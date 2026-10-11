@@ -1,8 +1,9 @@
 FROM ubuntu:24.04 AS toxbuild
+ARG TOXCORE_REF=v0.2.23
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates build-essential cmake pkg-config libsodium-dev && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --recurse-submodules https://github.com/TokTok/c-toxcore.git /src/toxcore \
+RUN git clone --depth 1 --branch "${TOXCORE_REF}" --recurse-submodules https://github.com/TokTok/c-toxcore.git /src/toxcore \
  && cmake -S /src/toxcore -B /tmp/toxbuild -DCMAKE_BUILD_TYPE=Release -DBOOTSTRAP_DAEMON=OFF -DUNITTEST=OFF -DAUTOTEST=OFF -DENABLE_SHARED=ON -DENABLE_STATIC=OFF -DBUILD_TOXAV=OFF -DDHT_BOOTSTRAP=OFF \
  && cmake --build /tmp/toxbuild -j2 \
  && cmake --install /tmp/toxbuild
