@@ -108,5 +108,22 @@ assert.ok(app.includes('peerProfileContent') &&
   "Peer details must use responsive Ant Design components");
 assert.ok(app.includes('onTouchStart={event=>event.stopPropagation()}'),
   "Tapping an incoming avatar must not trigger long-press message deletion");
+assert.ok(app.includes('selectedFriend?.status_message?.trim()')&&
+  app.includes('<Badge status={peerStatusColor} text={peerStatus}/>'),
+  "Peer state should be an Ant Badge by the nickname and status message below");
+assert.ok(app.includes('threadEl')&&app.includes('onScroll={onThreadScroll}')&&
+  app.includes('newBelowCount>0')&&app.includes('scrollToLatest'),
+  "Chat history should auto-follow bottom and announce messages when browsing old history");
+assert.ok(app.includes('countNewEntries')&&app.includes('ResizeObserver'),
+  "Only added messages should count and delayed images must keep bottom anchored");
+assert.ok(app.includes('ensureAvatarColors')&&app.includes('avatarLabel')&&
+  app.includes('backgroundColor:avatarColor('),
+  "Friend avatars should use saved random backgrounds and adaptive initials");
+const scrollCSS=readFileSync("frontend/src/wechat-style.css","utf8");
+assert.ok(scrollCSS.includes("scrollbar-width:none")&&
+  scrollCSS.includes("wt-thread-scrolling")&&
+  scrollCSS.includes(".wt-new-message-indicator"),
+  "Hide chat scrollbar while idle; show during scroll and new-message action");
+
 
 
