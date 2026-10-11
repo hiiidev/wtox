@@ -115,6 +115,12 @@ def init():
             expires INTEGER NOT NULL
         )""")
         c.execute("CREATE INDEX IF NOT EXISTS ix_archived_attachment_expiry ON archived_attachments(expires)")
+        c.execute("""CREATE TABLE IF NOT EXISTS friend_addresses (
+            account_id TEXT NOT NULL REFERENCES accounts(id),
+            public_key TEXT NOT NULL,
+            tox_address BLOB NOT NULL,
+            PRIMARY KEY(account_id,public_key)
+        )""")
         c.execute("CREATE INDEX IF NOT EXISTS ix_outbox_user ON outbox(account_id,status,created)")
         # Native Tox send may have succeeded immediately before a crash.
         # NEVER blindly replay a dispatch that was in-flight on restart:
@@ -411,3 +417,39 @@ def outbox_status(uid: str):
     return [{"id":eid,"public_key":peer,"status":status,"created":created,
              "session_id":session_id,"message_id":msg_id,"error":error}
             for eid,peer,status,created,session_id,msg_id,error in rows]
+
+
+def remember_friend_tox_id(uid: str, public_key: str, tox_id: str) -> None:
+    """Keep the *original* 76-character Tox address when the sender knows it.
+
+    A friend public key is only 64 hex characters, and cannot be expanded to
+    the complete address (nospam + checksum) without an original address.
+    """
+    pk=public_key.strip().upper()
+    address=tox_id.strip().upper()
+    if (len(pk)!=64 or len(address)!=76 or
+            not all(ch in "0123456789ABCDEF" for ch in address) or
+            not address.startswith(pk)):
+        raise ValueError("好友 Tox ID 与公钥不匹配")
+    with db() as connection:
+        connection.execute(
+            "INSERT INTO friend_addresses(account_id,public_key,tox_address) "
+            "VALUES(?,?,?) ON CONFLICT(account_id,public_key) "
+            "DO UPDATE SET tox_address=excluded.tox_address",
+            (uid,pk,encrypt(address.encode("ascii")))
+        )
+
+
+def friend_tox_ids(uid: str) -> dict[str,str]:
+    with db() as connection:
+        rows=connection.execute(
+            "SELECT public_key,tox_address FROM friend_addresses WHERE account_id=?",
+            (uid,)
+        ).fetchall()
+    return {pubkey:decrypt(address).decode("ascii") for pubkey,address in rows}
+
+
+def forget_friend_tox_id(uid: str, public_key: str) -> None:
+    with db() as connection:
+        connection.execute("DELETE FROM friend_addresses WHERE account_id=? "
+                           "AND public_key=?",(uid,public_key.upper()))
