@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ /app/backend/
 COPY frontend/ /app/frontend/
 # Fail the build if the native library cannot create and reopen a real Tox ID.
-RUN python -m backend.tox_identity
+RUN python -m backend.tox_smoke
 RUN useradd --uid 10001 --create-home wtox && mkdir /data && chown -R wtox:wtox /data
 USER wtox
 ENV PYTHONUNBUFFERED=1
