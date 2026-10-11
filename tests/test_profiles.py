@@ -28,14 +28,18 @@ class ToxLoginTests(unittest.TestCase):
             "WTOX_INSECURE_HTTP": "1",
         })
         self.env.start()
-        self.context = TestClient(app)
-        self.client = self.context.__enter__()
-        assert self.client.post("/api/gate/login", json={"password":"123456"}).status_code == 200
+        # API unit tests must NEVER enter the application lifespan: doing so
+        # starts the real 24/7 Tox native sessions and the infinite outbox task
+        # against synthetic .tox fixtures. Test the lifecycle separately.
+        store.init()
+        self.client = TestClient(app)
+        response = self.client.post("/api/gate/login", json={"password":"123456"})
+        self.assertEqual(response.status_code, 200, response.text)
         self.alice = fixture_identity("A", b"1"*32, b"native-alice-tox-save")
         self.bob = fixture_identity("B", b"2"*32, b"native-bob-tox-save")
 
     def tearDown(self):
-        self.context.__exit__(None, None, None)
+        self.client.close()
         self.env.stop()
         self.tmp.cleanup()
 
