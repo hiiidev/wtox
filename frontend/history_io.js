@@ -53,19 +53,27 @@ export function toQtoxTsv(records, friendKey, friendName) {
 export function fromQtoxTsv(text, peer, ownName) {
   if (!KEY_RE.test(peer)) throw new Error("请先选择目标好友");
   if (!ownName || !ownName.trim()) throw new Error("导入 qTox 历史需要填写导出文件中自己的昵称，才能正确区分收发方向");
-  const lines=text.replace(/\r\n?/g,"\n").split("\n").filter(x=>x.trim());
-  if(lines.length>MAX_RECORDS)throw new Error("记录数量过多");
+  const lines=text.replace(/\r\n?/g,"\n").replace(/\n$/, "").split("\n");
+  if(lines.length>MAX_RECORDS*6)throw new Error("历史文本行数过多");
   const records=[];
+  const prefix=/^(\d{4}-\d{2}-\d{2})\t(\d{2}:\d{2}:\d{2})\t([^\t]*)\t(.*)$/;
   for(const line of lines){
-    const parts=line.split("\t");
-    if(parts.length<4)throw new Error("不是 qTox 导出的制表符聊天日志（日期 / 时间 / 作者 / 内容）");
-    const [date,clock,sender,...message]=parts;
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^\d{2}:\d{2}:\d{2}$/.test(clock)){
-      throw new Error("qTox 时间格式不正确");
+    if(!line && !records.length)continue;
+    const match=line.match(prefix);
+    if(match){
+      if(records.length>=MAX_RECORDS)throw new Error("记录数量过多");
+      const [,date,clock,sender,body]=match;
+      const at=validTime(date+"T"+clock);
+      records.push({type:"message",direction:sender===ownName?"outgoing":"incoming",
+                    public_key:peer,text:body,at});
+    }else if(records.length){
+      // qTox writes embedded line breaks as-is. Continuation lines belong
+      // to the previous message, not to a new message.
+      records[records.length-1].text+="\n"+line;
+      if(records[records.length-1].text.length>65536)throw new Error("单条历史消息过长");
+    }else if(line.trim()){
+      throw new Error("不是 qTox 导出的制表符聊天日志（日期 / 时间 / 作者 / 内容）");
     }
-    const at=validTime(date+"T"+clock);
-    records.push({type:"message",direction:sender===ownName?"outgoing":"incoming",
-                  public_key:peer,text:message.join("\t"),at});
   }
   return records;
 }
