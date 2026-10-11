@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>wtox</title>
+<style>body{font:15px system-ui;background:#0e1726;color:#eaf0fc;margin:0;min-height:100dvh;display:grid;place-items:center}
+main{width:min(90vw,520px);background:#19263a;border:1px solid #354459;padding:28px;border-radius:18px}
+h1{letter-spacing:.5px}input,button{box-sizing:border-box;display:block;width:100%;margin:11px 0;padding:12px;border-radius:8px;font:inherit}
+input{background:#0d1523;color:white;border:1px solid #65748c}button{cursor:pointer;background:#4077e5;border:0;color:white}
+button.secondary{background:#374962}small{color:#afbdd1}#error{color:#ff9e9e;min-height:1em}</style></head>
+<body><main><h1>wtox</h1><p>原版 Tox 网页客户端 · VPS 方案</p>
+<section id="login"><h2>登录 / 创建账号</h2><small>通过网站访问密码后，可自由创建个人账号。每位用户的身份文件将独立保存。</small>
+<input id="username" autocomplete="username" placeholder="账号名（英文/数字）">
+<input id="password" type="password" autocomplete="current-password" placeholder="账号密码（至少12位）">
+<button id="signin">登录</button><button id="signup" class="secondary">创建账号</button></section>
+<section id="account" hidden><p id="welcome"></p><p>网站密码与账号体系已接入；原生 Toxcore、身份导入及聊天界面尚在开发，暂时无法与 qTox/aTox 收发消息。</p>
+<button id="logout" class="secondary">退出账号</button></section><p id="error" role="alert"></p></main>
+<script>
+const $=s=>document.querySelector(s);
+async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});
+const data=await r.json();if(!r.ok)throw new Error(data.detail||'请求失败');return data}
+async function state(){try{const me=await api('/api/me');$('#login').hidden=true;$('#account').hidden=false;$('#welcome').textContent='已登录：'+me.username}
+catch{$('#login').hidden=false;$('#account').hidden=true}}
+async function auth(url){$('#error').textContent='';try{await api(url,{method:'POST',body:JSON.stringify({username:$('#username').value,password:$('#password').value})});await state()}catch(e){$('#error').textContent=e.message}}
+$('#signin').onclick=()=>auth('/api/login');$('#signup').onclick=()=>auth('/api/register');
+$('#logout').onclick=async()=>{await api('/api/logout',{method:'POST'});await state()};state();
+</script></body></html>
