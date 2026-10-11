@@ -47,7 +47,7 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 class GateMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path=request.url.path
-        if path in ("/health","/gate","/api/gate/login","/favicon.ico","/logo.svg") or path.startswith("/assets/"):
+        if path in ("/health","/health/ui","/gate","/api/gate/login","/favicon.ico","/logo.svg") or path.startswith("/assets/"):
             return await call_next(request)
         if not access.gate_valid(request.cookies.get(access.COOKIE_NAME)):
             if path.startswith("/api/"):
@@ -66,6 +66,19 @@ class PasswordRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"ok":True}
+
+@app.get("/health/ui")
+def frontend_health():
+    """Detect incomplete React builds and missing static files before users see a white page."""
+    assets=FRONTEND_DIR/"assets"
+    good=(FRONTEND_DIR/"index.html").is_file() and (FRONTEND_DIR/"logo.svg").is_file()
+    scripts=list(assets.glob("*.js")) if assets.is_dir() else []
+    styles=list(assets.glob("*.css")) if assets.is_dir() else []
+    if not good or not scripts or not styles:
+        return JSONResponse(
+            {"ok":False,"detail":"React 静态资源不完整，请重新构建 Docker 镜像"},
+            status_code=503)
+    return {"ok":True,"js":len(scripts),"css":len(styles),"logo":True}
 
 @app.get("/gate",response_class=HTMLResponse)
 def gate_page():
