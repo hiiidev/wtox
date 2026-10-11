@@ -77,7 +77,10 @@ def init():
         columns = {r[1] for r in c.execute("PRAGMA table_info(accounts)")}
         if "tox_address" not in columns:
             c.execute("ALTER TABLE accounts ADD COLUMN tox_address TEXT")
-        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_unique_tox_address ON accounts(tox_address)")
+        if "tox_pubkey" not in columns:
+            c.execute("ALTER TABLE accounts ADD COLUMN tox_pubkey TEXT")
+        c.execute("UPDATE accounts SET tox_pubkey=SUBSTR(tox_address,1,64) WHERE tox_pubkey IS NULL AND tox_address IS NOT NULL")
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_unique_tox_pubkey ON accounts(tox_pubkey)")
 
 def add_account(username: str, password: str) -> str:
     if not (3 <= len(username) <= 40 and username.isascii()
@@ -144,12 +147,12 @@ def claim_profile(uid: str, savedata: bytes, address: str) -> None:
     try:
         with db() as c:
             result = c.execute(
-                "UPDATE accounts SET profile=?,tox_address=? WHERE id=? AND profile IS NULL",
-                (ciphertext, address, uid))
+                "UPDATE accounts SET profile=?,tox_address=?,tox_pubkey=? WHERE id=? AND profile IS NULL",
+                (ciphertext, address, address[:64], uid))
             if result.rowcount != 1:
                 raise ValueError("该账号已有 Tox 身份，不能覆盖；请先导出备份")
     except sqlite3.IntegrityError as exc:
-        raise ValueError("这个 Tox 身份已经导入其他网站账号") from exc
+        raise ValueError("这个 Tox 公钥已经属于其他网站账号") from exc
 
 def active_profiles():
     with db() as c:
