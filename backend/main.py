@@ -55,6 +55,7 @@ class GateMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(GateMiddleware)
+app.mount("/assets", StaticFiles(directory="/app/frontend"), name="assets")
 
 class PasswordRequest(BaseModel):
     password: str = Field(min_length=1,max_length=512)
