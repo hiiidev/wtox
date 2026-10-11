@@ -1,7 +1,7 @@
 import React, {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {
   MainContainer, Sidebar, ConversationList, Conversation,
-  ChatContainer, ConversationHeader, MessageList, Message, MessageInput
+  ChatContainer, ConversationHeader, MessageList, Message, MessageInput, InputToolbox
 } from "@chatscope/chat-ui-kit-react";
 import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
@@ -454,31 +454,32 @@ export default function App(){
               <button className="wtox-header-action" title="删除好友" disabled={!selected} onClick={removeFriend}>⋯</button>
             </ConversationHeader.Actions>
           </ConversationHeader>
-          <MessageList className="wtox-message-list"
-            empty={selected?"暂无聊天记录":"选择左侧联系人开始聊天"}>
-            {thread.map(item=><div key={item.id} className="wtox-message-item">
-              <Message model={{message:escapeHtml(item.text),
-                direction:item.direction==="outgoing"?"outgoing":"incoming",
-                position:"single"}}/>
-              <div className={"wtox-message-meta "+(item.direction==="outgoing"?"out":"")}>
-                {new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}
-                {item.direction==="outgoing"&&<span> · {stateText(item)}</span>}
-              </div>
-            </div>)}
+          <MessageList className="wtox-message-list">
+            <MessageList.Content>
+              {!selected&&<div className="wtox-empty-thread">选择左侧联系人开始聊天</div>}
+              {selected&&thread.length===0&&<div className="wtox-empty-thread">暂无聊天记录</div>}
+              {thread.map(item=><div key={item.id} className="wtox-message-item">
+                <Message model={{message:escapeHtml(item.text),
+                  direction:item.direction==="outgoing"?"outgoing":"incoming",
+                  position:"single"}}/>
+                <div className={"wtox-message-meta "+(item.direction==="outgoing"?"out":"")}>
+                  {new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}
+                  {item.direction==="outgoing"&&<span> · {stateText(item)}</span>}
+                </div>
+              </div>)}
+            </MessageList.Content>
           </MessageList>
-          <div className="wtox-send-zone">
-            <div className="wtox-send-tip">
-              {!selected?"先选择好友"
-                :!historyReady?"请完成本地历史迁移"
-                :offlineQueue&&!online(selectedFriend)?"对方离线，点击发送会进入 VPS 队列（正在发送）"
-                :!online(selectedFriend)?"对方离线，已关闭离线排队"
-                :sending?"正在处理发送请求":"Enter 发送 · Shift + Enter 换行"}
-            </div>
-            <MessageInput placeholder="输入消息…" attachButton={false}
-              value={draft} onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
-              onSend={sendText} disabled={!selected||!historyReady||sending||
-                (!offlineQueue&&!online(selectedFriend))}/>
-          </div>
+          <MessageInput className="wtox-send-input" placeholder="输入消息…" attachButton={false}
+            value={draft} onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
+            onSend={sendText} disabled={!selected||!historyReady||sending||
+              (!offlineQueue&&!online(selectedFriend))}/>
+          <InputToolbox className="wtox-send-tip">
+            {!selected?"先选择好友"
+              :!historyReady?"请完成本地历史迁移"
+              :offlineQueue&&!online(selectedFriend)?"对方离线，点击发送会进入 VPS 队列（正在发送）"
+              :!online(selectedFriend)?"对方离线，已关闭离线排队"
+              :sending?"正在处理发送请求":"Enter 发送 · Shift + Enter 换行"}
+          </InputToolbox>
         </ChatContainer>
       </MainContainer>
     </div>
