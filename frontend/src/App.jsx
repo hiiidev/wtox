@@ -1,8 +1,10 @@
 import React, {useCallback,useEffect,useMemo,useRef,useState} from "react";
-import {
-  MainContainer, Sidebar, ConversationList, Conversation,
-  ChatContainer, ConversationHeader, MessageList, Message, MessageInput, InputToolbox
-} from "@chatscope/chat-ui-kit-react";
+import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
+  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm } from "antd";
+import { Bubble, Conversations, Sender } from "@ant-design/x";
+import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
+  UserAddOutlined, DeleteOutlined, CloudOutlined, CloudSyncOutlined,
+  MessageOutlined } from "@ant-design/icons";
 import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson,toQtoxTsv,fromQtoxTsv} from "../history_io.js";
@@ -24,7 +26,8 @@ function stateText(record){
   return "已发送";
 }
 function Button({children,onClick,kind="",disabled=false}){
-  return <button type="button" className={"wtox-btn "+kind} onClick={onClick} disabled={disabled}>{children}</button>;
+  return <AntButton type={kind==="primary"?"primary":"default"}
+    onClick={onClick} disabled={disabled} className="wtox-ant-btn">{children}</AntButton>;
 }
 function Modal({title,close,children}){
   useEffect(()=>{
@@ -99,6 +102,13 @@ export default function App(){
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [offlineQueue,setOfflineQueue]=useState(false),[sending,setSending]=useState(false);
+  const [visualStyle,setVisualStyle]=useState(()=>{
+    try{return localStorage.getItem("wtox-visual-style")||"mist"}catch{return "mist"}
+  });
+  useEffect(()=>{
+    document.documentElement.setAttribute("data-wtox-theme",visualStyle);
+    try{localStorage.setItem("wtox-visual-style",visualStyle)}catch{}
+  },[visualStyle]);
   const [modal,setModal]=useState(""),[notice,setNotice]=useState("");
   const [loginFile,setLoginFile]=useState(null),[busy,setBusy]=useState(false);
   const [friendId,setFriendId]=useState(""),[requestKey,setRequestKey]=useState("");
