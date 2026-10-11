@@ -41,6 +41,7 @@ class ToxCore:
         self.address = self._fn("tox_self_get_address", None, ptr, buf)
         self.savedata_size = self._fn("tox_get_savedata_size", C.c_size_t, ptr)
         self.savedata_write = self._fn("tox_get_savedata", None, ptr, buf)
+        self.set_name = self._fn("tox_self_set_name", C.c_bool, ptr, buf, C.c_size_t, err)
 
     def _fn(self, name, result, *args):
         fn = getattr(self.lib, name)
@@ -48,7 +49,7 @@ class ToxCore:
         fn.argtypes = list(args)
         return fn
 
-    def identity(self, savedata: bytes | None = None) -> Identity:
+    def identity(self, savedata: bytes | None = None, nickname: str | None = None) -> Identity:
         if savedata is not None and not (1 <= len(savedata) <= MAX_SAVEDATA):
             raise ToxIdentityError("配置文件为空或超过 8 MiB")
         error = C.c_int()
@@ -69,6 +70,14 @@ class ToxCore:
                 if savedata is not None:
                     raise ToxIdentityError(f"配置不是有效的原始 Tox Savedata（错误码 {error.value}）")
                 raise RuntimeError(f"tox_new failed: {error.value}")
+            if savedata is None and nickname:
+                encoded_name = nickname.encode("utf-8")
+                if len(encoded_name) > 128:
+                    raise ToxIdentityError("昵称过长")
+                name_buf = (C.c_uint8 * len(encoded_name)).from_buffer_copy(encoded_name)
+                error.value = 0
+                if not self.set_name(tox, name_buf, len(encoded_name), C.byref(error)):
+                    raise ToxIdentityError(f"设置 Tox 昵称失败 ({error.value})")
             address_buf = (C.c_uint8 * ADDRESS_BYTES)()
             self.address(tox, address_buf)
             address = bytes(address_buf).hex().upper()
