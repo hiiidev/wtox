@@ -1,8 +1,11 @@
-# Build the React/ChatScope UI. Only compiled static assets reach runtime.
+# Build the React/Ant Design X UI. Only compiled static assets reach runtime.
 FROM node:22-bookworm-slim AS frontendbuild
 WORKDIR /frontend
 COPY frontend/package.json ./
-RUN npm install --no-audit --no-fund
+COPY tests/check_npm_peers.mjs /checks/check_npm_peers.mjs
+RUN node /checks/check_npm_peers.mjs \
+ && npm install --no-audit --no-fund \
+ && npm ls antd @ant-design/x @ant-design/icons --depth=0
 COPY frontend/ ./
 RUN npm run build
 
