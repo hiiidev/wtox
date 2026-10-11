@@ -614,61 +614,93 @@ export default function App(){
       borderRadius:12,fontFamily:"Inter, system-ui, -apple-system, sans-serif"}
   }}>
   <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat":"")}>
-    <header className="wtox-top ant-topbar">
-      <div className="wtox-brand">
-        <img className="wtox-logo" src="/logo.svg" alt="wtox logo"/>
-        <div><strong>wTox</strong>
-          {ownProfile.name&&<small>{ownProfile.name}</small>}
-        </div>
-      </div>
-      <nav className="wtox-tools">
-        <Tag color={ownProfile.user_status===2?"error":ownProfile.user_status===1?"warning":"processing"}
-          bordered={false}>{["在线","离开","忙碌"][ownProfile.user_status]||"在线"}</Tag>
-        <Tag color={network>0?"success":"warning"} bordered={false}>
-          <StatusDot active={network>0}/>
-          {network>0?statusLabel(network):"网络连接中"}
-        </Tag>
-        <Tooltip title="设置与备份">
-          <AntButton shape="circle" icon={<SettingOutlined/>}
-            aria-label="设置与备份" onClick={()=>setModal("settings")}/>
-        </Tooltip>
-      </nav>
-    </header>
     <div className="wtox-workspace ant-workspace">
+      <nav className="wechat-rail" aria-label="主导航">
+        <button type="button" className="wechat-rail-avatar" aria-label="我的资料与设置"
+          title="我的资料与设置" onClick={()=>setModal("settings")}>
+          <img src="/logo.svg" alt="wTox"/>
+        </button>
+        <div className="wechat-rail-primary">
+          <button type="button" className={"wechat-rail-button "+(section==="chats"?"is-active":"")}
+            aria-label="聊天" aria-current={section==="chats"?"page":undefined}
+            onClick={()=>{setSection("chats");setMobileChat(false)}}>
+            <MessageOutlined/><span>聊天</span>
+          </button>
+          <button type="button" className={"wechat-rail-button "+(section==="contacts"?"is-active":"")}
+            aria-label="通讯录" aria-current={section==="contacts"?"page":undefined}
+            onClick={()=>{setSection("contacts");setMobileChat(false)}}>
+            <ContactsOutlined/><span>通讯录</span>
+          </button>
+        </div>
+        <div className="wechat-rail-bottom">
+          <button type="button" className="wechat-rail-button"
+            aria-label="设置与备份" onClick={()=>setModal("settings")}>
+            <SettingOutlined/><span>设置</span>
+          </button>
+        </div>
+      </nav>
       <aside className="ant-contact-sidebar">
-        <div className="ant-sidebar-heading">
-          <div><h2>消息</h2><span>{friends.length} 位联系人</span></div>
+        <div className="wechat-list-head">
+          <div className="wechat-mobile-heading"><img src="/logo.svg" alt="" width="30" height="30"/><strong>wTox</strong></div>
+          <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
           <Tooltip title="添加好友">
-            <AntButton shape="circle" type="primary" icon={<UserAddOutlined/>}
-              aria-label="添加好友" onClick={()=>setModal("add")}/>
+            <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
+              onClick={()=>setModal("add")}/>
           </Tooltip>
         </div>
-        <div className="ant-search-row">
-          <Input.Search allowClear value={filter} placeholder="搜索好友、公钥"
-            aria-label="搜索好友" onChange={e=>setFilter(e.target.value)}/>
+        <div className="wechat-search">
+          <Input allowClear value={filter} placeholder="搜索"
+            prefix={<span className="wechat-search-icon">⌕</span>}
+            aria-label="搜索联系人" onChange={e=>setFilter(e.target.value)}/>
         </div>
-        <div className="ant-contacts-list">
-          <Conversations items={visibleFriends.map(friend=>({
-            key:friend.public_key,
-            label:<span className="ant-contact-label">
-              <strong>{friend.name||"Tox 好友 "+shortKey(friend.public_key)}</strong>
-              <small>{statusLabel(friend.status)}</small>
-            </span>,
-            icon:<Avatar className="ant-contact-avatar" size={42}>
-              {(friend.name||friend.public_key).slice(0,1).toUpperCase()}
-            </Avatar>
-          }))} activeKey={selected||""}
-            onActiveChange={key=>selectFriend(key)}/>
-          {!visibleFriends.length&&<div className="ant-list-empty">
-            <MessageOutlined style={{fontSize:30}}/>
-            <p>{friends.length?"没有匹配的好友":"还没有好友"}</p>
-            <AntButton type="link" onClick={()=>setModal("add")}>添加好友</AntButton>
+        <div className="wechat-list">
+          {visibleFriends.map(friend=>{
+            const recent=latestByPeer.get(friend.public_key);
+            const draftsText=drafts.current.get(friend.public_key)||"";
+            const preview=section==="contacts"
+              ?statusLabel(friend.status)
+              :draftsText?"[草稿] "+draftsText:
+                recent?.type==="file"?"[附件] "+(recent.file_name||"文件"):
+                recent?.text||statusLabel(friend.status);
+            const when=recent?.at?new Date(recent.at):null;
+            const clock=when ? (Date.now()-when.getTime()>86400000?
+              when.toLocaleDateString("zh-CN",{month:"2-digit",day:"2-digit"}):
+              when.toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})):"";
+            const unread=unreadFor(friend.public_key);
+            return <button type="button" key={friend.public_key}
+              className={"wechat-conversation "+(selected===friend.public_key?"is-selected":"")}
+              onClick={()=>selectFriend(friend.public_key)}>
+              <Avatar size={45} shape="square" className="wechat-contact-avatar">
+                {(friend.name||friend.public_key).slice(0,1).toUpperCase()}
+              </Avatar>
+              <span className="wechat-conversation-text">
+                <span className="wechat-conversation-name">{friend.name||"Tox 好友 "+shortKey(friend.public_key)}</span>
+                <span className="wechat-conversation-preview">{preview}</span>
+              </span>
+              <span className="wechat-conversation-side">
+                <time>{clock}</time>
+                {unread>0?<span className="wechat-unread">{unread>99?"99+":unread}</span>
+                  :<i className={"wechat-presence "+(online(friend)?"online":"")} />}
+              </span>
+            </button>;
+          })}
+          {!visibleFriends.length&&<div className="wechat-no-contacts">
+            <ContactsOutlined style={{fontSize:30}}/>
+            <p>{friends.length?"没有找到联系人":"还没有联系人"}</p>
+            <AntButton type="link" onClick={()=>setModal("add")}>添加 Tox 好友</AntButton>
           </div>}
         </div>
-        <div className="ant-sidebar-footer">
-          <span>好友状态自动刷新 · 12 秒</span>
-          <span>VPS 加密离线队列 · 自动发送</span>
-        </div>
+        <nav className="wechat-mobile-tabs" aria-label="手机导航">
+          <button type="button" className={section==="chats"?"active":""}
+            aria-current={section==="chats"?"page":undefined}
+            onClick={()=>setSection("chats")}><MessageOutlined/><span>聊天</span></button>
+          <button type="button" className={section==="contacts"?"active":""}
+            aria-current={section==="contacts"?"page":undefined}
+            onClick={()=>setSection("contacts")}><ContactsOutlined/><span>通讯录</span></button>
+          <button type="button" onClick={()=>setModal("settings")}>
+            <UserOutlined/><span>我</span>
+          </button>
+        </nav>
       </aside>
       <main className="ant-chat-area">
         <div className="ant-chat-toolbar">
