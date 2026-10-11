@@ -1,6 +1,6 @@
-// wtox browser client. Does not store account or history passwords persistently.
+// wtox browser client. Tox .tox savedata is the only personal login credential.
 const $ = (selector) => document.querySelector(selector);
-let username = null;
+let profileKey = null;
 let socket = null;
 let historyDb = null;
 let historyKey = null;
@@ -174,7 +174,7 @@ async function refreshNetwork(){
 }
 function connectWebsocket(){
   if(socket) {socket.onclose=null;socket.close();}
-  if(!username) return;
+  if(!profileKey) return;
   const protocol=location.protocol==="https:"?"wss:":"ws:";
   socket=new WebSocket(protocol+"//"+location.host+"/ws");
   socket.onopen=()=>{refreshNetwork().catch(()=>{});refreshFriends().catch(()=>{});};
@@ -195,72 +195,76 @@ function connectWebsocket(){
     }
   };
   socket.onclose=()=>{
-    if(username){setTimeout(()=>{if(username)connectWebsocket()},4500);}
+    if(profileKey){setTimeout(()=>{if(profileKey)connectWebsocket()},4500);}
   };
 }
 async function refreshIdentity(){
   const profile=await json("/api/profile/status");
-  $("#setup").hidden=profile.has_profile;
-  $("#ready").hidden=!profile.has_profile;
+  $("#ready").hidden=false;
   $("#toxid").textContent=profile.tox_id||"";
-  if(profile.has_profile){
-    await refreshNetwork().catch(e=>error(e.message));
-    await refreshFriends().catch(e=>error(e.message));
-    connectWebsocket();
-  } else if(socket){socket.onclose=null;socket.close();socket=null;}
+  await refreshNetwork().catch(e=>error(e.message));
+  await refreshFriends().catch(e=>error(e.message));
+  connectWebsocket();
 }
 async function updateState(){
   try{
     const info=await json("/api/me");
-    if(username!==info.username){
+    if(!info.public_key) throw new Error("身份未激活");
+    if(profileKey!==info.public_key){
       historyKey=null;
-      if(historyDb)historyDb.close();
-      historyDb=await openHistory(info.username);
+      selectedPeer=null;
+      $("#peer").value="";
+      $("#selected").textContent="请选择好友";
+      if(historyDb) historyDb.close();
+      historyDb=await openHistory(info.public_key);
       $("#historyLock").hidden=false;
       $("#historyActive").hidden=true;
+      $("#messages").replaceChildren();
     }
-    username=info.username;
+    profileKey=info.public_key;
     $("#login").hidden=true;$("#account").hidden=false;
-    $("#welcome").textContent="已登录： "+username;
+    $("#welcome").textContent="已登录 Tox 身份： "+profileKey.slice(0,16)+"…";
     await refreshIdentity();
   }catch(e){
     if(socket){socket.onclose=null;socket.close();socket=null;}
-    username=null;historyKey=null;
+    profileKey=null;historyKey=null;selectedPeer=null;
     if(historyDb)historyDb.close();historyDb=null;
     $("#login").hidden=false;$("#account").hidden=true;
   }
 }
-async function auth(endpoint){
-  error("");
-  try{
-    await post(endpoint,{username:$("#username").value,password:$("#password").value});
-    $("#password").value="";
-    await updateState();
-  }catch(e){error(e.message);}
-}
-$("#signin").onclick=()=>auth("/api/login");
-$("#signup").onclick=()=>auth("/api/register");
 $("#logout").onclick=async()=>{
   try{await post("/api/logout",{});error("");await updateState();}
   catch(e){error(e.message)}
 };
 $("#create").onclick=async()=>{
-  if(!confirm("创建新的 Tox 身份？此账号首次只能创建或导入一次。"))return;
-  try{const result=await post("/api/profile/create",{});await refreshIdentity();
-      if(!result.session_started)error("身份已保存，但启动 Toxcore 失败，请检查服务器日志");}
-  catch(e){error(e.message)}
+  if(!confirm("创建新的 Tox 身份并下载私人 .tox 备份？丢失备份将无法在新设备使用这个身份登录。"))return;
+  error("");
+  try{
+    const response=await api("/api/tox/create",{method:"POST"});
+    const blob=await response.blob();
+    const filename="wtox-"+(response.headers.get("X-Tox-ID")||"new").slice(0,16)+".tox";
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");link.href=url;link.download=filename;link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2500);
+    await updateState();
+    if(response.headers.get("X-Tox-Session-Started")!=="true")
+      error("配置已创建并下载，但 Tox 网络会话尚未启动，请检查服务器日志");
+  }catch(e){error(e.message)}
 };
 $("#import").onclick=async()=>{
   const file=$("#profileFile").files[0];
-  if(!file){error("请先选择 .tox 文件");return}
+  if(!file){error("请先选择 .tox 配置文件");return}
   if(file.size>8*1024*1024){error("配置文件超过 8 MiB");return}
-  if(!confirm("此操作会将所选身份绑定到当前账号。确认继续？"))return;
-  try{const response=await api("/api/profile/import",{
-     method:"POST",raw:true,headers:{"Content-Type":"application/octet-stream"},body:file
-  });
-  const result=await response.json();
-  await refreshIdentity();
-  if(!result.session_started)error("导入已保存，但 Toxcore 未启动；请检查服务器日志");
+  error("");
+  try{
+    const response=await api("/api/tox/login",{
+      method:"POST",raw:true,
+      headers:{"Content-Type":"application/octet-stream"},body:file
+    });
+    const result=await response.json();
+    $("#profileFile").value="";
+    await updateState();
+    if(!result.session_started) error("身份登录成功，但 Toxcore 网络会话未启动，请检查服务器日志");
   }catch(e){error(e.message)}
 };
 $("#copyid").onclick=()=>navigator.clipboard.writeText($("#toxid").textContent).catch(e=>error(e.message));
