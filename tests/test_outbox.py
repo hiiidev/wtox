@@ -31,12 +31,19 @@ class OutboxTests(unittest.TestCase):
     def enqueue(self, eid="c"*32, text="offline-plaintext-secret"):
         return store.enqueue_outbox(self.uid,self.peer,text,eid)
 
-    def test_browser_queue_default_vps_opt_in(self):
-        self.assertFalse(store.offline_queue_enabled(self.uid))
-        store.set_offline_queue(self.uid,True)
+    def test_all_tox_accounts_have_permanent_vps_queue(self):
         self.assertTrue(store.offline_queue_enabled(self.uid))
-        store.set_offline_queue(self.uid,False)
-        self.assertFalse(store.offline_queue_enabled(self.uid))
+        # Existing profiles that had the obsolete browser-only setting migrate
+        # automatically when the app initializes its SQLite schema.
+        with store.db() as connection:
+            connection.execute("UPDATE accounts SET offline_queue=0 WHERE id=?",
+                               (self.uid,))
+        store.init()
+        self.assertTrue(store.offline_queue_enabled(self.uid))
+        with store.db() as connection:
+            flag=connection.execute("SELECT offline_queue FROM accounts WHERE id=?",
+                                    (self.uid,)).fetchone()[0]
+        self.assertEqual(flag,1)
 
     def test_outbox_is_encrypted_idempotent_and_owned_by_account(self):
         record=self.enqueue()
