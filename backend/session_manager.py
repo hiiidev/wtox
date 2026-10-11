@@ -41,9 +41,12 @@ class SessionManager:
         with self.lock:
             session = self.sessions.get(uid)
             if session is not None:
-                if session.thread is not None and not session.thread.is_alive():
-                    raise ToxActionError("该用户 Tox 会话已停止，请检查服务器日志")
-                return session
+                if session.thread is None or session.thread.is_alive():
+                    return session
+                # A stopped native Tox thread has completed its cleanup.
+                # The VPS outbox worker must recover it without browser login.
+                self.sessions.pop(uid, None)
+                print("Recovering stopped Tox identity:", uid[:8], flush=True)
             savedata = store.read_profile(uid)
             if savedata is None:
                 raise ValueError("请先创建或导入 Tox 身份")
@@ -60,7 +63,11 @@ class SessionManager:
             # signed-in account. A connected browser retains manual Accept.
             session.files.should_auto_accept = lambda account=uid: not bool(self.sockets.get(account))
             self.sessions[uid] = session
-            session.start()
+            try:
+                session.start()
+            except Exception:
+                self.sessions.pop(uid, None)
+                raise
             return session
 
     def dispatch_outbox(self, uid: str):
