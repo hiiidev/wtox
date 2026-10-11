@@ -455,19 +455,19 @@ export default function App(){
             </ConversationHeader.Actions>
           </ConversationHeader>
           <MessageList className="wtox-message-list">
-            <MessageList.Content>
-              {!selected&&<div className="wtox-empty-thread">选择左侧联系人开始聊天</div>}
-              {selected&&thread.length===0&&<div className="wtox-empty-thread">暂无聊天记录</div>}
-              {thread.map(item=><div key={item.id} className="wtox-message-item">
-                <Message model={{message:escapeHtml(item.text),
-                  direction:item.direction==="outgoing"?"outgoing":"incoming",
-                  position:"single"}}/>
-                <div className={"wtox-message-meta "+(item.direction==="outgoing"?"out":"")}>
-                  {new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}
-                  {item.direction==="outgoing"&&<span> · {stateText(item)}</span>}
-                </div>
-              </div>)}
-            </MessageList.Content>
+            {!thread.length
+              ? <MessageList.Content><div className="wtox-empty-thread">
+                  {selected?"暂无聊天记录":"选择左侧联系人开始聊天"}
+                </div></MessageList.Content>
+              : thread.map(item=><Message key={item.id} className="wtox-message-item"
+                  model={{message:String(item.text||""),type:"text",
+                    direction:item.direction==="outgoing"?"outgoing":"incoming",
+                    position:"single"}}>
+                  <Message.Footer sentTime={
+                    new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+
+                    (item.direction==="outgoing"?" · "+stateText(item):"")
+                  }/>
+                </Message>)}
           </MessageList>
           <MessageInput className="wtox-send-input" placeholder="输入消息…" attachButton={false}
             value={draft} onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
