@@ -100,4 +100,13 @@ assert.ok(app.includes('selectedFriend.status_message')&&app.includes('selectedF
 assert.ok(python.includes('store.friend_tox_ids(uid)') &&
   python.includes('store.remember_friend_tox_id(uid, key, body.address)'),
   "Only original known 76-digit Tox addresses should be kept for future copy");
+assert.ok(app.includes('className="wt-mobile-me-page"') &&
+  app.includes('setSection("me")')&&app.includes('{settingsContent}'),
+  "Mobile Me must be a full page sharing settings with desktop modal");
+assert.ok(app.includes('peerProfileContent') &&
+  app.includes('isMobile') && app.includes('Grid.useBreakpoint'),
+  "Peer details must use responsive Ant Design components");
+assert.ok(app.includes('onTouchStart={event=>event.stopPropagation()}'),
+  "Tapping an incoming avatar must not trigger long-press message deletion");
+
 
