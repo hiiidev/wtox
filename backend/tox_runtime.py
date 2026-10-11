@@ -30,6 +30,11 @@ class ToxActionError(Exception):
     pass
 
 
+class FriendOfflineError(ToxActionError):
+    """Tox error 3: friend is offline or not yet mutually connected."""
+    pass
+
+
 def hex_bytes(value: str, expected: int, label: str) -> bytes:
     if len(value) != expected * 2:
         raise ValueError(f"{label}必须为 {expected * 2} 个十六进制字符")
@@ -314,8 +319,23 @@ class ToxSession:
             if error.value:
                 raise ValueError("好友不在列表中")
             error.value = 0
+            status = int(self.friend_connection(self.tox, number, C.byref(error)))
+            if error.value:
+                raise ToxActionError(f"读取好友状态失败（{error.value}）")
+            if status == 0:
+                raise FriendOfflineError("好友目前离线或尚未接受请求，Tox 只支持向已连接的好友即时发消息。请等待对方上线后再发送。")
+            error.value = 0
             msg_id = self.friend_send(self.tox, number, 0, uint8_array(encoded),
                                       len(encoded), C.byref(error))
+            if error.value == 3:
+                # Race: friend disconnected between the status check and send.
+                raise FriendOfflineError("好友刚刚断开连接，消息未发送。请等待好友重新上线后重试。")
             if error.value:
-                raise ToxActionError(f"tox_friend_send_message error {error.value}")
+                explanations = {
+                    2: "好友不存在",
+                    4: "Tox 发送队列已满，请稍后重试",
+                    5: "消息超过长度限制",
+                    6: "消息不能为空",
+                }
+                raise ToxActionError(explanations.get(error.value, f"Tox 发送失败（错误码 {error.value}）"))
             return int(msg_id)
