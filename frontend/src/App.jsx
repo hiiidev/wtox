@@ -467,6 +467,58 @@ export default function App(){
   ):null;
   const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
     .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
+  const scrollToLatest=useCallback(()=>{
+    const element=threadEl.current;
+    followLatest.current=true;
+    setNewBelowCount(0);
+    if(element)element.scrollTop=element.scrollHeight;
+  },[]);
+  const onThreadScroll=useCallback(()=>{
+    const element=threadEl.current;
+    if(!element)return;
+    const atBottom=isNearBottom(element);
+    followLatest.current=atBottom;
+    if(atBottom)setNewBelowCount(count=>count===0?count:0);
+    setThreadScrolling(true);
+    if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
+    scrollIdleTimer.current=setTimeout(()=>setThreadScrolling(false),950);
+  },[]);
+  useEffect(()=>()=>{if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current)},[]);
+  useLayoutEffect(()=>{
+    const element=threadEl.current;
+    const ids=thread.map(item=>item.id);
+    const previous=previousThread.current;
+    if(previous.peer!==selected){
+      previousThread.current={peer:selected,ids};
+      followLatest.current=true;
+      setNewBelowCount(0);
+      if(element)element.scrollTop=element.scrollHeight;
+      return;
+    }
+    const newlyAdded=countNewEntries(previous.ids,ids);
+    previousThread.current={peer:selected,ids};
+    if(followLatest.current){
+      if(element)element.scrollTop=element.scrollHeight;
+      setNewBelowCount(count=>count===0?count:0);
+    }else if(newlyAdded>0){
+      // Updating delivery receipts does not add IDs, so it cannot inflate
+      // this badge while the reader is looking at earlier messages.
+      setNewBelowCount(count=>count+newlyAdded);
+    }
+  },[selected,thread]);
+  useEffect(()=>{
+    const element=threadEl.current;
+    const content=element?.firstElementChild;
+    if(!content||typeof ResizeObserver==="undefined")return;
+    const observer=new ResizeObserver(()=>{
+      // Images and delayed attachment previews may change message height
+      // after the message itself was rendered.
+      if(followLatest.current)element.scrollTop=element.scrollHeight;
+    });
+    observer.observe(content);
+    return()=>observer.disconnect();
+  },[selected]);
+
   const latestByPeer=useMemo(()=>{
     const latest=new Map();
     for(const item of messages){
@@ -493,6 +545,8 @@ export default function App(){
     selectedRef.current=key;setSelected(key);
     setPeerDetailsOpen(false);
     setDraft(drafts.current.get(key)||"");setMobileChat(true);
+    // Opening the same conversation again also restores bottom following.
+    requestAnimationFrame(scrollToLatest);
     setSeen(previous=>({...previous,[key]:Date.now()}));
   }
   useEffect(()=>{
@@ -915,7 +969,11 @@ export default function App(){
             </Tooltip>
           </Space>
         </div>
-        <div className="ant-thread" role="log" aria-label="聊天记录">
+        <div className="wt-thread-shell">
+          <div ref={threadEl}
+            className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
+            onScroll={onThreadScroll} role="log" aria-label="聊天记录">
+            <div className="wt-thread-content">
           {!selected&&<div className="ant-empty-chat">
             <img src="/logo.svg" alt="" width="74" height="74"/>
             <h3>欢迎使用 wTox</h3><p>选择一位好友，开始私人对话</p>
@@ -960,6 +1018,13 @@ export default function App(){
                   </span>}
                   footerPlacement={item.direction==="outgoing"?"outer-end":"outer-start"}/>
               </div>)}
+            </div>
+          </div>
+          {selected&&newBelowCount>0&&<AntButton type="primary" shape="round"
+            className="wt-new-message-indicator" icon={<ArrowDownOutlined/>}
+            onClick={scrollToLatest} aria-label={`查看下面的${newBelowCount}条新消息`}>
+            {newBelowCount} 条新消息
+          </AntButton>}
         </div>
         <div className="ant-compose-area">
           <p className="ant-compose-status">{!selected?"请先选择好友":
