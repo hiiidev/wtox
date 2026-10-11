@@ -4,6 +4,7 @@ let profileKey = null;
 let socket = null;
 let historyDb = null;
 let historyKey = null;
+let deviceHistoryKey = null; // Non-extractable WebCrypto key stored per Tox ID in IndexedDB
 let selectedPeer = null;
 let contacts = [];
 let drafts = new Map();
@@ -76,31 +77,106 @@ async function unseal(data, key) {
     {name:"AES-GCM",iv:new Uint8Array(data.iv)}, key, new Uint8Array(data.cipher));
   return JSON.parse(td.decode(plaintext));
 }
-async function unlockLocal() {
-  const pass = $("#historyPass").value;
-  if (pass.length < 12) throw new Error("本地历史口令至少需要 12 位");
-  const saltEntry = await getMeta("salt");
-  const salt = saltEntry ? new Uint8Array(saltEntry.value) : crypto.getRandomValues(new Uint8Array(16));
-  const material = await crypto.subtle.importKey("raw", te.encode(pass), "PBKDF2", false, ["deriveKey"]);
-  const derived = await crypto.subtle.deriveKey(
-    {name:"PBKDF2",salt,iterations:250000,hash:"SHA-256"},
-    material,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+// Stored only in this browser's per-Tox-public-key database. The AES key is
+// marked non-extractable, and is never sent to the server or derived from the
+// PUBLIC Tox ID (public IDs alone are not cryptographic secrets).
+const AUTO_KEY_ID = "device-key-v2";
+const AUTO_MARKER = "wtox-history-device-v2";
+async function beginHistoryForIdentity(){
+  if(!historyDb)throw new Error("浏览器不支持或无法打开加密历史数据库");
+  historyKey = null;
+  deviceHistoryKey = null;
+  $("#historyLock").hidden = true;
+  $("#historyActive").hidden = true;
+
   const check = await getMeta("check");
-  if (check) {
-    let marker;
-    try { marker = await unseal(check.value, derived); }
-    catch { throw new Error("本地历史口令不正确"); }
-    if (marker !== "wtox-history-v1") throw new Error("本地历史文件校验失败");
-  } else {
-    await putMeta({id:"salt",value:b64(salt)});
-    await putMeta({id:"check",value:await seal("wtox-history-v1",derived)});
+  const count = await reqResult(historyDb.transaction("events").objectStore("events").count());
+  if(!check && count>0){
+    throw new Error("本地历史验证信息丢失，已保留现有记录，请先备份浏览器数据");
   }
-  historyKey=derived;
+  let keyRecord = await getMeta(AUTO_KEY_ID);
+  if(!keyRecord){
+    const key = await crypto.subtle.generateKey(
+      {name:"AES-GCM",length:256},false,["encrypt","decrypt"]
+    );
+    const marker = !check ? await seal(AUTO_MARKER,key) : null;
+    const tx = historyDb.transaction("meta","readwrite");
+    tx.objectStore("meta").put({id:AUTO_KEY_ID,value:key});
+    if(marker)tx.objectStore("meta").put({id:"check",value:marker});
+    await txnDone(tx);
+    keyRecord = {value:key};
+  }
+  if(!keyRecord.value || keyRecord.value.type!=="secret" ||
+     keyRecord.value.algorithm?.name!=="AES-GCM"){
+    throw new Error("浏览器历史密钥不可用，已保留已有消息");
+  }
+  deviceHistoryKey = keyRecord.value;
+  // The check read before key generation may be empty on a new database.
+  const markerEntry = check || await getMeta("check");
+  if(markerEntry){
+    try{
+      const marker = await unseal(markerEntry.value,deviceHistoryKey);
+      if(marker !== AUTO_MARKER)throw new Error("marker mismatch");
+    }catch(exc){
+      if(await getMeta("salt")){
+        // Old PBKDF2+passphrase history. Do not overwrite or acknowledge
+        // pending messages until every old event is re-encrypted atomically.
+        $("#historyLock").hidden = false;
+        $("#historyActive").hidden = true;
+        error("检测到旧版加密历史：请在「本地加密聊天记录」中输入一次旧口令完成迁移",false);
+        return;
+      }
+      throw new Error("本地历史密钥与现有数据不匹配。已保留数据，不会覆盖或删除");
+    }
+  }
+  historyKey = deviceHistoryKey;
+  $("#historyLock").hidden=true;
+  $("#historyActive").hidden=false;
   $("#historyPass").value="";
+  await recoverPending();
+  await renderHistory();
+  updateComposer();
+}
+async function migrateLegacyHistory(){
+  if(!historyDb||!deviceHistoryKey)throw new Error("请先登录 Tox 身份");
+  if(historyKey)return;
+  const password=$("#historyPass").value;
+  if(!password)throw new Error("请输入旧版历史口令");
+  const saltEntry=await getMeta("salt");
+  const check=await getMeta("check");
+  if(!saltEntry||!check)throw new Error("未发现可以迁移的旧版历史");
+  const salt=new Uint8Array(saltEntry.value);
+  const material=await crypto.subtle.importKey("raw",te.encode(password),"PBKDF2",false,["deriveKey"]);
+  const oldKey=await crypto.subtle.deriveKey(
+    {name:"PBKDF2",salt,iterations:250000,hash:"SHA-256"},
+    material,{name:"AES-GCM",length:256},false,["decrypt"]
+  );
+  let oldMarker;
+  try{oldMarker=await unseal(check.value,oldKey)}
+  catch{throw new Error("旧版历史口令不正确，原始历史没有改变")}
+  if(oldMarker!=="wtox-history-v1")throw new Error("旧版历史校验失败，记录已保留");
+  // Work is staged entirely in memory until every event passes decryption.
+  const oldRows=await reqResult(historyDb.transaction("events").objectStore("events").getAll());
+  const converted=[];
+  for(const row of oldRows){
+    let plain;
+    try{plain=await unseal(row,oldKey)}
+    catch{throw new Error("部分旧记录无法解密，为避免丢失已取消迁移")}
+    converted.push({id:row.id,...await seal(plain,deviceHistoryKey)});
+  }
+  const newCheck=await seal(AUTO_MARKER,deviceHistoryKey);
+  const tx=historyDb.transaction(["meta","events"],"readwrite");
+  for(const row of converted)tx.objectStore("events").put(row);
+  tx.objectStore("meta").put({id:"check",value:newCheck});
+  tx.objectStore("meta").delete("salt");
+  await txnDone(tx); // All-or-nothing IndexedDB transaction.
+  $("#historyPass").value="";
+  historyKey=deviceHistoryKey;
   $("#historyLock").hidden=true;
   $("#historyActive").hidden=false;
   await recoverPending();
   await renderHistory();
+  updateComposer();
 }
 async function persistEvent(event) {
   if (!historyDb || !historyKey) return false;
