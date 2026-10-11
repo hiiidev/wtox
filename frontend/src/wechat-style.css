@@ -16,8 +16,18 @@ html[data-wtox-theme="wechat"] body{background:#1d1d1f!important}
 .ant-messenger .wechat-rail {background:#282829;color:#a5a6aa;
  border-right:1px solid #323234;min-height:0;
  display:flex;flex-direction:column;align-items:center;padding:26px 0 18px;gap:28px;}
-.wechat-rail-avatar{height:46px;width:46px;border:0;background:none;padding:0;
- cursor:pointer;border-radius:10px;overflow:hidden;}
+.wechat-rail-avatar{height:48px!important;width:48px!important;border:0!important;
+ background:transparent!important;padding:0!important;cursor:pointer;
+ border-radius:10px;overflow:visible!important;display:inline-flex!important;
+ align-items:center;justify-content:center;}
+.wechat-rail-avatar .ant-badge,.wechat-mobile-avatar .ant-badge{display:inline-flex;line-height:0;}
+.wechat-rail-avatar .ant-badge-dot,.wechat-mobile-avatar .ant-badge-dot{
+ box-shadow:0 0 0 2px var(--wt-panel, #252527);min-width:9px;width:9px;height:9px;
+}
+.wechat-mobile-avatar.ant-btn{min-width:38px;height:38px;padding:0;border:0;
+ display:inline-flex;align-items:center;justify-content:center;}
+.wtox-profile-header{display:flex;align-items:center;gap:16px;margin-bottom:22px;}
+.wtox-profile-id{overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,monospace;}
 .wechat-rail-avatar img{width:100%;height:100%;object-fit:contain;}
 .wechat-rail-primary,.wechat-rail-bottom {display:flex;flex-direction:column;gap:18px;align-items:center;}
 .wechat-rail-bottom{margin-top:auto}
