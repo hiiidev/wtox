@@ -178,7 +178,16 @@ def download_file(transfer_id: str, uid: str = Depends(require_user)):
     try:
         name,data=session(uid).files.download(transfer_id)
     except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
+        archive=manager.archive
+        if not archive or not archive.enabled:
+            raise HTTPException(404,str(exc)) from exc
+        try:
+            recovered=archive.get(uid,transfer_id)
+        except (OSError,ValueError) as error:
+            raise HTTPException(503,"WebDAV 附件暂时不可读取") from error
+        if not recovered:
+            raise HTTPException(404,"附件不存在或已过期") from exc
+        name,data=recovered
     safe=quote(name,safe="")
     return Response(data,media_type="application/octet-stream",headers={
         "Content-Disposition": "attachment; filename=\"attachment.bin\"; filename*=UTF-8''"+safe,
