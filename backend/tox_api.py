@@ -5,15 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSo
 from pydantic import BaseModel, Field
 
 from . import access, store
+from .profile_api import COOKIE_NAME as TOX_SESSION_COOKIE
 from .session_manager import manager
 from .tox_runtime import ToxActionError
 
 router = APIRouter()
 
 def require_user(request: Request) -> str:
-    uid = store.session_user(request.cookies.get("wtox_session"))
+    uid = store.tox_session_user(request.cookies.get(TOX_SESSION_COOKIE))
     if not uid:
-        raise HTTPException(401, "请先登录个人账号")
+        raise HTTPException(401, "请上传 .tox 身份文件登录")
     return uid
 
 def check_origin(request: Request):
@@ -118,7 +119,7 @@ async def websocket_endpoint(ws: WebSocket):
     if not access.gate_valid(ws.cookies.get(access.COOKIE_NAME)):
         await ws.close(code=1008)
         return
-    uid = store.session_user(ws.cookies.get("wtox_session"))
+    uid = store.tox_session_user(ws.cookies.get(TOX_SESSION_COOKIE))
     if not uid:
         await ws.close(code=1008)
         return
