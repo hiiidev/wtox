@@ -9,7 +9,7 @@ services:
     volumes:
       - wtox_data:/data
     expose:
-      - "8000"
+      - "6066"
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 256
@@ -17,7 +17,7 @@ services:
     tmpfs:
       - /tmp
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6066/health', timeout=5)"]
       interval: 30s
       timeout: 8s
       retries: 3
