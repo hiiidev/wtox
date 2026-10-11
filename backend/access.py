@@ -13,8 +13,8 @@ SESSION_AGE = 7 * 86400
 
 def validate_settings():
     secret = os.environ.get("WTOX_ACCESS_PASSWORD", "")
-    if len(secret) < 16 or secret == "REPLACE_WITH_STRONG_RANDOM_PASSWORD":
-        raise RuntimeError("Set WTOX_ACCESS_PASSWORD to a real password of at least 16 characters")
+    if len(secret) < 6 or secret == "REPLACE_WITH_STRONG_RANDOM_PASSWORD":
+        raise RuntimeError("Set WTOX_ACCESS_PASSWORD to a real password of at least 6 characters")
 
 def signature(message: bytes) -> bytes:
     # Rotating the entrance password revokes issued entrance cookies.
