@@ -142,7 +142,7 @@ export default function App(){
     selected:"#0da769",own:"#35d18c",incoming:"#303032",
     ownText:"#09291d",incomingText:"#f3f3f3"
   }:{
-    bg:"#fafafa",rail:"#c5c6c6",sidebar:"#eeeef0",chat:"#fafafa",
+    bg:"#f5f5f5",rail:"#c5c6c6",sidebar:"#eeeef0",chat:"#f5f5f5",
     search:"#ffffff",hover:"#e3e3e5",border:"#e3e3e5",
     text:"#222326",muted:"#96969c",primary:"#16ac71",
     selected:"#16ac71",own:"#9df29f",incoming:"#eeeeef",
