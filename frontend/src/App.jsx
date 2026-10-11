@@ -611,6 +611,40 @@ export default function App(){
     }catch(error){alert(error.message)}
   }
 
+  // Shared Ant Design settings, rendered as a full mobile "Me" page or
+  // a desktop modal; do not duplicate form state or export controls.
+  const settingsContent=<div className="wt-settings-content">
+
+      <h3>界面风格</h3>
+      <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
+        options={[{label:"浅色",value:"light"},{label:"黑夜",value:"dark"}]}/>
+      <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
+      <div className="wtox-separator">消息传输</div>
+      <p className="wtox-info">所有文字消息默认进入 VPS 加密队列；即使关闭网页，
+        VPS 也会在好友上线时发送。队列最多保留 7 天。</p>
+      <div className="wtox-separator">身份备份</div>
+      <p>.tox 文件包含身份私钥，请妥善保管，切勿分享给他人。</p>
+      <Button kind="primary" onClick={async()=>{
+        try{downloadBlob(await(await api("/api/profile/export")).blob(),"wtox-profile.tox")}
+        catch(e){alert(e.message)}
+      }}>下载最新 .tox 备份</Button>
+      <div className="wtox-separator">本地加密历史与导入导出</div>
+      {!historyReady&&!migrateRequired&&<p className="wtox-info">本地历史尚未就绪。</p>}
+      {migrateRequired&&<><label>旧版历史密码
+        <input type="password" value={legacyPass} onChange={e=>setLegacyPass(e.target.value)}/></label>
+        <Button kind="primary" onClick={migrateHistory}>一次性迁移旧历史</Button></>}
+      <div className="wtox-separator">历史导出</div>
+      <Button onClick={exportJson}>导出聊天记录（wTox JSON）</Button>
+      <p className="wtox-warning">以上历史文件均为明文，请妥善加密保管。</p>
+      <div className="wtox-separator">导入历史</div>
+      <label>选择 wTox JSON 文件
+        <input type="file" accept=".json,application/json" onChange={e=>setHistoryFile(e.target.files?.[0]||null)}/></label>
+      <Button kind="primary" onClick={importHistory}>导入到此浏览器</Button>
+      <small>aTox 提供聊天历史导出，但其专有格式尚待验证；目前仅保证 wTox 自身 JSON 的备份和恢复。</small>
+      <div className="wtox-separator">当前登录会话</div>
+      <Button onClick={logout}>退出当前 Tox 身份</Button>
+  </div>;
+
   if(loading)return <div className="wtox-loading">正在加载 wTox…</div>;
   if(!user)return <div className="wtox-auth-layout">
     <div className="wtox-auth-card"><img className="wtox-logo" src="/logo.svg" alt="wtox"/>
@@ -750,11 +784,41 @@ export default function App(){
           <button type="button" className={section==="contacts"?"active":""}
             aria-current={section==="contacts"?"page":undefined}
             onClick={()=>setSection("contacts")}><ContactsOutlined/><span>通讯录</span></button>
-          <button type="button" onClick={()=>setModal("settings")}>
+          <button type="button" onClick={()=>{setSection("me");setMobileChat(false)}}>
             <UserOutlined/><span>我</span>
           </button>
         </nav>
       </aside>
+      <section className="wt-mobile-me-page" aria-label="我的设置">
+        <header className="wt-mobile-me-header"><Typography.Title level={4}>我</Typography.Title></header>
+        <AntButton type="text" className="wt-mobile-profile-card"
+          onClick={()=>setModal("profile")} aria-label="查看并修改我的 Tox 资料">
+          <Badge dot color={ownBadgeColor} offset={[-2,44]}>
+            <Avatar size={56} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
+              {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+            </Avatar>
+          </Badge>
+          <span className="wt-mobile-profile-name">
+            <strong>{ownProfile.name||"Tox 用户"}</strong>
+            <Typography.Text type="secondary">{ownStatusLabel}</Typography.Text>
+          </span>
+          <span className="wt-mobile-profile-arrow">›</span>
+        </AntButton>
+        <div className="wt-mobile-settings-scroll">
+          {settingsContent}
+        </div>
+        <nav className="wechat-mobile-tabs" aria-label="手机导航">
+          <button type="button" onClick={()=>setSection("chats")}>
+            <MessageOutlined/><span>聊天</span>
+          </button>
+          <button type="button" onClick={()=>setSection("contacts")}>
+            <ContactsOutlined/><span>通讯录</span>
+          </button>
+          <button type="button" className="active" aria-current="page">
+            <UserOutlined/><span>我</span>
+          </button>
+        </nav>
+      </section>
       <main className="ant-chat-area">
         <div className="ant-chat-toolbar">
           <div className="ant-chat-identity">
@@ -967,34 +1031,7 @@ export default function App(){
     </AntModal>}
 
     {modal==="settings"&&<AntModal open title="设置与备份" onCancel={closeModal} footer={null} centered destroyOnHidden width={640}>
-      <h3>界面风格</h3>
-      <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
-        options={[{label:"浅色",value:"light"},{label:"黑夜",value:"dark"}]}/>
-      <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
-      <div className="wtox-separator">消息传输</div>
-      <p className="wtox-info">所有文字消息默认进入 VPS 加密队列；即使关闭网页，
-        VPS 也会在好友上线时发送。队列最多保留 7 天。</p>
-      <div className="wtox-separator">身份备份</div>
-      <p>.tox 文件包含身份私钥，请妥善保管，切勿分享给他人。</p>
-      <Button kind="primary" onClick={async()=>{
-        try{downloadBlob(await(await api("/api/profile/export")).blob(),"wtox-profile.tox")}
-        catch(e){alert(e.message)}
-      }}>下载最新 .tox 备份</Button>
-      <div className="wtox-separator">本地加密历史与导入导出</div>
-      {!historyReady&&!migrateRequired&&<p className="wtox-info">本地历史尚未就绪。</p>}
-      {migrateRequired&&<><label>旧版历史密码
-        <input type="password" value={legacyPass} onChange={e=>setLegacyPass(e.target.value)}/></label>
-        <Button kind="primary" onClick={migrateHistory}>一次性迁移旧历史</Button></>}
-      <div className="wtox-separator">历史导出</div>
-      <Button onClick={exportJson}>导出聊天记录（wTox JSON）</Button>
-      <p className="wtox-warning">以上历史文件均为明文，请妥善加密保管。</p>
-      <div className="wtox-separator">导入历史</div>
-      <label>选择 wTox JSON 文件
-        <input type="file" accept=".json,application/json" onChange={e=>setHistoryFile(e.target.files?.[0]||null)}/></label>
-      <Button kind="primary" onClick={importHistory}>导入到此浏览器</Button>
-      <small>aTox 提供聊天历史导出，但其专有格式尚待验证；目前仅保证 wTox 自身 JSON 的备份和恢复。</small>
-      <div className="wtox-separator">当前登录会话</div>
-      <Button onClick={logout}>退出当前 Tox 身份</Button>
+      {settingsContent}
     </AntModal>}
 
     {modal==="add"&&<AntModal open title="添加 Tox 好友" onCancel={closeModal}
