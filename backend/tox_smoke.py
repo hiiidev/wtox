@@ -42,6 +42,10 @@ def main():
             assert len(session.friends()) == 1
             assert session.friends()[0]["public_key"] == friend_key
             assert session.friends()[0]["status"] == 0, "offline friend should be offline"
+            updated = session.update_self_profile("wTox smoke", "aTox compatible status", 2)
+            assert updated == {"name": "wTox smoke",
+                               "status_message": "aTox compatible status",
+                               "user_status": 2}, "native Tox profile write/read failed"
         finally:
             session.close()
         assert saved, "session did not flush savedata at shutdown"
@@ -50,6 +54,10 @@ def main():
         try:
             assert len(reopened.friends()) == 1, "friend was not retained in savedata"
             assert reopened.friends()[0]["public_key"] == friend_key
+            assert reopened.self_profile() == {
+                "name": "wTox smoke", "status_message": "aTox compatible status",
+                "user_status": 2
+            }, "nickname/status were not saved to native .tox profile"
             print("wtox native smoke PASS: friends persist across savedata reload")
         finally:
             # Close a session which hasn't started a thread, with explicit native cleanup.
