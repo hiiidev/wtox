@@ -42,7 +42,7 @@ function Modal({title,close,children}){
     </section>
   </div>;
 }
-function AttachmentBubble({file,accept,reject,download}){
+function AttachmentBubble({file,accept,reject,download,historyHandle}){
   const [preview,setPreview]=useState("");
   const isPicture=/\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
   const completed=file.file_state==="completed";
@@ -52,12 +52,17 @@ function AttachmentBubble({file,accept,reject,download}){
     let alive=true,url="";
     (async()=>{
       try{
-        const blob=await(await api("/api/files/"+encodeURIComponent(file.file_id)+"/download")).blob();
-        if(blob.size>5*1024*1024)return;
-        const mime=/\.png$/i.test(file.file_name)?"image/png":
-          /\.webp$/i.test(file.file_name)?"image/webp":
-          /\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
-        url=URL.createObjectURL(new Blob([blob],{type:mime}));
+        let blob=historyHandle?.ready()?await historyHandle.cachedImage(file.file_id):null;
+        if(!blob){
+          blob=await(await api("/api/files/"+encodeURIComponent(file.file_id)+"/download")).blob();
+          if(blob.size>5*1024*1024)return;
+          const mime=/\.png$/i.test(file.file_name)?"image/png":
+            /\.webp$/i.test(file.file_name)?"image/webp":
+            /\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
+          blob=new Blob([blob],{type:mime});
+          if(historyHandle?.ready())await historyHandle.cacheImage(file.file_id,blob);
+        }
+        url=URL.createObjectURL(blob);
         if(alive)setPreview(url);
         else URL.revokeObjectURL(url);
       }catch{
@@ -65,7 +70,7 @@ function AttachmentBubble({file,accept,reject,download}){
       }
     })();
     return()=>{alive=false;if(url)URL.revokeObjectURL(url)};
-  },[canDownload,isPicture,file.file_id,file.file_name]);
+  },[canDownload,isPicture,file.file_id,file.file_name,historyHandle]);
   const percentage=file.file_size>0?Math.min(100,Math.floor(
     (file.file_progress||0)/file.file_size*100)):0;
   const mine=file.direction==="outgoing";
@@ -288,6 +293,7 @@ export default function App(){
               });
             }
           }
+          await h.expireImages();
           await recoverPending(h);
           await flushBrowserQueue(null,h);
         }
@@ -295,6 +301,15 @@ export default function App(){
     })();
     return()=>{dead=true;history.current?.close();history.current=null};
   },[user?.public_key,recoverPending,alert]);
+
+  // Encrypted image previews are temporary browser data too; remove after
+  // seven days even when the user leaves the application open.
+  useEffect(()=>{
+    if(!user?.public_key)return;
+    const sweep=()=>history.current?.expireImages().catch(()=>{});
+    const timer=setInterval(sweep,60*60*1000);
+    return()=>clearInterval(timer);
+  },[user?.public_key]);
 
   // Poll always, including when websocket is interrupted. Visibility/wakeup
   // triggers immediate catch-up after mobile browser background suspension.
@@ -530,7 +545,13 @@ export default function App(){
   }
   async function downloadFile(file){
     try{
-      const blob=await(await api("/api/files/"+encodeURIComponent(file.id)+"/download")).blob();
+      let blob=null;
+      const h=history.current;
+      const isImage=/\.(png|jpe?g|gif|webp)$/i.test(file.name||"");
+      if(isImage&&h?.ready())blob=await h.cachedImage(file.id);
+      if(!blob)blob=await(await api("/api/files/"+encodeURIComponent(file.id)+"/download")).blob();
+      if(isImage&&h?.ready()&&blob.size<=5*1024*1024)
+        await h.cacheImage(file.id,blob);
       downloadBlob(blob,file.name);
     }catch(error){alert(error.message)}
   }
@@ -655,7 +676,7 @@ export default function App(){
                 <AttachmentBubble file={item}
                   accept={id=>controlFile(id,"accept")}
                   reject={id=>controlFile(id,"reject")}
-                  download={downloadFile}/>
+                  download={downloadFile} historyHandle={history.current}/>
               </div>
             : <div key={item.id} className="ant-message-wrap"
                 onContextMenu={event=>{event.preventDefault();requestDelete(item)}}
