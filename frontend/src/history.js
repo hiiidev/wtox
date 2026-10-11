@@ -125,7 +125,8 @@ export async function openIdentityHistory(owner){
         text:event.text||"",
         message_id:event.direction==="outgoing"?event.message_id:undefined,
         session_id:event.direction==="outgoing"?event.session_id:undefined,
-        delivery_status:event.direction==="outgoing"?(event.delivery_status||"sent"):undefined
+        delivery_status:event.direction==="outgoing"?(event.delivery_status||"sent"):undefined,
+        outbox_id:event.direction==="outgoing"?(event.outbox_id||event.client_id):undefined
       };
       const cipher=await cryptoSeal(row,key);
       const tx=db.transaction("events","readwrite");
@@ -155,6 +156,37 @@ export async function openIdentityHistory(owner){
       }
       return false;
     }
+    async function applyOutboxStatuses(statuses){
+      requireKey();
+      if(!Array.isArray(statuses)||!statuses.length)return 0;
+      const mapping=new Map(statuses.map(s=>[s.id,s]));
+      const rows=await allEncrypted(db);
+      const updates=[];
+      for(const row of rows){
+        const plain=await cryptoOpen(row,key);
+        const entry=plain.outbox_id && mapping.get(plain.outbox_id);
+        if(!entry||plain.direction!=="outgoing"||plain.type!=="message")continue;
+        // Never downgrade a confirmed receipt after a later stale status poll.
+        if(["delivered","read"].includes(plain.delivery_status))continue;
+        const next=entry.status==="sent"?"sent":
+                   entry.status==="failed"?"failed":
+                   entry.status==="expired"?"failed":
+                   entry.status==="uncertain"?"uncertain":"queued";
+        if(plain.delivery_status===next&&
+           plain.session_id===entry.session_id&&plain.message_id===entry.message_id)continue;
+        plain.delivery_status=next;
+        plain.session_id=entry.session_id||plain.session_id;
+        plain.message_id=Number.isInteger(entry.message_id)?entry.message_id:plain.message_id;
+        if(entry.error)plain.delivery_error=entry.error;
+        updates.push({id:row.id,...await cryptoSeal(plain,key)});
+      }
+      if(updates.length){
+        const tx=db.transaction("events","readwrite");
+        for(const row of updates)tx.objectStore("events").put(row);
+        await completed(tx);
+      }
+      return updates.length;
+    }
     async function importMessages(rows){
       requireKey();
       if(rows.length>20000)throw new Error("导入记录超过 20000 条");
@@ -172,6 +204,6 @@ export async function openIdentityHistory(owner){
       return encrypted.length;
     }
     return {owner,ready:()=>!!key,needsMigration:()=>needsMigration,
-      migrate,read,persist,deliverReceipt,importMessages,close:()=>db.close()};
+      migrate,read,persist,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
   }catch(error){db.close();throw error}
 }
