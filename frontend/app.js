@@ -209,7 +209,7 @@ async function applyMessageReceipt(event) {
   if(!historyDb||!historyKey)return false;
   // Restrict matching to a single native Toxcore instance. Message IDs can
   // be reused when a Tox profile is restored after a process restart.
-  if(event.type!=="message_receipt" || !["read","sent"].includes(event.status) ||
+  if(event.type!=="message_receipt" || !["delivered","read","sent"].includes(event.status) ||
      typeof event.public_key!=="string" ||
      typeof event.session_id!=="string" ||
      !Number.isInteger(event.message_id))return false;
@@ -220,8 +220,8 @@ async function applyMessageReceipt(event) {
        record.public_key===event.public_key &&
        record.session_id===event.session_id &&
        record.message_id===event.message_id){
-      if(record.delivery_status!=="read"){
-        record.delivery_status="read";
+      if(record.delivery_status!=="delivered" && record.delivery_status!=="read"){
+        record.delivery_status="delivered";
         const encrypted=await seal(record,historyKey);
         const tx=historyDb.transaction("events","readwrite");
         tx.objectStore("events").put({id:row.id,...encrypted});
@@ -280,8 +280,8 @@ async function renderHistory(){
     const row=document.createElement("div");row.className="bubble-row"+(mine?" mine":"");
     const bubble=document.createElement("div");bubble.className="bubble";bubble.textContent=e.text||"";
     const stamp=document.createElement("div");stamp.className="bubble-info";
-    stamp.textContent=new Date(e.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+(mine?(e.delivery_status==="read"?" · 已读取":" · 已发送"):"");
-    if(mine)stamp.title="已发送：本机 Toxcore 接受消息；已读取：对方 Tox 客户端回执，不保证本人阅读";
+    stamp.textContent=new Date(e.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+(mine?(["delivered","read"].includes(e.delivery_status)?" · 已送达":" · 已发送"):"");
+    if(mine)stamp.title="已发送：本机 Toxcore 接受消息；已送达：对方 Tox 客户端回执，不代表本人已读";
     row.append(bubble,stamp);pane.append(row);
   }
   pane.scrollTop=pane.scrollHeight;
