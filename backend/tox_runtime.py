@@ -169,7 +169,7 @@ class ToxSession:
                 "public_key": self._friend_key(friend),
                 "session_id": self.session_id,
                 "message_id": int(message_id),
-                "status": "read",
+                "status": "delivered",
             })
         except Exception as exc:
             print("Tox receipt callback failed:", type(exc).__name__, flush=True)
