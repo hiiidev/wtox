@@ -7,7 +7,7 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   MessageOutlined } from "@ant-design/icons";
 import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
-import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson,toQtoxTsv,fromQtoxTsv} from "../history_io.js";
+import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
 const transferText={offered:"等待接受",waiting:"等待对方接受",receiving:"接收中",sending:"发送中",
@@ -120,7 +120,7 @@ export default function App(){
   const [loginFile,setLoginFile]=useState(null),[busy,setBusy]=useState(false);
   const [friendId,setFriendId]=useState(""),[requestKey,setRequestKey]=useState("");
   const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
-  const [historyFile,setHistoryFile]=useState(null),[ownName,setOwnName]=useState("");
+  const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),noticeTimer=useRef(null),lastMessage=useRef(0);
@@ -504,27 +504,15 @@ export default function App(){
         "wtox-"+user.public_key.slice(0,12)+".json");
     }catch(error){alert(error.message)}
   }
-  async function exportQtox(){
-    try{
-      if(!selected)throw Error("请先选择要导出的好友");
-      if(!history.current?.ready())throw Error("本地历史未就绪");
-      if(!confirm("导出的 TXT 是明文聊天记录。确定导出吗？"))return;
-      const name=selectedFriend?.name||"Tox Friend";
-      const data=toQtoxTsv(await history.current.read(),selected,name);
-      downloadBlob(new Blob([data],{type:"text/plain;charset=utf-8"}),
-        "wtox-qtox-"+selected.slice(0,12)+".txt");
-    }catch(error){alert(error.message)}
-  }
   async function importHistory(){
     try{
       if(!historyFile||historyFile.size>MAX_HISTORY_IMPORT)throw Error("请选择小于 8 MiB 的文件");
       if(!history.current?.ready())throw Error("本地历史未就绪");
       const text=await historyFile.text();
-      const rows=historyFile.name.toLowerCase().endsWith(".json")
-        ?fromWtoxJson(text,user.public_key):
-        historyFile.name.toLowerCase().endsWith(".txt")
-          ?fromQtoxTsv(text,selected,ownName.trim())
-          :(()=>{throw Error("只接受 JSON 或 qTox TXT")})();
+      if(!historyFile.name.toLowerCase().endsWith(".json")){
+        throw Error("目前仅支持 wTox JSON；aTox 导出文件格式尚未验证");
+      }
+      const rows=fromWtoxJson(text,user.public_key);
       if(!rows.length)throw Error("文件不含可导入消息");
       if(!confirm("导入 "+rows.length+" 条消息到此浏览器的加密历史？"))return;
       await history.current.importMessages(rows);await refreshHistory();
