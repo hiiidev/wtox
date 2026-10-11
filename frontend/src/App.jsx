@@ -39,6 +39,56 @@ function Modal({title,close,children}){
     </section>
   </div>;
 }
+function AttachmentBubble({file,accept,reject,download}){
+  const [preview,setPreview]=useState("");
+  const isPicture=/\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
+  const completed=file.file_state==="completed";
+  const canDownload=file.direction==="incoming"&&completed;
+  useEffect(()=>{
+    if(!canDownload||!isPicture||!file.file_id)return;
+    let alive=true,url="";
+    (async()=>{
+      try{
+        const blob=await(await api("/api/files/"+encodeURIComponent(file.file_id)+"/download")).blob();
+        if(blob.size>5*1024*1024)return;
+        const mime=/\.png$/i.test(file.file_name)?"image/png":
+          /\.webp$/i.test(file.file_name)?"image/webp":
+          /\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
+        url=URL.createObjectURL(new Blob([blob],{type:mime}));
+        if(alive)setPreview(url);
+        else URL.revokeObjectURL(url);
+      }catch{
+        // File may already have expired from the VPS memory.
+      }
+    })();
+    return()=>{alive=false;if(url)URL.revokeObjectURL(url)};
+  },[canDownload,isPicture,file.file_id,file.file_name]);
+  const percentage=file.file_size>0?Math.min(100,Math.floor(
+    (file.file_progress||0)/file.file_size*100)):0;
+  const mine=file.direction==="outgoing";
+  const state=transferText[file.file_state]||file.file_state;
+  return <div className={"wtox-attachment-row "+(mine?"out":"")} role="group"
+     aria-label={"附件 "+file.file_name}>
+    <div className="wtox-attachment-bubble">
+      {preview&&<img className="wtox-attachment-image" src={preview}
+        alt={file.file_name} loading="lazy"/>}
+      <strong>📎 {file.file_name}</strong>
+      <small>{Math.round(file.file_size/1024)} KiB · {state}
+        {percentage>0&&percentage<100?" · "+percentage+"%":""}</small>
+      {file.direction==="incoming"&&file.file_state==="offered"&&
+        <div className="wtox-attachment-actions">
+          <Button onClick={()=>accept(file.file_id)}>接受</Button>
+          <Button onClick={()=>reject(file.file_id)}>拒绝</Button>
+        </div>}
+      {canDownload&&<Button onClick={()=>download({id:file.file_id,name:file.file_name})}>
+        下载文件
+      </Button>}
+      {completed&&mine&&<small>已由 Toxcore 完成文件传输</small>}
+      {completed&&!preview&&isPicture&&<small>图片预览不可用或已过期</small>}
+    </div>
+    <time>{new Date(file.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</time>
+  </div>;
+}
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
 
 export default function App(){
@@ -70,7 +120,13 @@ export default function App(){
     setNetwork((await getJson("/api/network")).status??-1);
   },[]);
   const refreshTransfers=useCallback(async()=>{
-    setTransfers((await getJson("/api/files")).files||[]);
+    const files=(await getJson("/api/files")).files||[];
+    setTransfers(files);
+    const h=history.current;
+    if(h?.ready()){
+      for(const file of files)await h.persistFile(file);
+      if(files.length)setMessages(await h.read());
+    }
   },[]);
   const refreshHistory=useCallback(async(h=history.current)=>{
     if(h?.ready())setMessages(await h.read());
@@ -159,6 +215,11 @@ export default function App(){
         }catch(error){alert("消息送达回执处理失败："+error.message)}
       }
     }else if(e.type==="file"){
+      // Persist the attachment bubble even if the server expires its file buffer.
+      if(h?.ready()){
+        try{await h.persistFile(e);await refreshHistory(h)}
+        catch(error){alert("附件状态保存失败："+error.message)}
+      }
       refreshTransfers().catch(()=>{});
       if(e.state==="offered")alert("收到附件："+e.name+"。打开 📎 查看并接受。");
     }else if(["connection","friend_connection"].includes(e.type)){
@@ -254,7 +315,7 @@ export default function App(){
       .then(settings=>setOfflineQueue(settings.offline_queue!==false))]);
   },[user?.public_key,refreshFriends,refreshNetwork]);
   const selectedFriend=friends.find(f=>f.public_key===selected);
-  const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&e.type==="message")
+  const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
     .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
   const visibleFriends=useMemo(()=>friends.filter(f=>
     (f.name+" "+f.public_key).toLowerCase().includes(filter.toLowerCase()))
@@ -501,7 +562,11 @@ export default function App(){
           </ConversationHeader>
           <MessageList className="wtox-message-list"
             empty={selected?"暂无聊天记录":"选择左侧联系人开始聊天"}>
-            {thread.map(item=><Message key={item.id}
+            {thread.map(item=>item.type==="file"
+              ? <AttachmentBubble key={item.id} file={item}
+                  accept={id=>controlFile(id,"accept")}
+                  reject={id=>controlFile(id,"reject")} download={downloadFile}/>
+              : <Message key={item.id}
               model={{message:String(item.text||""),sentTime:
                 new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+
                 (item.direction==="outgoing"?" · "+stateText(item):""),
