@@ -134,9 +134,9 @@ assert.match(refined,/\.ant-mobile-back\.ant-btn:active/);
 assert.match(refined,/\.wechat-mobile-tabs button svg\{/);
 assert.match(refined,/\.wechat-conversation\.is-selected \.wechat-presence\.online/);
 assert.match(refined,/\.wechat-conversation \.wechat-presence\.online\{[\s\S]*?outline:none!important/);
-assert.equal((app.match(/<RailIcon kind="chats"\/>/g)||[]).length,2);
-assert.equal((app.match(/<RailIcon kind="contacts"\/>/g)||[]).length,2);
-assert.equal((app.match(/<RailIcon kind="settings"\/>/g)||[]).length,2);
+assert.equal((app.match(/<RailIcon kind="chats"\/>/g)||[]).length,3);
+assert.equal((app.match(/<RailIcon kind="contacts"\/>/g)||[]).length,3);
+assert.equal((app.match(/<RailIcon kind="settings"\/>/g)||[]).length,3);
 
 assert.equal((app.match(/trigger=\{\["contextMenu"\]\}/g)||[]).length,2);
 assert.match(app,/const messageMenu=item=>\(\{/);
