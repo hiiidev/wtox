@@ -92,3 +92,9 @@ assert.match(app,/password:createPassword/);
 assert.match(app,/X-Tox-Password-Bytes/);
 assert.match(app,/password:backupPassword/);
 assert.match(app,/\/api\/profile\/export\/encrypted/);
+
+const encryptedHistory=readFileSync("frontend/src/history.js","utf8");
+assert.match(encryptedHistory,/await meta\(db,"deleted-"\+id\)/);
+assert.match(encryptedHistory,/db\.transaction\(\["events","meta"\],"readwrite"\)/);
+assert.match(encryptedHistory,/tx\.objectStore\("meta"\)\.put\(\{id:"deleted-"\+id/);
+assert.doesNotMatch(app,/wt-select-indicator" aria-hidden/);
