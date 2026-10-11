@@ -164,3 +164,15 @@ h2{font-size:22px;letter-spacing:-.035em}small,.muted{color:var(--muted)}.eyebro
   .auth-card{padding:25px 22px;border-radius:16px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* Interoperable history and native Tox file transfers */
+.history-transfer{margin-top:22px;padding-top:15px;border-top:1px solid #31445f}
+.history-transfer h3{font-size:15px;margin-bottom:7px}
+.history-transfer .muted{font-size:12px;line-height:1.6}
+.history-transfer input[type=file]{width:100%}
+.transfer-list{display:flex;flex-direction:column;gap:10px;max-height:300px;overflow-y:auto}
+.transfer-card{padding:12px;background:#192d46;border:1px solid #37506e;border-radius:12px;display:flex;flex-direction:column;gap:7px;overflow-wrap:anywhere}
+.transfer-card strong{font-size:13px}
+.transfer-card small{font-size:12px;color:#a2bddb}
+.transfer-card .button{align-self:flex-start;padding:7px 11px}
+@media(max-width:650px){.transfer-card .button{font-size:13px}.history-transfer .button-row{gap:6px}}
