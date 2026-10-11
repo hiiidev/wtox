@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from . import access, store
 from .profile_api import COOKIE_NAME as TOX_SESSION_COOKIE
 from .session_manager import manager
-from .tox_runtime import ToxActionError
+from .tox_runtime import ToxActionError, FriendOfflineError
 from .file_transfer import MAX_FILE
 
 router = APIRouter()
@@ -41,6 +41,10 @@ class FriendAccept(BaseModel):
 class SendMessage(BaseModel):
     public_key: str = Field(min_length=64, max_length=64)
     text: str = Field(min_length=1, max_length=1000)
+    client_id: str | None = Field(default=None, min_length=32, max_length=32)
+
+class MessageSettings(BaseModel):
+    offline_queue: bool
 
 class Acknowledge(BaseModel):
     ids: list[str] = Field(max_length=100)
@@ -95,15 +99,37 @@ def send_message(body: SendMessage, request: Request, uid: str = Depends(require
     check_origin(request)
     try:
         tox_session = session(uid)
-        message_id = tox_session.send_message(body.public_key, body.text)
-        return {"ok": True, "message_id": message_id,
-                "session_id": tox_session.session_id,
-                "status": "sent",
-                "public_key": body.public_key.upper()}
+        public_key = body.public_key.upper()
+        if store.offline_queue_enabled(uid):
+            import uuid
+            # Validate friend exists; do not enqueue to an unknown peer.
+            if not any(f["public_key"]==public_key for f in tox_session.friends()):
+                raise ValueError("好友不在列表中")
+            client_id=body.client_id or uuid.uuid4().hex
+            entry=store.enqueue_outbox(uid,public_key,body.text,client_id)
+            return {"ok":True,**entry}
+        message_id=tox_session.send_message(public_key,body.text)
+        return {"ok":True,"message_id":message_id,"session_id":tox_session.session_id,
+                "status":"sent","public_key":public_key}
     except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
+        raise HTTPException(400,str(exc)) from exc
     except ToxActionError as exc:
-        raise HTTPException(409, str(exc)) from exc
+        raise HTTPException(409,str(exc)) from exc
+
+@router.get("/api/settings")
+def message_settings(uid: str = Depends(require_user)):
+    return {"offline_queue": store.offline_queue_enabled(uid),
+            "friend_refresh_seconds":12, "pending_poll_seconds":8}
+
+@router.put("/api/settings")
+def update_settings(body: MessageSettings, request: Request, uid: str = Depends(require_user)):
+    check_origin(request)
+    store.set_offline_queue(uid,body.offline_queue)
+    return {"offline_queue": store.offline_queue_enabled(uid)}
+
+@router.get("/api/outbox")
+def outbox(uid: str = Depends(require_user)):
+    return {"messages":store.outbox_status(uid)}
 
 @router.get("/api/files")
 def list_files(uid: str = Depends(require_user)):
