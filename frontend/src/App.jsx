@@ -146,6 +146,7 @@ export default function App(){
   const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
+  const attachmentInput=useRef(null);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),noticeTimer=useRef(null),lastMessage=useRef(0);
   useEffect(()=>{
@@ -698,17 +699,39 @@ export default function App(){
     }catch(error){alert(error.message)}
   }
   async function sendFile(){
+    const file=uploadFile;
     if(!selected||!online(selectedFriend)){alert("附件要求双方在线");return}
-    if(!uploadFile||uploadFile.size<1||uploadFile.size>5*1024*1024){
+    if(!file||file.size<1||file.size>5*1024*1024){
       alert("附件大小需为 1 字节至 5 MiB");return;
     }
     setBusy(true);
     try{
       const url="/api/files/send?peer="+encodeURIComponent(selected)+
-        "&name="+encodeURIComponent(uploadFile.name);
-      await api(url,{method:"POST",raw:true,headers:{"Content-Type":"application/octet-stream"},body:uploadFile});
-      setUploadFile(null);await refreshTransfers();alert("已发送附件请求，等待对方接受");
-    }catch(error){alert(error.message)}finally{setBusy(false)}
+        "&name="+encodeURIComponent(file.name);
+      const response=await api(url,{
+        method:"POST",raw:true,
+        headers:{"Content-Type":"application/octet-stream"},
+        body:file
+      });
+      const transfer=await response.json();
+      const h=history.current;
+      // Directly persist the returned transfer, independently of WebSocket
+      // timing; then it always appears among the current chat bubbles.
+      if(h?.ready()){
+        await h.persistFile(transfer);
+        if(/\.(png|jpe?g|webp|gif)$/i.test(file.name) && file.size<=5*1024*1024){
+          const mime=file.type.startsWith("image/")?file.type:
+            /\.png$/i.test(file.name)?"image/png":"image/jpeg";
+          await h.cacheImage(transfer.id,new Blob([file],{type:mime}));
+        }
+        await refreshHistory(h);
+      }
+      setUploadFile(null);
+      if(attachmentInput.current)attachmentInput.current.value="";
+      await refreshTransfers();
+      alert("附件已加入聊天，等待对方接受");
+    }catch(error){alert("发送附件失败："+error.message)}
+    finally{setBusy(false)}
   }
   async function controlFile(id,action){
     try{
@@ -976,10 +999,6 @@ export default function App(){
             </div>
           </div>
           <Space>
-            <Tooltip title="发送和接收附件">
-              <AntButton shape="circle" icon={<PaperClipOutlined/>}
-                aria-label="附件" onClick={()=>{setModal("files");refreshTransfers().catch(()=>{})}}/>
-            </Tooltip>
             <Tooltip title="删除当前好友">
               <Popconfirm title="删除此 Tox 好友？" description="本地聊天记录不会被删除"
                 onConfirm={removeFriend} okText="删除" cancelText="取消" disabled={!selected}>
@@ -1051,7 +1070,34 @@ export default function App(){
             !historyReady?"本地加密历史尚未就绪":
             !online(selectedFriend)?"对方离线，VPS 已准备好离线队列":
             sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
-          <Sender value={draft} placeholder="输入消息…"
+          <input type="file" hidden ref={attachmentInput}
+            aria-label="选择要发送的附件"
+            onChange={e=>setUploadFile(e.target.files?.[0]||null)}/>
+          <Sender className="wt-chat-sender" value={draft}
+            placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
+            prefix={<Tooltip title="添加附件">
+              <AntButton type="text" icon={<PaperClipOutlined/>}
+                aria-label="添加附件" disabled={!selected||!online(selectedFriend)}
+                onClick={()=>attachmentInput.current?.click()}/>
+            </Tooltip>}
+            header={<Sender.Header title="准备发送附件" open={!!uploadFile}
+              onOpenChange={open=>{if(!open)setUploadFile(null)}}>
+              {uploadFile&&<Space orientation="vertical" size="small"
+                className="wt-send-file-preview">
+                <FileCard name={uploadFile.name} byte={uploadFile.size} size="small"/>
+                <Space>
+                  <AntButton type="primary" size="small" loading={busy}
+                    disabled={!online(selectedFriend)} onClick={sendFile}>
+                    发送附件
+                  </AntButton>
+                  <AntButton size="small" onClick={()=>setUploadFile(null)}>取消</AntButton>
+                </Space>
+              </Space>}
+            </Sender.Header>}
+            onPasteFile={files=>{
+              const file=files?.[0];
+              if(file)setUploadFile(file);
+            }}
             onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
             onSubmit={text=>sendText("",text,text)}
             disabled={!selected||!historyReady||sending} submitType="enter"/>
