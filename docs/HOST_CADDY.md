@@ -28,6 +28,27 @@ nano .env
 
 **升级旧版本时不要覆盖已存在的 `.env`，尤其不能更换 `WTOX_MASTER_KEY`。在重建容器前备份 `wtox_data` 数据卷。新版不再使用网站用户名和个人账号密码，改为下载/上传 `.tox` 配置创建或登录身份；旧登录 Cookie 尚有效时可在新页面导出原身份备份。**
 
+## 本次 React 与离线队列升级
+
+本次升级保留原生 Caddy 和宿主机 `127.0.0.1:6066` 端口。新增 React/Vite 前端构建阶段，需要 Docker 能访问 npm 包仓库；**不需要在宿主机额外运行 Node.js 进程**。
+
+- 默认允许发送给离线的 Tox 好友：消息先 AES-GCM 加密暂存在 VPS SQLite，好友上线后后台任务尝试发送。
+- 网页设置里可以关闭；刷新好友在线状态每 12 秒，未领取消息和队列状态每 8 秒检查，手机从后台返回时立即同步。
+- 发送中断的结果不确定时不会自动重试，避免消息被重复发送。
+- 已有 `.env`、`WTOX_MASTER_KEY` 和 `wtox_data` 数据卷不能覆盖或删除。
+
+**建议先执行构建检查，再替换运行容器：**
+
+```bash
+cd wtox
+git pull
+docker compose -f compose.host-caddy.yml build web
+docker compose -f compose.host-caddy.yml up -d --no-build
+curl -fsS http://127.0.0.1:6066/health
+```
+
+Docker 构建阶段会编译 React 静态文件并执行原生 Toxcore 自检。如果失败，不应跳过构建检查；请保留错误日志中的非敏感文本。
+
 ## 2. **只运行 wtox Web 容器**
 
 ```bash
