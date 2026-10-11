@@ -21,11 +21,12 @@ function completed(transaction){
 }
 function openDb(owner){
   return new Promise((resolve,reject)=>{
-    const req=indexedDB.open("wtox-local-"+owner,1);
+    const req=indexedDB.open("wtox-local-"+owner,2);
     req.onupgradeneeded=()=>{
       const db=req.result;
       if(!db.objectStoreNames.contains("meta")) db.createObjectStore("meta",{keyPath:"id"});
       if(!db.objectStoreNames.contains("events"))db.createObjectStore("events",{keyPath:"id"});
+      if(!db.objectStoreNames.contains("attachments"))db.createObjectStore("attachments",{keyPath:"id"});
     };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error);
@@ -181,6 +182,49 @@ export async function openIdentityHistory(owner){
       await completed(tx);
       return true;
     }
+    const IMAGE_CACHE_TTL=7*86400*1000;
+    async function cacheImage(id,blob){
+      requireKey();
+      if(typeof id!=="string"||!^[a-f0-9]{32}$/i.test(id))
+        throw new Error("无效附件 ID");
+      if(!blob||blob.size<=0||blob.size>5*1024*1024)
+        throw new Error("图片缓存不能超过 5 MiB");
+      const iv=crypto.getRandomValues(new Uint8Array(12));
+      const bytes=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,await blob.arrayBuffer());
+      const item={id,iv:Array.from(iv),cipher:new Uint8Array(bytes),
+                  created:Date.now(),mime:blob.type||"application/octet-stream"};
+      const tx=db.transaction("attachments","readwrite");
+      tx.objectStore("attachments").put(item);
+      await completed(tx);
+    }
+    async function cachedImage(id){
+      requireKey();
+      if(!id)return null;
+      const item=await request(db.transaction("attachments").objectStore("attachments").get(id));
+      if(!item)return null;
+      if(Date.now()-item.created>=IMAGE_CACHE_TTL){
+        const tx=db.transaction("attachments","readwrite");
+        tx.objectStore("attachments").delete(id);await completed(tx);
+        return null;
+      }
+      const raw=await crypto.subtle.decrypt({name:"AES-GCM",
+        iv:new Uint8Array(item.iv)},key,item.cipher);
+      return new Blob([raw],{type:item.mime||"application/octet-stream"});
+    }
+    async function expireImages(){
+      const items=await request(db.transaction("attachments").objectStore("attachments").getAll());
+      const stale=items.filter(x=>Date.now()-x.created>=IMAGE_CACHE_TTL);
+      if(!stale.length)return 0;
+      const tx=db.transaction("attachments","readwrite");
+      for(const item of stale)tx.objectStore("attachments").delete(item.id);
+      await completed(tx);
+      return stale.length;
+    }
+    async function deleteCachedImage(id){
+      const tx=db.transaction("attachments","readwrite");
+      tx.objectStore("attachments").delete(id);
+      await completed(tx);
+    }
     async function deleteEvent(id){
       requireKey();
       if(typeof id!=="string"||id.length>200)throw new Error("消息 ID 无效");
@@ -254,6 +298,6 @@ export async function openIdentityHistory(owner){
       return encrypted.length;
     }
     return {owner,ready:()=>!!key,needsMigration:()=>needsMigration,
-      migrate,read,persist,persistFile,deleteEvent,patchEvent,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
+      migrate,read,persist,persistFile,deleteEvent,patchEvent,cacheImage,cachedImage,expireImages,deleteCachedImage,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
   }catch(error){db.close();throw error}
 }
