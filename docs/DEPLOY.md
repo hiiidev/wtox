@@ -26,7 +26,7 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-`.env` 里的 **SITE_DOMAIN** 填域名，**WTOX_ACCESS_PASSWORD** 设置独立的随机强密码（至少 16 位）。**WTOX_MASTER_KEY** 为 32 字节随机值的 hex 表示：
+`.env` 里的 **SITE_DOMAIN** 填域名，**WTOX_ACCESS_PASSWORD** 设置独立的随机强密码（最少 6 个字符，但建议使用更长的随机密码）。**WTOX_MASTER_KEY** 为 32 字节随机值的 hex 表示：
 
 ```sh
 python3 -c 'import secrets; print(secrets.token_hex(32))'
