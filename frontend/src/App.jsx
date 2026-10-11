@@ -808,11 +808,21 @@ export default function App(){
                   reject={id=>controlFile(id,"reject")}
                   download={downloadFile} historyHandle={history.current}/>
               </div>
-            : <div key={item.id} className="ant-message-wrap"
+            : <div key={item.id} className={"ant-message-wrap wt-message-row "+
+                (item.direction==="outgoing"?"wt-message-outgoing":"wt-message-incoming")}
                 onContextMenu={event=>{event.preventDefault();requestDelete(item)}}
                 onTouchStart={()=>startLongPress(item)}
                 onTouchEnd={cancelLongPress}
                 onTouchMove={cancelLongPress}>
+                {item.direction!=="outgoing"&&<AntButton type="text"
+                  className="wt-message-peer-avatar" aria-label="查看好友 Tox 资料"
+                  onClick={event=>{event.stopPropagation();setPeerDetailsOpen(true)}}
+                  onTouchStart={event=>event.stopPropagation()}
+                  onContextMenu={event=>event.stopPropagation()}>
+                  <Avatar size={34} shape="square">
+                    {(selectedFriend?.name||item.public_key).slice(0,1).toUpperCase()}
+                  </Avatar>
+                </AntButton>}
                 <Bubble content={String(item.text||"")}
                   placement={item.direction==="outgoing"?"end":"start"}
                   shape="round" variant="filled"
