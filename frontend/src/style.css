@@ -137,3 +137,6 @@ body{background:radial-gradient(circle at 10% -20%,#1d3252,transparent 55%),#0c1
  .wtox-chat>.cs-message-input{padding:8px!important}
  .wtox-chat>.cs-input-toolbox{padding:4px 9px max(7px,env(safe-area-inset-bottom))!important}
 }
+
+.wtox-logo{width:43px;height:43px;object-fit:contain;display:block;flex-shrink:0}
+.wtox-auth-card>.wtox-logo{width:70px;height:70px;margin:0 auto 7px}
