@@ -4,9 +4,27 @@
 
 - **原生 Tox 附件**：发送者浏览器 → HTTPS → **wtox VPS Toxcore** → Tox 网络 → qTox / aTox 好友。反向方向亦然。原生 c-toxcore 运行于 VPS，所以这条通道**无法绕过 VPS**。
 - 收发需双方在线，接收须用户确认。每个文件最多 5 MiB，最多 4 个活动传输。
-- React 界面在聊天中显示文件气泡、接收/拒绝/下载与进度。PNG、JPEG、WebP、GIF 在本轮收到且暂存有效时直接以浏览器内存 URL 预览；不会执行脚本或信任 SVG 图片。
-- 当前 VPS 在内存保留附件数据约 15 分钟，不存文件到数据库或磁盘；浏览器历史仅持久化附件**元数据**，并非附件本体。重启或到期后不能保证继续下载。
+- Ant Design X 界面在聊天中显示文件气泡、接收/拒绝/下载与进度。PNG、JPEG、WebP、GIF 在下载后会使用当前 Tox 身份专属的不可导出 AES-GCM 设备密钥加密缓存到浏览器 IndexedDB，7 天后自动清理；SVG 不作为图片直接预览。
+- 未配置 WebDAV 时，VPS 在内存保留附件本体约 15 分钟；浏览器历史保存加密元数据，已下载图片额外可在本浏览器缓存 7 天。配置 HTTPS WebDAV 后，接收完成的文件会在后台加密归档到 WebDAV，最长保存 7 天，到期每小时清理；运行时明文会经过 VPS Toxcore。
 - **离线文字接收**已经存在：VPS Toxcore 始终在线时，收到的文字 AES-GCM 加密进入服务器 7 天待领队列；浏览器以后打开会补领。**离线二进制附件收取**尚未实现。
+
+## 可选的 WebDAV 加密归档（已提供基础实现）
+
+你可以使用 Nextcloud、坚果云等支持标准 WebDAV PUT/GET/DELETE 的服务，在 VPS 的 `.env` 增加：
+
+```env
+WTOX_WEBDAV_URL=https://dav.example.com/path/to/existing/wtox-folder/
+WTOX_WEBDAV_USERNAME=your-webdav-account
+WTOX_WEBDAV_PASSWORD=your-app-password
+```
+
+**必须事先创建独立的 WebDAV 文件夹，使用 HTTPS，并确保服务支持 PUT、GET、DELETE。** 建议使用权限受限的专用应用密码。WebDAV 配置错误会导致服务启动时明确报错；不设置这些变量则继续使用内存附件模式。
+
+接收完成后，wtox 后台将文件用现有 `WTOX_MASTER_KEY` 派生的 AES-GCM 配置加密上传，WebDAV 无法直接看到原始文件内容或文件名。真实文件名以 AES-GCM 保存到 VPS SQLite，远端路径使用随机内部标识。未过期时，内存附件消失后可以从 WebDAV 读取密文、在 VPS 验证 AES-GCM 后下载。
+
+后台每 1 小时检查过期记录，**归档时间超过 7 天后删除 WebDAV 远程密文与数据库索引**。即使 WebDAV 暂时故障，过期记录也会被拒绝下载，且清理会反复重试。远程删除属于尽力而为，WebDAV 提供商备份与快照的保留期仍由提供商决定。
+
+**限制：** 目前是接收完成后由 VPS 异步归档，不是浏览器直传；不能绕过 VPS 的 Tox 数据通道。也不意味着支持 qTox/aTox 离线附件协议，原生文件收发双方仍需在线。
 
 ## 浏览器直连临时对象存储（未来可选附件模式）
 
