@@ -60,6 +60,24 @@ class DiskAttachmentAPITests(unittest.TestCase):
                        (int(time.time())-1,doc.id))
         self.assertEqual(self.client.get(url).status_code,404)
 
+    def test_completed_offline_attachment_is_visible_via_files_api(self):
+        doc=self.disk.begin(self.uid,"unread-photo.jpg",expected=5,
+                            direction="incoming",public_key="AB"*32)
+        doc.write(b"photo")
+        doc.finish()
+        # Simulate a new Tox runtime with no in-memory transfer items.
+        fake=SimpleNamespace(files=SimpleNamespace(
+            list=lambda:self.disk.list_received(self.uid)))
+        with patch("backend.tox_api.session",return_value=fake):
+            response=self.client.get("/api/files")
+        self.assertEqual(response.status_code,200,response.text)
+        files=response.json()["files"]
+        self.assertEqual(len(files),1)
+        self.assertEqual(files[0]["id"],doc.id)
+        self.assertEqual(files[0]["name"],"unread-photo.jpg")
+        self.assertEqual(files[0]["public_key"],"AB"*32)
+        self.assertEqual(files[0]["state"],"completed")
+
     def test_upload_written_encrypted_before_native_send(self):
         def send(peer,name,document):
             self.assertTrue(document.complete)

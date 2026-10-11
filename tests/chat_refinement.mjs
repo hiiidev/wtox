@@ -170,3 +170,8 @@ assert.equal((app.match(/className="wt-nav-chat-badge"/g)||[]).length,3);
 assert.match(refined,/\.wt-nav-chat-badge \.ant-badge-count/);
 assert.match(app,/seenHydration\.current=\{owner:user\.public_key,initial,ready:false\}/);
 assert.match(app,/selected&&mobileChat&&messages\.length/);
+
+assert.match(app,/await recoverPending\(h\);[\s\S]*?await refreshTransfers\(\)/);
+assert.match(app,/const transferTimer=setInterval\(\(\)=>\{/);
+assert.match(app,/clearInterval\(transferTimer\)/);
+assert.match(app,/recoverPending\(\),refreshTransfers\(\)/);

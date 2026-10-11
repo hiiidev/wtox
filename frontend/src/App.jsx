@@ -586,12 +586,15 @@ export default function App(){
           }
           await h.expireImages();
           await recoverPending(h);
+          // Native Toxcore could receive attachments while this browser was
+          // closed. Completed encrypted files are listed persistently by VPS.
+          await refreshTransfers();
           await flushBrowserQueue(null,h);
         }
       }catch(error){if(!dead)alert("无法打开本地加密历史："+error.message)}
     })();
     return()=>{dead=true;history.current?.close();history.current=null};
-  },[user?.public_key,recoverPending,alert]);
+  },[user?.public_key,recoverPending,refreshTransfers,alert]);
 
   // Encrypted image previews are temporary browser data too; remove after
   // seven days even when the user leaves the application open.
@@ -614,7 +617,8 @@ export default function App(){
       lastMessage.current=Date.now();
       ws.onopen=()=>{
         lastMessage.current=Date.now();
-        Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),flushBrowserQueue()]);
+        Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
+          refreshTransfers(),flushBrowserQueue()]);
       };
       ws.onmessage=msg=>{
         lastMessage.current=Date.now();
@@ -629,6 +633,10 @@ export default function App(){
     const pendingTimer=setInterval(()=>{
       if(!dead){recoverPending().catch(()=>{});flushBrowserQueue().catch(()=>{})}
     },8000);
+    // Recover missed file events after disconnects, even without text events.
+    const transferTimer=setInterval(()=>{
+      if(!dead)refreshTransfers().catch(()=>{});
+    },30000);
     const pingTimer=setInterval(()=>{
       if(ws?.readyState===WebSocket.OPEN){
         if(Date.now()-lastMessage.current>60000){
@@ -639,20 +647,21 @@ export default function App(){
     },25000);
     const wake=()=>{
       if(!dead&&document.visibilityState==="visible"){
-        Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending()]);
+        Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),refreshTransfers()]);
       }
     };
     document.addEventListener("visibilitychange",wake);
     window.addEventListener("focus",wake);
     return()=>{
       dead=true;clearTimeout(retry);clearInterval(friendTimer);
-      clearInterval(pendingTimer);clearInterval(pingTimer);
+      clearInterval(pendingTimer);clearInterval(transferTimer);clearInterval(pingTimer);
       document.removeEventListener("visibilitychange",wake);
       window.removeEventListener("focus",wake);
       if(ws){ws.onclose=null;ws.close()}
       socket.current=null;
     };
-  },[user?.public_key,onRealtime,recoverPending,flushBrowserQueue,refreshFriends,refreshNetwork,alert]);
+  },[user?.public_key,onRealtime,recoverPending,flushBrowserQueue,refreshFriends,
+    refreshNetwork,refreshTransfers,alert]);
 
   useEffect(()=>{
     if(!user?.public_key)return;
