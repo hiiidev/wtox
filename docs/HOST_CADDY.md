@@ -5,7 +5,7 @@
 ```
 Browser --HTTPS/WSS--> Host Caddy (:80/:443)
                             |
-                   http://127.0.0.1:8000
+                   http://127.0.0.1:6066
                             |
                      Docker wtox-web
                             |
@@ -32,7 +32,7 @@ nano .env
 docker compose -f compose.host-caddy.yml config -q
 docker compose -f compose.host-caddy.yml up -d --build
 docker compose -f compose.host-caddy.yml ps
-curl -fsS http://127.0.0.1:8000/health
+curl -fsS http://127.0.0.1:6066/health
 ```
 
 验证返回 `{"ok":true}` 后继续。原生 c-toxcore 在镜像构建过程中执行自检；目前构建及真实互通尚未经过 VPS 验收，如果失败不要跳过自检。
@@ -44,9 +44,9 @@ docker compose stop caddy
 docker compose rm -f caddy
 ```
 
-**不要运行 `docker compose down -v`**，那会删除用户的 SQLite 和 Tox 身份命名卷。不要停止服务器原生 Caddy。Docker 容器上的 8000 只绑定 `127.0.0.1`，不对公网开放。
+**不要运行 `docker compose down -v`**，那会删除用户的 SQLite 和 Tox 身份命名卷。不要停止服务器原生 Caddy。Docker 容器上的 6066 只绑定 `127.0.0.1`，不对公网开放。
 
-如果宿主机 8000 已被占用，在 `compose.host-caddy.yml` 把前面的 `8000` 改成 `18080`，并将后文 Caddy 上游一并改为 `127.0.0.1:18080`。
+如果宿主机 6066 已被占用，在 `compose.host-caddy.yml` 把前面的 `6066` 改成 `18080`，并将后文 Caddy 上游一并改为 `127.0.0.1:18080`。
 
 ## 3. 修改**宿主机原有 Caddyfile**
 
@@ -55,7 +55,7 @@ docker compose rm -f caddy
 ```caddyfile
 tox.example.com {
     encode zstd gzip
-    reverse_proxy 127.0.0.1:8000
+    reverse_proxy 127.0.0.1:6066
     header {
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
@@ -84,18 +84,18 @@ curl -I https://tox.example.com/gate
 ## 4. 常用排查
 
 ```bash
-sudo ss -lntp | grep -E ':(80|443|8000)\\b'
+sudo ss -lntp | grep -E ':(80|443|6066)\\b'
 docker compose -f compose.host-caddy.yml logs --tail=100 web
 sudo journalctl -u caddy -n 100 --no-pager
 ```
 
-- 502 Bad Gateway：Web 容器未启动、主机 8000 映射错误、应用健康检查失败。
+- 502 Bad Gateway：Web 容器未启动、主机 6066 映射错误、应用健康检查失败。
 - TLS 证书申请失败：DNS 或公网 80/443 配置问题。
 - Caddy reload 报错：先修复配置，不要重启所有现有站点。
 - 好友长期离线：检查 `WTOX_BOOTSTRAP` 和 VPS 出站 UDP/TCP；Caddy 只代理浏览器连接，不代理原版 Tox UDP。
 
 ## 安全与数据
 
-wtox 的 `/health` 不需要网站密码，所以只暴露没有凭据的健康状态；登录入口以及业务 API 由后端验证统一访问密码和个人登录态。不要通过公网 `http://VPS-IP:8000` 暴露应用。VPS 中的 Toxcore 仍能访问身份私钥和收发明文，不是零知识服务器。
+wtox 的 `/health` 不需要网站密码，所以只暴露没有凭据的健康状态；登录入口以及业务 API 由后端验证统一访问密码和个人登录态。不要通过公网 `http://VPS-IP:6066` 暴露应用。VPS 中的 Toxcore 仍能访问身份私钥和收发明文，不是零知识服务器。
 
 用户 2–3 人时只需这一个 VPS。纯浏览器 WASM 暂不开展。
