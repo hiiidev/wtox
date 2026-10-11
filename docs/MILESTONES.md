@@ -1,12 +1,14 @@
 # Milestones
 
+Current repository contains initial deployment scaffolding and architecture documentation only. Application code and native Tox interoperability are not yet implemented.
+
 ## Stage 1: native bridge, authentication and UI (work in progress)
 
 - [x] Create private repository and bootstrap architecture
-- [x] Native c-toxcore FFI integration source
-- [x] Account storage / encrypted savedata design
-- [x] Friend/message REST and WebSocket endpoints
-- [x] Minimal responsive browser UI and encrypted IndexedDB history
+- [ ] Native c-toxcore FFI integration source
+- [ ] Account storage / encrypted savedata implementation
+- [ ] Friend/message REST and WebSocket endpoints
+- [ ] Minimal responsive browser UI and encrypted IndexedDB history
 - [ ] Build Docker image in CI and verify library ABI
 - [ ] qTox/aTox live two-way interop test
 - [ ] Thorough security review / tests on a clean VPS
