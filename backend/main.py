@@ -47,7 +47,7 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 class GateMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path=request.url.path
-        if path in ("/health","/gate","/api/gate/login"):
+        if path in ("/health","/gate","/api/gate/login","/favicon.ico","/logo.png") or path.startswith("/assets/"):
             return await call_next(request)
         if not access.gate_valid(request.cookies.get(access.COOKIE_NAME)):
             if path.startswith("/api/"):
@@ -125,6 +125,16 @@ def export_legacy_profile(request: Request):
         headers={"Content-Disposition":'attachment; filename="wtox-legacy-backup.tox"',
                  "Cache-Control":"no-store", "X-Content-Type-Options":"nosniff"}
     )
+
+@app.get("/favicon.ico")
+def favicon():
+    return FileResponse(str(FRONTEND_DIR / "favicon.ico"),
+                        media_type="image/x-icon")
+
+@app.get("/logo.png")
+def logo():
+    return FileResponse(str(FRONTEND_DIR / "logo.png"),
+                        media_type="image/png")
 
 @app.get("/")
 def index():
