@@ -8,13 +8,15 @@
 - [x] Open personal account registration/login (no fixed registration cap)
 - [x] AES-GCM encrypted SQLite profile storage foundation
 - [x] Minimal responsive entrance/login UI
-- [ ] Native c-toxcore FFI with verified Docker build
-- [ ] Create/export raw Tox savedata and import aTox/qTox compatible raw savedata
+- [x] Native c-toxcore ctypes identity adapter (create/restore savedata), Docker smoke hook added
+- [ ] Verified Docker build and native ABI test in GitHub Actions or clean VPS
+- [x] API + browser UI for creating/importing/exporting raw Tox savedata (integration test pending)
 - [ ] Independent live Tox instances per account; startup/restart recovery
 - [ ] Add/accept friend requests, connect to network, send/receive messages
 - [ ] Authenticated WebSocket push and reconnect
 - [ ] Seven-day pending message queue and browser ack processing
 - [ ] Browser encrypted IndexedDB histories
+- [ ] Confirm raw .tox identity compatibility using exported files from real aTox/qTox
 - [ ] Real qTox/aTox bidirectional interoperability tests
 - [ ] Security review, backup procedure and end-to-end VPS deployment tests
 
