@@ -1,4 +1,5 @@
 """Website gate, accounts and native Tox identity HTTP API (chat not yet implemented)."""
+import asyncio
 import html
 import os
 import time
@@ -14,6 +15,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import access, store
 from .profile_api import router as profile_router
+from .tox_api import router as tox_router
+from .session_manager import manager
 
 _ATTEMPTS = defaultdict(deque)
 _ATTEMPT_LOCK = Lock()
@@ -30,7 +33,11 @@ def rate_check(key: str):
 async def lifespan(app: FastAPI):
     access.validate_settings()
     store.init()
-    yield
+    manager.start(asyncio.get_running_loop())
+    try:
+        yield
+    finally:
+        await manager.shutdown()
 
 app = FastAPI(title="wtox",docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
 
@@ -128,3 +135,4 @@ def index():
     return FileResponse("/app/frontend/index.html",headers={"Cache-Control":"no-store"})
 
 app.include_router(profile_router)
+app.include_router(tox_router)
