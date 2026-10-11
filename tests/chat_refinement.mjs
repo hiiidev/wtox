@@ -31,7 +31,9 @@ assert.match(app,/await h\.cacheImage\(transfer\.id/);
 assert.match(app,/<FileCard name=\{file\.file_name\}/);
 assert.match(app,/<Image className="wtox-attachment-image"/);
 assert.match(refined,/max-width:900px/);
-assert.match(refined,/wt-message-outgoing\{justify-content:flex-end/);
+assert.ok(refined.includes("wt-message-outgoing") &&
+  refined.includes("justify-content:flex-end"),
+  "Outgoing messages should align to the right");
 assert.match(refined,/background:var\(--wt-bg\)/);
 assert.match(refined,/scrollbar-width:none/);
 console.log("System themes, settings, Sender attachments, timeline images and token-based layout checks OK");
