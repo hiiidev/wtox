@@ -43,7 +43,7 @@ For step-by-step instructions and a real-client test checklist see [VPS_DEPLOY.m
 
 1. Set DNS of `chat.example.com` to VPS public IP. Ensure port 80/443 is reachable for Caddy's automatic certificate.
 2. `cp .env.example .env`.
-3. In `.env`, set `SITE_DOMAIN`, a strong `WTOX_ACCESS_PASSWORD` (minimum 16 characters), and `WTOX_MASTER_KEY` as 64 random hex characters:
+3. In `.env`, set `SITE_DOMAIN`, a `WTOX_ACCESS_PASSWORD` (minimum 6 characters; a longer random password is strongly recommended), and `WTOX_MASTER_KEY` as 64 random hex characters:
 
    ```sh
    python3 -c 'import secrets; print(secrets.token_hex(32))'
