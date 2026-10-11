@@ -89,7 +89,7 @@ assert.match(app,/kind="settings"/);
 // Mobile bottom navigation intentionally retains text labels and standard icons.
 assert.match(app,/className="wt-peer-profile-presence"/);
 assert.match(refined,/\.wt-peer-avatar-button\.ant-btn:active/);
-assert.match(refined,/\.wt-select-indicator\{display:none!important;\}/);
+assert.doesNotMatch(refined,/\.wt-select-indicator/);
 assert.match(app,/api\("\/api\/tox\/create",\{method:"POST",/);
 assert.match(app,/password:createPassword/);
 assert.match(app,/X-Tox-Password-Bytes/);
@@ -153,3 +153,5 @@ assert.match(app,/<span className="wechat-search-icon" aria-hidden="true">/);
 assert.match(app,/<circle cx="10\.8" cy="10\.8" r="6\.7"\/>/);
 assert.match(refined,/\.wechat-search \.ant-input-prefix/);
 assert.doesNotMatch(app,/margin-top:-4px/);
+
+assert.doesNotMatch(refined,/\.ant-sender-prefix/);

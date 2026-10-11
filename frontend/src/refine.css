@@ -97,7 +97,6 @@ body:has(.ant-messenger){background:var(--wt-bg)!important}
 .ant-messenger .ant-compose-area .ant-sender textarea{
   color:var(--wt-text)!important;background:transparent!important}
 .ant-messenger .ant-compose-area .ant-sender textarea::placeholder{color:var(--wt-muted)}
-.ant-messenger .wt-chat-sender .ant-sender-prefix .ant-btn{color:var(--wt-muted)}
 .ant-messenger .wt-send-file-preview{padding:12px;width:100%;
   max-width:100%;overflow:hidden}
 .ant-messenger .wt-new-message-indicator.ant-btn{background:var(--wt-primary)!important;
@@ -229,14 +228,6 @@ html[data-wtox-theme="dark"],html[data-wtox-theme="dark"] body{
 .ant-messenger .wt-selectable-message.is-selecting{
   cursor:pointer;user-select:none;-webkit-user-select:none;
 }
-.ant-messenger .wt-select-indicator{display:inline-grid;place-items:center;
-  position:absolute;left:-17px;top:10px;width:18px;height:18px;
-  border:1px solid var(--wt-muted);border-radius:50%;background:var(--wt-panel);
-  color:var(--wt-primary);font-size:12px;font-weight:800;z-index:1;
-}
-.ant-messenger .wt-selectable-message.is-batch-selected .wt-select-indicator{
-  border-color:var(--wt-primary);background:var(--wt-primary);color:#fff;
-}
 .ant-messenger .wt-selectable-message.is-batch-selected .ant-bubble-content,
 .ant-messenger .wt-selectable-message.is-batch-selected .wtox-attachment-bubble{
   outline:2px solid var(--wt-primary)!important;outline-offset:2px;
@@ -250,8 +241,6 @@ html[data-wtox-theme="dark"],html[data-wtox-theme="dark"] body{
 .ant-messenger .wt-batch-toolbar strong{font-size:12px;font-weight:600;}
 @media(max-width:767px){
   .ant-messenger .wt-message-row .ant-bubble{max-width:min(85%,440px)!important}
-  .ant-messenger .wt-select-indicator{left:0;top:7px}
-  .ant-messenger .wt-selectable-message.is-selecting{padding-left:24px}
   .ant-messenger .wt-batch-toolbar{gap:5px;padding:7px;}
   .ant-messenger .wt-batch-toolbar .ant-btn{padding-inline:7px;}
   .ant-messenger[data-theme] .wechat-search,
@@ -489,13 +478,6 @@ html[data-wtox-theme="dark"],html[data-wtox-theme="dark"] body{
   font-size:12px;color:var(--wt-muted);
 }
 .ant-messenger .wt-peer-profile .ant-divider{margin:12px 0!important;}
-/* The selected bubble outline alone indicates batch selection. No selection dots. */
-.ant-messenger .wt-select-indicator{display:none!important;}
-@media(max-width:767px){
-  .ant-messenger .wt-selectable-message.is-selecting{
-    padding-left:0!important;
-  }
-}
 /* Persistent Ant Design message notice. Closing it never rejects requests. */
 .wt-friend-request-message .ant-message-notice-content{
   border-radius:12px!important;
