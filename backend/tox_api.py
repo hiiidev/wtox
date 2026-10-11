@@ -85,6 +85,49 @@ def delete_friend(public_key: str, request: Request, uid: str = Depends(require_
     except ToxActionError as exc:
         raise HTTPException(409, str(exc)) from exc
 
+@router.get("/api/friend-requests")
+def friend_requests(uid: str = Depends(require_user)):
+    """Multiple independent native Tox requests retained for seven days."""
+    return {"requests": [
+        {"id":row["id"],"public_key":row["event"]["public_key"],
+         "text":row["event"].get("text",""),"created":row["created"]}
+        for row in store.get_pending(uid)
+        if row["event"].get("type") == "friend_request"
+        and isinstance(row["event"].get("public_key"),str)
+    ]}
+
+
+@router.post("/api/friend-requests/{request_id}/accept")
+def accept_pending_request(request_id: str, request: Request,
+                           uid: str = Depends(require_user)):
+    check_origin(request)
+    row = next((item for item in store.get_pending(uid)
+                if item["id"] == request_id and
+                item["event"].get("type") == "friend_request"), None)
+    if row is None:
+        raise HTTPException(404,"好友请求不存在或已过期")
+    try:
+        key = session(uid).accept_friend(row["event"]["public_key"])
+    except ValueError as exc:
+        raise HTTPException(400,str(exc)) from exc
+    except ToxActionError as exc:
+        raise HTTPException(409,str(exc)) from exc
+    store.ack_pending(uid,[request_id])
+    return {"ok": True, "public_key":key}
+
+
+@router.delete("/api/friend-requests/{request_id}")
+def reject_pending_request(request_id: str, request: Request,
+                           uid: str = Depends(require_user)):
+    check_origin(request)
+    if not any(item["id"]==request_id and
+               item["event"].get("type")=="friend_request"
+               for item in store.get_pending(uid)):
+        raise HTTPException(404,"好友请求不存在或已过期")
+    store.ack_pending(uid,[request_id])
+    return {"ok": True}
+
+
 @router.post("/api/friends/accept")
 def accept_friend(body: FriendAccept, request: Request, uid: str = Depends(require_user)):
     check_origin(request)
