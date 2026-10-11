@@ -1,7 +1,5 @@
-"""Website gate, accounts, Tox identity and live messaging API."""
+"""Website entrance gate and Tox-profile-only authentication."""
 import asyncio
-import html
-import os
 import time
 from pathlib import Path
 from collections import defaultdict, deque
@@ -15,7 +13,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import access, store
-from .profile_api import router as profile_router
+from .profile_api import router as profile_router, COOKIE_NAME as TOX_SESSION_COOKIE
 from .tox_api import router as tox_router
 from .session_manager import manager
 
@@ -34,6 +32,9 @@ def rate_check(key: str):
 async def lifespan(app: FastAPI):
     access.validate_settings()
     store.init()
+    if store.needs_legacy_migration():
+        from .tox_identity import ToxCore
+        store.migrate_legacy_identities(ToxCore())
     manager.start(asyncio.get_running_loop())
     try:
         yield
@@ -61,15 +62,6 @@ app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR)), name="assets")
 
 class PasswordRequest(BaseModel):
     password: str = Field(min_length=1,max_length=512)
-
-class AccountRequest(BaseModel):
-    username: str = Field(min_length=3,max_length=40)
-    password: str = Field(min_length=12,max_length=256)
-
-def require_user(request:Request):
-    uid=store.session_user(request.cookies.get("wtox_session"))
-    if not uid: raise HTTPException(401,"请先登录个人账号")
-    return uid
 
 @app.get("/health")
 def health():
@@ -101,37 +93,19 @@ def site_login(body: PasswordRequest, request: Request, response: Response):
                         samesite="strict",max_age=access.SESSION_AGE,path="/")
     return {"ok":True}
 
-@app.post("/api/register")
-def register(body: AccountRequest, response: Response,request:Request):
-    ip=request.client.host if request.client else "unknown"
-    rate_check("register:"+ip)
-    try: uid=store.add_account(body.username,body.password)
-    except ValueError as exc: raise HTTPException(400,str(exc)) from exc
-    response.set_cookie("wtox_session",store.create_session(uid),
-                        httponly=True,secure=access.secure_cookies(),samesite="strict",
-                        max_age=7*86400,path="/")
-    return {"ok":True,"username":body.username}
-
-@app.post("/api/login")
-def login(body: AccountRequest, response: Response,request:Request):
-    ip=request.client.host if request.client else "unknown"
-    rate_check("account-login:"+ip)
-    uid=store.verify_account(body.username,body.password)
-    if not uid: raise HTTPException(401,"账号名或密码错误")
-    response.set_cookie("wtox_session",store.create_session(uid),
-                        httponly=True,secure=access.secure_cookies(),samesite="strict",
-                        max_age=7*86400,path="/")
-    return {"ok":True,"username":body.username}
-
 @app.post("/api/logout")
-def logout(request: Request,response:Response):
-    store.revoke_session(request.cookies.get("wtox_session"))
-    response.delete_cookie("wtox_session",path="/")
-    return {"ok":True}
+def logout(request: Request, response: Response):
+    store.revoke_tox_session(request.cookies.get(TOX_SESSION_COOKIE))
+    response.delete_cookie(TOX_SESSION_COOKIE, path="/")
+    response.delete_cookie("wtox_session", path="/")
+    return {"ok": True}
 
 @app.get("/api/me")
-def me(uid=Depends(require_user)):
-    return store.user_info(uid)
+def me(request: Request):
+    uid = store.tox_session_user(request.cookies.get(TOX_SESSION_COOKIE))
+    if not uid:
+        raise HTTPException(401, "请先使用 .tox 配置登录")
+    return store.tox_identity_info(uid)
 
 @app.get("/")
 def index():
