@@ -22,7 +22,8 @@ function stateText(record){
   if(record.delivery_status==="delivered"||record.delivery_status==="read")return "已送达";
   if(record.delivery_status==="failed")return "发送失败";
   if(record.delivery_status==="uncertain")return "发送结果待确认";
-  if(["queued","dispatching","queued_local","dispatching_local"].includes(record.delivery_status))return "正在发送";
+  if(["queued","queued_local"].includes(record.delivery_status))return "待发送";
+  if(["dispatching","dispatching_local"].includes(record.delivery_status))return "正在发送";
   if(record.message_id===undefined&&!record.outbox_id&&!record.delivery_status)return "历史消息";
   return "已发送";
 }
