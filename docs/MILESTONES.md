@@ -11,11 +11,11 @@
 - [x] Native c-toxcore ctypes identity adapter (create/restore savedata), Docker smoke hook added
 - [ ] Verified Docker build and native ABI test in GitHub Actions or clean VPS
 - [x] API + browser UI for creating/importing/exporting raw Tox savedata (integration test pending)
-- [ ] Independent live Tox instances per account; startup/restart recovery
-- [ ] Add/accept friend requests, connect to network, send/receive messages
-- [ ] Authenticated WebSocket push and reconnect
-- [ ] Seven-day pending message queue and browser ack processing
-- [ ] Browser encrypted IndexedDB histories
+- [x] Independent live Tox instances per account; startup/restart recovery (source implemented; live verification pending)
+- [x] Add/accept friend requests, Bootstrap/relay connections, send/receive messages (source implemented; live verification pending)
+- [x] Authenticated WebSocket push and reconnect (source implemented)
+- [x] Seven-day encrypted pending message queue and browser ack processing (source implemented)
+- [x] Browser encrypted IndexedDB histories (source implemented; browser verification pending)
 - [ ] Confirm raw .tox identity compatibility using exported files from real aTox/qTox
 - [ ] Real qTox/aTox bidirectional interoperability tests
 - [ ] Security review, backup procedure and end-to-end VPS deployment tests
