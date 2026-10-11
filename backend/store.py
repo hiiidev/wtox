@@ -127,7 +127,7 @@ def append_pending(uid: str, event: dict) -> str:
     now = int(time.time())
     with db() as c:
         c.execute("DELETE FROM pending WHERE created<?",(now-7*86400,))
-        # bounded queue to protect limited VPS disk, not a limit on account creation
+        # bounded queue protects VPS disk; it does not cap Tox identity creation
         count = c.execute("SELECT COUNT(*) FROM pending WHERE account_id=?",(uid,)).fetchone()[0]
         if count >= 1000: raise RuntimeError("消息临时队列已满")
         c.execute("INSERT INTO pending VALUES(?,?,?,?)",(eid,uid,payload,now))
@@ -173,13 +173,19 @@ def migrate_legacy_identities(toxcore):
             "WHERE profile IS NOT NULL AND (tox_secret_hash IS NULL OR tox_pubkey IS NULL)"
         ).fetchall()
         for uid, encrypted in rows:
-            original = decrypt(encrypted)
-            identity = toxcore.identity(original)
-            _check_identity(identity)
-            c.execute(
-                "UPDATE accounts SET tox_address=?,tox_pubkey=?,tox_secret_hash=? WHERE id=?",
-                (identity.address, identity.address[:64], identity.secret_proof, uid)
-            )
+            try:
+                original = decrypt(encrypted)
+                identity = toxcore.identity(original)
+                _check_identity(identity)
+                c.execute(
+                    "UPDATE accounts SET tox_address=?,tox_pubkey=?,tox_secret_hash=? WHERE id=?",
+                    (identity.address, identity.address[:64], identity.secret_proof, uid)
+                )
+            except Exception as exc:
+                # Preserve the encrypted legacy row; do not block other users
+                # from starting if one old profile is invalid/corrupted.
+                print("Legacy Tox profile migration skipped:",
+                      uid[:8], type(exc).__name__, flush=True)
 
 
 def create_tox_identity(identity) -> str:
