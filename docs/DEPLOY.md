@@ -6,7 +6,7 @@
 
 ## 1. VPS
 
-推荐 Ubuntu 24.04 LTS、1 vCPU、2GB RAM、20GB SSD。为 Caddy 开放入站 TCP 80/443。SSH 的 TCP 22 建议限制为你的管理 IP 或通过已有安全的远程访问方式进入 VPS。Toxcore 使用出站 UDP/TCP；默认无需公网暴露本应用的 8000 端口。
+推荐 Ubuntu 24.04 LTS、1 vCPU、2GB RAM、20GB SSD。为 Caddy 开放入站 TCP 80/443。SSH 的 TCP 22 建议限制为你的管理 IP 或通过已有安全的远程访问方式进入 VPS。Toxcore 使用出站 UDP/TCP；默认无需公网暴露本应用的 6066 端口。
 
 在 VPS 安装 Docker Engine 和 Docker Compose 插件，确认：
 
