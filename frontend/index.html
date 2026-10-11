@@ -64,6 +64,7 @@
             <strong id="selected">选择一个好友开始聊天</strong>
             <small id="selectedStatus">与 qTox / aTox 兼容的原版 Tox 网络</small>
           </div>
+          <button id="openFiles" class="icon-button" title="附件收发" aria-label="附件收发">📎</button>
           <button id="deleteFriend" class="icon-button danger" title="删除当前好友" aria-label="删除当前好友" disabled>⋯</button>
         </div>
         <div id="messages" class="message-list" role="log" aria-live="polite" aria-label="消息列表">
@@ -95,6 +96,19 @@
     <label class="field-label" for="friendKey">对方公钥（64 位）</label>
     <input id="friendKey" maxlength="64" placeholder="好友请求中的公钥">
     <button id="acceptFriend" class="button outline full">接受好友请求</button>
+  </dialog>
+
+  <dialog id="fileDialog" class="dialog-panel">
+    <div class="dialog-heading"><div><div class="eyebrow">TOX FILE TRANSFERS</div><h2>附件收发</h2></div>
+      <button id="closeFiles" class="icon-button" aria-label="关闭附件窗口">×</button></div>
+    <p class="muted">通过原版 Tox 文件传输发送或接收。好友必须在线，每个附件最多 5 MiB，接收前需手动同意。暂不支持断线续传。</p>
+    <label class="field-label" for="attachmentFile">发送给当前选中的好友</label>
+    <input id="attachmentFile" type="file">
+    <button id="sendAttachment" class="button primary full">发送附件</button>
+    <div class="separator"><span>当前附件传输</span></div>
+    <div id="transferList" class="transfer-list" role="list"></div>
+    <button id="refreshFiles" class="button subtle full">刷新传输列表</button>
+    <p class="footnote">附件仅在 VPS 内存中临时保留，完成后请及时下载。文件可能不安全，不要随意执行收到的程序；完成/失败或重启后不保证可恢复。</p>
   </dialog>
 
   <dialog id="identityDialog" class="dialog-panel">
