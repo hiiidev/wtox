@@ -131,6 +131,14 @@ class ToxSession:
         self.friend_connection = bind("tox_friend_get_connection_status", C.c_int, P, U32, ERR)
         self.friend_name_size = bind("tox_friend_get_name_size", C.c_size_t, P, U32, ERR)
         self.friend_name = bind("tox_friend_get_name", C.c_bool, P, U32, IP, ERR)
+        self.get_name_size = bind("tox_self_get_name_size", C.c_size_t, P)
+        self.get_name = bind("tox_self_get_name", None, P, IP)
+        self.set_name_native = bind("tox_self_set_name", C.c_bool, P, IP, C.c_size_t, ERR)
+        self.get_status_message_size = bind("tox_self_get_status_message_size", C.c_size_t, P)
+        self.get_status_message = bind("tox_self_get_status_message", None, P, IP)
+        self.set_status_message_native = bind("tox_self_set_status_message", C.c_bool, P, IP, C.c_size_t, ERR)
+        self.get_user_status = bind("tox_self_get_status", C.c_int, P)
+        self.set_user_status_native = bind("tox_self_set_status", None, P, C.c_int)
 
     def _emit(self, event: dict):
         try:
@@ -290,6 +298,53 @@ class ToxSession:
                 status = int(self.friend_connection(self.tox, number, C.byref(error)))
                 friends.append({"public_key": key, "name": name, "status": status})
             return friends
+
+    def self_profile(self) -> dict:
+        """Public Tox profile metadata, read from the authoritative native session."""
+        with self.lock:
+            self._require_live()
+            name_size = int(self.get_name_size(self.tox))
+            message_size = int(self.get_status_message_size(self.tox))
+            if not 0 <= name_size <= 128 or not 0 <= message_size <= 1007:
+                raise ToxActionError("无效的 Tox 个人信息长度")
+            name_buffer = (U8 * max(1,name_size))()
+            message_buffer = (U8 * max(1,message_size))()
+            if name_size:
+                self.get_name(self.tox, name_buffer)
+            if message_size:
+                self.get_status_message(self.tox, message_buffer)
+            return {
+                "name": bytes(name_buffer[:name_size]).decode("utf-8","replace"),
+                "status_message": bytes(message_buffer[:message_size]).decode("utf-8","replace"),
+                "user_status": int(self.get_user_status(self.tox)),
+            }
+
+    def update_self_profile(self, name: str, status_message: str, user_status: int) -> dict:
+        """Apply and immediately persist Tox-native nickname, message and status."""
+        name_data = name.encode("utf-8")
+        message_data = status_message.encode("utf-8")
+        if len(name_data) > 128:
+            raise ValueError("昵称超过 Tox 限制（128 字节）")
+        if len(message_data) > 1007:
+            raise ValueError("状态消息超过 Tox 限制（1007 字节）")
+        if user_status not in (0,1,2):
+            raise ValueError("状态只能为在线、离开或忙碌")
+        with self.lock:
+            self._require_live()
+            err = C.c_int()
+            if not self.set_name_native(self.tox,uint8_array(name_data),
+                                        len(name_data),C.byref(err)) or err.value:
+                raise ToxActionError(f"设置 Tox 昵称失败（{err.value}）")
+            err.value = 0
+            if not self.set_status_message_native(self.tox,uint8_array(message_data),
+                                                   len(message_data),C.byref(err)) or err.value:
+                # Nickname is already changed; save it and report an error.
+                self._save()
+                raise ToxActionError(f"设置状态消息失败（{err.value}）")
+            self.set_user_status_native(self.tox,user_status)
+            self._dirty = True
+            self._save()
+            return self.self_profile()
 
     def add_friend(self, address: str, request_text: str) -> str:
         raw_address = hex_bytes(address.strip(), 38, "Tox ID")
