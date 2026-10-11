@@ -12,7 +12,7 @@ services:
       - wtox_data:/data
     ports:
       # Never expose the plaintext backend beyond the VPS itself.
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:6066:6066"
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 256
@@ -20,7 +20,7 @@ services:
     tmpfs:
       - /tmp
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6066/health', timeout=5)"]
       interval: 30s
       timeout: 8s
       retries: 3
