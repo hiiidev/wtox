@@ -78,11 +78,17 @@ def frontend_health():
     good=(FRONTEND_DIR/"index.html").is_file() and (FRONTEND_DIR/"logo.svg").is_file()
     scripts=list(assets.glob("*.js")) if assets.is_dir() else []
     styles=list(assets.glob("*.css")) if assets.is_dir() else []
-    if not good or not scripts or not styles:
+    # Checking disk files alone previously returned 200 even though the
+    # /assets mount pointed one directory too high and served only 404s.
+    asset_route=next((route for route in app.routes
+                      if getattr(route,"path",None)=="/assets"),None)
+    mounted=Path(asset_route.app.directory).resolve() if asset_route else None
+    route_ok=mounted==assets.resolve()
+    if not good or not scripts or not styles or not route_ok:
         return JSONResponse(
             {"ok":False,"detail":"React 静态资源不完整，请重新构建 Docker 镜像"},
             status_code=503)
-    return {"ok":True,"js":len(scripts),"css":len(styles),"logo":True}
+    return {"ok":True,"js":len(scripts),"css":len(styles),"logo":True,"asset_route":"/assets"}
 
 @app.get("/gate",response_class=HTMLResponse)
 def gate_page():
