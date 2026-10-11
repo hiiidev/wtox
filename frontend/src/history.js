@@ -181,6 +181,15 @@ export async function openIdentityHistory(owner){
       await completed(tx);
       return true;
     }
+    async function deleteEvent(id){
+      requireKey();
+      if(typeof id!=="string"||id.length>200)throw new Error("消息 ID 无效");
+      // Delete only this device's encrypted IndexedDB entry. Nothing is
+      // sent to the Tox peer, and server-queued messages are not revoked.
+      const tx=db.transaction("events","readwrite");
+      tx.objectStore("events").delete(id);
+      await completed(tx);
+    }
     async function patchEvent(id,changes){
       requireKey();
       const row=await request(db.transaction("events").objectStore("events").get(id));
@@ -245,6 +254,6 @@ export async function openIdentityHistory(owner){
       return encrypted.length;
     }
     return {owner,ready:()=>!!key,needsMigration:()=>needsMigration,
-      migrate,read,persist,persistFile,patchEvent,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
+      migrate,read,persist,persistFile,deleteEvent,patchEvent,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
   }catch(error){db.close();throw error}
 }
