@@ -23,6 +23,7 @@ def main():
         assert restored.address == created.address
         assert restored.secret_proof == created.secret_proof, "Tox private-key proof changed across restore"
 
+        friend_identity = core.identity(nickname="wtox-friend-test")
         saved = []
         events = []
         session = ToxSession(created.savedata, events.append, saved.append)
@@ -36,10 +37,25 @@ def main():
             assert session.thread is not None and session.thread.is_alive(), "native loop exited"
             assert session.friends() == [], "new identity unexpectedly has friends"
             assert session.last_connection in (0, 1, 2), "invalid network status"
+            friend_key = session.add_friend(friend_identity.address, "hello from wtox")
+            assert friend_key == friend_identity.address[:64]
+            assert len(session.friends()) == 1
+            assert session.friends()[0]["public_key"] == friend_key
+            assert session.friends()[0]["status"] == 0, "offline friend should be offline"
         finally:
             session.close()
         assert saved, "session did not flush savedata at shutdown"
         assert core.identity(saved[-1]).address == created.address
+        reopened = ToxSession(saved[-1], events.append, saved.append)
+        try:
+            assert len(reopened.friends()) == 1, "friend was not retained in savedata"
+            assert reopened.friends()[0]["public_key"] == friend_key
+            print("wtox native smoke PASS: friends persist across savedata reload")
+        finally:
+            # Close a session which hasn't started a thread, with explicit native cleanup.
+            reopened._save()
+            reopened.core.kill(reopened.tox)
+            reopened.tox = None
         print("wtox native smoke PASS: savedata + event loop + friends API")
     finally:
         if original_bootstrap is None:
