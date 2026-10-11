@@ -1,77 +1,62 @@
 <!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>wtox</title><style>
-:root{color-scheme:dark}body{font:15px system-ui;background:#0e1726;color:#eaf0fc;margin:0;min-height:100dvh;display:grid;place-items:center}
-main{width:min(90vw,620px);background:#19263a;border:1px solid #354459;padding:28px;border-radius:18px;box-sizing:border-box}
-h1{letter-spacing:.5px}input,button{box-sizing:border-box;display:block;width:100%;margin:11px 0;padding:12px;border-radius:8px;font:inherit}
-input{background:#0d1523;color:white;border:1px solid #65748c}input[type=file]{padding:8px}
-button{cursor:pointer;background:#4077e5;border:0;color:white}button.secondary{background:#374962}
-small,.muted{color:#afbdd1}.toxid{font-family:ui-monospace,monospace;overflow-wrap:anywhere;line-height:1.65;padding:12px;background:#0d1523;border-radius:8px}
-#error{color:#ff9e9e;min-height:1.2em}section{margin-top:18px}
-</style></head>
-<body><main><h1>wtox</h1><p class="muted">原版 Tox · 私有 VPS 客户端</p>
-<section id="login"><h2>登录 / 创建账号</h2><small>网站访问密码之外，每位使用者有独立账号和 Tox 身份。</small>
-<input id="username" autocomplete="username" placeholder="账号名（英文/数字）">
+<title>wtox</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font:15px system-ui;background:#0d1625;color:#eaf0fc;margin:0;min-height:100dvh;display:grid;place-items:center}
+main{width:min(94vw,900px);background:#19263a;border:1px solid #354459;padding:24px;border-radius:18px}
+h1{letter-spacing:.6px}input,button,textarea{font:inherit}
+input,textarea{width:100%;margin:7px 0;padding:10px;border-radius:8px;background:#0d1523;color:white;border:1px solid #65748c}
+button{padding:10px 14px;border:0;border-radius:8px;background:#4077e5;color:white;cursor:pointer;margin:5px 3px 5px 0}
+button.secondary{background:#34475f}button:disabled{opacity:.5;cursor:default}
+small,.muted{color:#afbdd1}#error{color:#ff9e9e;min-height:1.4em}
+.card{border:1px solid #364960;background:#142034;padding:15px;border-radius:12px;margin:14px 0}
+.toxid{font-family:ui-monospace,monospace;overflow-wrap:anywhere;background:#0d1523;border-radius:8px;padding:12px}
+.cols{display:grid;grid-template-columns:260px 1fr;gap:14px}
+#messages{height:280px;overflow-y:auto;background:#0d1523;border:1px solid #364960;border-radius:8px;padding:10px}
+.event{margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.event time{color:#a3b6d3;font-size:12px;margin-right:8px}
+.friend{display:block;width:100%;text-align:left;margin:4px 0;background:#293f5b;overflow:hidden;text-overflow:ellipsis}
+.hint{font-size:12px;color:#9fb2ca;overflow-wrap:anywhere}
+@media(max-width:660px){.cols{grid-template-columns:1fr} main{padding:14px}}
+</style></head><body><main>
+<h1>wtox</h1><p class="muted">原版 Tox · VPS 自托管客户端</p>
+<section id="login"><h2>登录 / 创建账号</h2>
+<input id="username" autocomplete="username" placeholder="账号名">
 <input id="password" type="password" autocomplete="current-password" placeholder="账号密码（至少12位）">
 <button id="signin">登录</button><button id="signup" class="secondary">创建账号</button></section>
-<section id="account" hidden><p id="welcome"></p>
-<div id="setup" hidden><h2>设置 Tox 身份</h2>
+<section id="account" hidden><div class="card"><span id="welcome"></span>
+<button id="logout" class="secondary" style="float:right">退出账号</button><div style="clear:both"></div></div>
+<section id="setup" hidden class="card"><h2>设置 Tox 身份</h2>
 <button id="create">创建新的 Tox ID</button>
 <label for="profileFile">或者导入 aTox / qTox 导出的原始 .tox 配置</label>
 <input type="file" id="profileFile" accept=".tox,application/octet-stream">
 <button id="import" class="secondary">导入 .tox 文件</button>
-<small>仅支持原始 Tox Savedata。导入不会恢复聊天历史；请先关闭其他使用同一 Tox 身份的客户端。</small>
+<p class="hint">仅支持原始 Tox Savedata，不包含旧客户端聊天记录。不要同时在其他客户端运行同一身份。</p>
+</section>
+<section id="ready" hidden><div class="card"><h2>我的 Tox ID</h2>
+<p id="toxid" class="toxid"></p><button id="copyid" class="secondary">复制 ID</button>
+<button id="export" class="secondary">下载身份备份</button><p class="hint">备份包含身份私钥，必须妥善保管。VPS 会持有运行中的身份密钥。</p>
 </div>
-<div id="ready" hidden><h2>你的 Tox ID</h2><p id="toxid" class="toxid"></p>
-<button id="export">下载身份备份 (.tox)</button>
-<small>备份含私钥，请加密保存、不要发给其他人。原生网络连接、好友及聊天功能仍在开发中。</small>
-</div>
-<button id="logout" class="secondary">退出个人账号</button>
-</section><p id="error" role="alert"></p></main>
-<script>
-const $=s=>document.querySelector(s);
-function error(msg){$('#error').textContent=msg||''}
-async function api(url,opts={}){
- const r=await fetch(url,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});
- if(!r.ok){let message='请求失败 ('+r.status+')';try{const data=await r.json();message=data.detail||message}catch{}
- throw new Error(message)}
- return r
-}
-async function json(url,opts={}){return(await api(url,opts)).json()}
-async function status(){
- const s=await json('/api/profile/status');
- $('#setup').hidden=s.has_profile;$('#ready').hidden=!s.has_profile;
- $('#toxid').textContent=s.tox_id||'尚未获取 ID';
-}
-async function state(){
- try{const me=await json('/api/me');$('#login').hidden=true;$('#account').hidden=false;
- $('#welcome').textContent='已登录：'+me.username;await status()}
- catch(e){$('#login').hidden=false;$('#account').hidden=true}
-}
-async function auth(url){
- error('');
- try{await json(url,{method:'POST',body:JSON.stringify({username:$('#username').value,password:$('#password').value})});await state()}
- catch(e){error(e.message)}
-}
-$('#signin').onclick=()=>auth('/api/login');$('#signup').onclick=()=>auth('/api/register');
-$('#logout').onclick=async()=>{await api('/api/logout',{method:'POST'});error('');await state()};
-$('#create').onclick=async()=>{
- if(!confirm('创建新的 Tox 身份？每个账号首次只能创建或导入一次。'))return;
- error('');try{await json('/api/profile/create',{method:'POST'});await status()}
- catch(e){error(e.message)}
-};
-$('#import').onclick=async()=>{
- const file=$('#profileFile').files[0];if(!file){error('请先选择 .tox 文件');return}
- if(file.size>8*1024*1024){error('配置文件不能超过 8 MiB');return}
- if(!confirm('确定导入此文件作为这个账号的 Tox 身份？不能覆盖已有身份。'))return;
- error('');try{await json('/api/profile/import',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file});await status()}
- catch(e){error(e.message)}
-};
-$('#export').onclick=async()=>{
- error('');try{
- const r=await api('/api/profile/export');const blob=await r.blob();const url=URL.createObjectURL(blob);
- const a=document.createElement('a');a.href=url;a.download='wtox-profile.tox';a.click();URL.revokeObjectURL(url)
- }catch(e){error(e.message)}
-};
-state();
-</script></body></html>
+<div class="card"><h2>浏览器本地加密历史</h2>
+<div id="historyLock"><p class="muted">本地历史需要单独的口令解锁。口令不发送至服务器；忘记口令无法恢复此浏览器的历史。</p>
+<input id="historyPass" type="password" autocomplete="off" placeholder="本地历史口令（至少 12 位）">
+<button id="unlock">解锁 / 首次设置</button></div>
+<p id="historyActive" hidden>本地历史已解锁；收到消息写入加密 IndexedDB 后，才向 VPS 确认领取。</p></div>
+<div class="cols">
+<div class="card"><h3>连接</h3><div id="network" class="hint">正在获取状态…</div>
+<button id="refresh" class="secondary">刷新好友</button>
+<h3>好友</h3><div id="friends"></div><hr>
+<input id="friendAddress" placeholder="好友 Tox ID（76 位）">
+<input id="requestText" value="你好，我想添加你为 Tox 好友" placeholder="好友请求内容">
+<button id="addFriend">发送好友请求</button>
+<h3>接受好友请求</h3><input id="friendKey" placeholder="请求者公钥（64 位）">
+<button id="acceptFriend" class="secondary">接受请求</button></div>
+<div class="card"><h3>文字聊天</h3>
+<p class="hint" id="selected">选择好友或输入公钥。首次使用请先解锁本地历史。</p>
+<div id="messages" role="log" aria-live="polite"></div>
+<input id="peer" placeholder="好友公钥（64 位）">
+<textarea id="message" rows="3" maxlength="1000" placeholder="输入文字消息"></textarea>
+<button id="send">发送</button>
+<p class="hint">原生 Tox 网络功能已接入代码，仍需在 VPS 上测试 qTox/aTox 实际互通。</p></div>
+</div></section></section><p id="error" role="alert"></p>
+</main><script type="module" src="/assets/app.js"></script></body></html>
