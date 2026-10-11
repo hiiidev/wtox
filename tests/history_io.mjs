@@ -15,6 +15,10 @@ const tsv=h.toQtoxTsv(sample,peer,"Bob");
 assert.match(tsv,/\tBob\thi/);
 const loaded=h.fromQtoxTsv(tsv,peer,"wtox-me");
 assert.deepEqual(loaded,sample);
+const multiline=[{...sample[0],text:"first line\nsecond line"}];
+const multilineLog=h.toQtoxTsv(multiline,peer,"Bob");
+assert.equal(h.fromQtoxTsv(multilineLog,peer,"wtox-me")[0].text,"first line\nsecond line");
+
 assert.throws(()=>h.fromQtoxTsv(tsv,peer,""));
 assert.throws(()=>h.fromQtoxTsv("garbage",peer,"wtox-me"));
 console.log("history interchange JSON and qTox TSV roundtrip OK");
