@@ -86,6 +86,25 @@ def init():
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_unique_tox_pubkey ON accounts(tox_pubkey)")
         if "tox_secret_hash" not in columns:
             c.execute("ALTER TABLE accounts ADD COLUMN tox_secret_hash BLOB")
+        if "offline_queue" not in columns:
+            c.execute("ALTER TABLE accounts ADD COLUMN offline_queue INTEGER NOT NULL DEFAULT 1")
+        c.execute("""CREATE TABLE IF NOT EXISTS outbox (
+            id TEXT PRIMARY KEY,
+            account_id TEXT NOT NULL REFERENCES accounts(id),
+            peer TEXT NOT NULL,
+            data BLOB,
+            status TEXT NOT NULL,
+            created INTEGER NOT NULL,
+            updated INTEGER NOT NULL,
+            session_id TEXT,
+            message_id INTEGER,
+            error TEXT
+        )""")
+        c.execute("CREATE INDEX IF NOT EXISTS ix_outbox_user ON outbox(account_id,status,created)")
+        # Native Tox send may have succeeded immediately before a crash.
+        # NEVER blindly replay a dispatch that was in-flight on restart:
+        # doing so can duplicate messages. Surface an uncertain state.
+        c.execute("UPDATE outbox SET status='uncertain',error='服务器中断，无法确定是否已发送' WHERE status='dispatching'")
         c.execute("""CREATE TABLE IF NOT EXISTS tox_sessions (
             token_hash TEXT PRIMARY KEY,
             account_id TEXT NOT NULL REFERENCES accounts(id),
@@ -288,3 +307,93 @@ def needs_legacy_migration() -> bool:
             "AND (tox_secret_hash IS NULL OR tox_pubkey IS NULL) LIMIT 1"
         ).fetchone()
     return row is not None
+
+
+OUTBOX_TTL = 7 * 86400
+OUTBOX_LIMIT = 250
+
+def offline_queue_enabled(uid: str) -> bool:
+    with db() as c:
+        row=c.execute("SELECT offline_queue FROM accounts WHERE id=?", (uid,)).fetchone()
+    if not row: raise ValueError("Tox 身份不存在")
+    return bool(row[0])
+
+def set_offline_queue(uid: str, enabled: bool):
+    with db() as c:
+        c.execute("UPDATE accounts SET offline_queue=? WHERE id=?", (int(enabled),uid))
+
+def enqueue_outbox(uid: str, peer: str, text: str, client_id: str) -> dict:
+    """Encrypt a pending outgoing text, one idempotent browser-generated ID.
+
+    Up to 250 undelivered messages per identity; queued only 7 days.
+    """
+    if len(peer)!=64 or any(ch not in "0123456789ABCDEF" for ch in peer):
+        raise ValueError("好友公钥无效")
+    if len(client_id)!=32 or any(ch not in "0123456789abcdef" for ch in client_id):
+        raise ValueError("消息 ID 无效")
+    if not 1<=len(text.encode("utf-8"))<=1000:
+        raise ValueError("消息长度必须为 1–1000 字节")
+    now=int(time.time())
+    with db() as c:
+        c.execute("UPDATE outbox SET status='expired', data=NULL, updated=? "
+                  "WHERE status='queued' AND created<?", (now,now-OUTBOX_TTL))
+        prior=c.execute("SELECT account_id,peer,status,created,session_id,message_id,error "
+                        "FROM outbox WHERE id=?", (client_id,)).fetchone()
+        if prior:
+            if prior[0]!=uid or prior[1]!=peer: raise ValueError("消息 ID 冲突")
+            return {"id":client_id,"public_key":prior[1],"status":prior[2],
+                    "created":prior[3],"session_id":prior[4],
+                    "message_id":prior[5],"error":prior[6]}
+        active=c.execute(
+            "SELECT COUNT(*) FROM outbox WHERE account_id=? "
+            "AND status IN ('queued','dispatching')", (uid,)
+        ).fetchone()[0]
+        if active>=OUTBOX_LIMIT: raise ValueError("待发送队列已满（250 条）")
+        c.execute(
+            "INSERT INTO outbox(id,account_id,peer,data,status,created,updated)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (client_id,uid,peer,encrypt(text.encode("utf-8")),"queued",now,now)
+        )
+    return {"id":client_id,"public_key":peer,"status":"queued",
+            "created":now,"session_id":None,"message_id":None,"error":None}
+
+def outbox_queued(uid: str):
+    now=int(time.time())
+    with db() as c:
+        c.execute("UPDATE outbox SET status='expired',data=NULL,updated=? "
+                  "WHERE status='queued' AND created<?",(now,now-OUTBOX_TTL))
+        rows=c.execute(
+            "SELECT id,peer,data FROM outbox WHERE account_id=? AND status='queued' "
+            "ORDER BY created,id LIMIT 20", (uid,)
+        ).fetchall()
+    return [(eid,peer,decrypt(data).decode("utf-8")) for eid,peer,data in rows]
+
+def outbox_claim(uid: str, eid: str) -> bool:
+    with db() as c:
+        cur=c.execute(
+            "UPDATE outbox SET status='dispatching',updated=? "
+            "WHERE id=? AND account_id=? AND status='queued'",
+            (int(time.time()),eid,uid)
+        )
+        return cur.rowcount==1
+
+def outbox_finish(uid: str, eid: str, status: str, session_id=None, message_id=None, error=None):
+    if status not in ("sent","queued","failed","uncertain"): raise ValueError("bad outbox status")
+    with db() as c:
+        c.execute(
+            "UPDATE outbox SET status=?,data=CASE WHEN ?='queued' THEN data ELSE NULL END,"
+            "updated=?,session_id=?,message_id=?,error=? "
+            "WHERE id=? AND account_id=? AND status='dispatching'",
+            (status,status,int(time.time()),session_id,message_id,error,eid,uid)
+        )
+
+def outbox_status(uid: str):
+    with db() as c:
+        rows=c.execute(
+            "SELECT id,peer,status,created,session_id,message_id,error FROM outbox "
+            "WHERE account_id=? AND created>=? ORDER BY created DESC LIMIT 250",
+            (uid,int(time.time())-OUTBOX_TTL*2)
+        ).fetchall()
+    return [{"id":eid,"public_key":peer,"status":status,"created":created,
+             "session_id":session_id,"message_id":msg_id,"error":error}
+            for eid,peer,status,created,session_id,msg_id,error in rows]
