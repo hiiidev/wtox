@@ -335,6 +335,7 @@ def enqueue_outbox(uid: str, peer: str, text: str, client_id: str) -> dict:
         raise ValueError("消息长度必须为 1–1000 字节")
     now=int(time.time())
     with db() as c:
+        c.execute("DELETE FROM outbox WHERE created<?",(now-OUTBOX_TTL*2,))
         c.execute("UPDATE outbox SET status='expired', data=NULL, updated=? "
                   "WHERE status='queued' AND created<?", (now,now-OUTBOX_TTL))
         prior=c.execute("SELECT account_id,peer,status,created,session_id,message_id,error "
@@ -360,6 +361,7 @@ def enqueue_outbox(uid: str, peer: str, text: str, client_id: str) -> dict:
 def outbox_queued(uid: str):
     now=int(time.time())
     with db() as c:
+        c.execute("DELETE FROM outbox WHERE created<?",(now-OUTBOX_TTL*2,))
         c.execute("UPDATE outbox SET status='expired',data=NULL,updated=? "
                   "WHERE status='queued' AND created<?",(now,now-OUTBOX_TTL))
         rows=c.execute(
