@@ -441,3 +441,83 @@ html[data-wtox-theme="dark"],html[data-wtox-theme="dark"] body{
   }
   .ant-messenger[data-theme] .wt-thread-shell>.ant-thread::-webkit-scrollbar{width:0;}
 }
+
+
+/* Filled icon-only desktop navigation, with a softer neutral light rail. */
+.ant-messenger[data-theme] .wechat-rail{gap:26px}
+.ant-messenger[data-theme] .wechat-rail-button{
+  width:50px;min-height:50px;height:50px;border-radius:12px;
+  color:var(--wt-muted)!important;
+  background:transparent!important;
+  display:flex;align-items:center;justify-content:center;
+  padding:0!important;gap:0;
+}
+.ant-messenger[data-theme] .wechat-rail-button svg{
+  width:25px;height:25px;display:block;
+}
+.ant-messenger[data-theme] .wechat-rail-button:hover{
+  background:var(--wt-hover)!important;
+  color:var(--wt-text)!important;
+}
+.ant-messenger[data-theme] .wechat-rail-button.is-active{
+  color:var(--wt-primary)!important;
+  background:color-mix(in srgb,var(--wt-primary) 10%,transparent)!important;
+}
+.ant-messenger[data-theme="light"] .wechat-rail-button:not(.is-active){
+  color:#666e75!important;
+}
+.ant-messenger[data-theme="light"] .wechat-rail-button:hover{
+  background:#dadddf!important;
+}
+.ant-messenger[data-theme] .wt-peer-avatar-button.ant-btn,
+.ant-messenger[data-theme] .wt-peer-avatar-button.ant-btn:hover,
+.ant-messenger[data-theme] .wt-peer-avatar-button.ant-btn:active,
+.ant-messenger[data-theme] .wt-peer-avatar-button.ant-btn:focus,
+.ant-messenger[data-theme] .wt-peer-avatar-button.ant-btn:focus-visible{
+  background:transparent!important;border-color:transparent!important;
+  box-shadow:none!important;
+}
+.ant-messenger .wt-peer-profile-heading{
+  display:flex;flex-direction:column;align-items:flex-start;
+  justify-content:flex-start;gap:5px;
+  padding:2px 0 4px;
+}
+.ant-messenger .wt-peer-profile-heading h5.ant-typography{
+  font-size:18px;line-height:1.4;font-weight:650;
+  margin:0!important;overflow-wrap:anywhere;
+}
+.ant-messenger .wt-peer-profile-presence .ant-badge-status-text{
+  font-size:12px;color:var(--wt-muted);
+}
+.ant-messenger .wt-peer-profile .ant-divider{margin:12px 0!important;}
+/* The selected bubble outline alone indicates batch selection. No selection dots. */
+.ant-messenger .wt-select-indicator{display:none!important;}
+@media(max-width:767px){
+  .ant-messenger .wt-selectable-message.is-selecting{
+    padding-left:0!important;
+  }
+}
+/* Persistent Ant Design message notice. Closing it never rejects requests. */
+.wt-friend-request-message .ant-message-notice-content{
+  border-radius:12px!important;
+  border:1px solid #d5d9dd;
+  box-shadow:0 7px 30px rgba(25,30,36,.16)!important;
+  padding:9px 12px!important;
+}
+.wt-request-message-content{display:inline-flex;align-items:center;
+  flex-wrap:wrap;gap:6px;font-size:13px}
+.wt-request-message-content .ant-btn{min-height:28px;padding-inline:6px!important;}
+html[data-wtox-theme="light"] .wt-friend-request-message .ant-message-notice-content{
+  color:#242629!important;background:#fff!important;border-color:#e0e3e6!important;
+}
+html[data-wtox-theme="dark"] .wt-friend-request-message .ant-message-notice-content{
+  color:#f5f5f5!important;background:#303034!important;border-color:#47474a!important;
+}
+html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-default,
+html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
+  color:#e9e9e9!important;
+}
+@media(max-width:767px){
+  .wt-friend-request-message .ant-message-notice-content{max-width:calc(100vw - 24px);}
+  .wt-request-message-content{max-width:calc(100vw - 88px);}
+}
