@@ -69,9 +69,9 @@ class WebDavArchive:
         if not name or len(name.encode("utf-8")) > 220:
             raise ValueError("附件名称不合法")
         encrypted = store.encrypt(data)
-        # The DAV server only receives an opaque random ID and ciphertext.
-        self._request("PUT", self._url(uid, ident), encrypted)
         now=int(time.time())
+        # Record expiry BEFORE remote PUT; a crash after a successful PUT must
+        # not leave a permanently orphaned ciphertext object.
         with store.db() as connection:
             connection.execute(
                 "INSERT OR REPLACE INTO archived_attachments "
@@ -79,6 +79,9 @@ class WebDavArchive:
                 (ident,uid,store.encrypt(name.encode("utf-8")),len(data),
                  now,now+TTL_SECONDS)
             )
+        # The DAV server receives only an opaque random ID and ciphertext.
+        # Failed PUTs leave an expiry-indexed DB record for later 404-safe cleanup.
+        self._request("PUT", self._url(uid, ident), encrypted)
         return True
 
     def get(self, uid: str, ident: str):
