@@ -40,4 +40,20 @@ assert.match(python,/@router\.get\("\/api\/outbox"\)/);
 assert.match(python,/@router\.put\("\/api\/settings"\)/);
 assert.match(store,/encrypt\(text\.encode\("utf-8"\)\)/);
 assert.match(mgr,/await asyncio\.sleep\(3\)/);
+assert.ok(app.includes('const [offlineQueue,setOfflineQueue]=useState(false)'),
+  "VPS offline queue must be opt-in; browser is default");
+assert.ok(app.includes('delivery_status:"queued_local"'),
+  "Browser-local encrypted offline queue is missing");
+assert.ok(app.includes('flushBrowserQueue'),
+  "Browser queue must flush while page is active");
+assert.ok(app.includes('patchEvent(item.id'),
+  "Browser queued send status must be updated in IndexedDB");
+assert.ok(app.includes('modal==="settings"') && !app.includes('modal==="identity"') &&
+  !app.includes('modal==="history"'),"Account and chat-history management must be in one settings modal");
+assert.ok(app.includes('AttachmentBubble') && app.includes('wtox-attachment-image'),
+  "Native Tox files should appear in chat bubbles with image preview");
+assert.ok(!app.includes("MessageList.Content"),"Unsupported ChatScope MessageList.Content can render a blank page");
+assert.ok(!app.includes("Message.Footer"),"Unsupported ChatScope Message.Footer can render a blank page");
+assert.ok(existsSync("frontend/public/logo.svg"),"Generated wtox logo missing");
+assert.ok(html.includes('href="/logo.svg"'),"Generated logo not registered as favicon");
 console.log("React responsive messenger, encrypted offline queue and real-time fallback structural checks OK");
