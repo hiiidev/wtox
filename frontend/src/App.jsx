@@ -100,6 +100,13 @@ export default function App(){
   const [sending,setSending]=useState(false);
   const [ownProfile,setOwnProfile]=useState({name:"",status_message:"",user_status:0});
   const [profileSaving,setProfileSaving]=useState(false);
+  // Native Tox status: 0 available, 1 away, 2 busy. When the Tox network
+  // connection is down, show a neutral offline dot instead of false green.
+  const ownStatus=ownProfile.user_status;
+  const ownStatusLabel=network>0?["在线","离开","忙碌"][ownStatus]||"在线":"离线";
+  const ownBadgeStatus=network>0?["success","warning","error"][ownStatus]||"success":"default";
+  const ownBadgeColor=network>0?["#52c41a","#faad14","#ff4d4f"][ownStatus]||"#52c41a":"#8c8c8c";
+
   const [visualStyle,setVisualStyle]=useState(()=>{
     try {
       const stored=localStorage.getItem("wtox-visual-style");
@@ -637,10 +644,14 @@ export default function App(){
       <nav className="wechat-rail" aria-label="主导航">
         <AntButton type="text" className="wechat-rail-avatar" aria-label="我的 Tox 资料"
           title="我的 Tox 资料" onClick={()=>setModal("profile")}>
-          <Avatar size={44} shape="square" className="wechat-self-avatar"
-            icon={!ownProfile.name?<UserOutlined/>:undefined}>
-            {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
-          </Avatar>
+          <Tooltip title={ownStatusLabel}>
+            <Badge dot color={ownBadgeColor} offset={[-2,35]}>
+              <Avatar size={44} shape="square" className="wechat-self-avatar"
+                icon={!ownProfile.name?<UserOutlined/>:undefined}>
+                {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+              </Avatar>
+            </Badge>
+          </Tooltip>
         </AntButton>
         <div className="wechat-rail-primary">
           <button type="button" className={"wechat-rail-button "+(section==="chats"?"is-active":"")}
@@ -666,9 +677,13 @@ export default function App(){
           <div className="wechat-mobile-heading">
             <AntButton type="text" className="wechat-mobile-avatar" aria-label="我的 Tox 资料"
               onClick={()=>setModal("profile")}>
-              <Avatar size={32} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
-                {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
-              </Avatar>
+              <Tooltip title={ownStatusLabel}>
+                <Badge dot color={ownBadgeColor} offset={[-2,25]}>
+                  <Avatar size={32} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
+                    {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+                  </Avatar>
+                </Badge>
+              </Tooltip>
             </AntButton>
             <strong>wTox</strong>
           </div>
@@ -810,14 +825,14 @@ export default function App(){
     {modal==="profile"&&<AntModal open title="我的 Tox 资料"
       onCancel={closeModal} footer={null} centered destroyOnHidden width={520}>
       <div className="wtox-profile-header">
-        <Avatar size={64} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
-          {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
-        </Avatar>
+        <Badge dot color={ownBadgeColor} offset={[-3,53]}>
+          <Avatar size={64} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
+            {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+          </Avatar>
+        </Badge>
         <div>
           <Typography.Title level={4} style={{margin:0}}>{ownProfile.name||"Tox 用户"}</Typography.Title>
-          <Typography.Text type="secondary">
-            {["在线","离开","忙碌"][ownProfile.user_status]||"在线"}
-          </Typography.Text>
+          <Badge status={ownBadgeStatus} text={ownStatusLabel}/>
         </div>
       </div>
       <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
