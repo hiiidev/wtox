@@ -20,6 +20,7 @@ function stateText(record){
   if(record.delivery_status==="failed")return "发送失败";
   if(record.delivery_status==="uncertain")return "发送结果待确认";
   if(record.delivery_status==="queued"||record.delivery_status==="dispatching")return "正在发送";
+  if(record.message_id===undefined&&!record.outbox_id&&!record.delivery_status)return "历史消息";
   return "已发送";
 }
 function Button({children,onClick,kind="",disabled=false}){
