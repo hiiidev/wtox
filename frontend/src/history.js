@@ -156,6 +156,31 @@ export async function openIdentityHistory(owner){
       }
       return false;
     }
+    async function persistFile(file){
+      requireKey();
+      if(!file?.id||!file.public_key||!file.name)return false;
+      const id="file-"+file.id;
+      const prior=await request(db.transaction("events").objectStore("events").get(id));
+      let old=null;
+      if(prior)old=await cryptoOpen(prior,key);
+      const row={
+        id,type:"file",
+        at:old?.at||(file.created?file.created*1000:Date.now()),
+        direction:file.direction||"incoming",
+        public_key:file.public_key,
+        text:"",
+        file_id:file.id,
+        file_name:file.name,
+        file_size:file.size||0,
+        file_state:file.state||"offered",
+        file_progress:file.progress||0
+      };
+      const cipher=await cryptoSeal(row,key);
+      const tx=db.transaction("events","readwrite");
+      tx.objectStore("events").put({id,...cipher});
+      await completed(tx);
+      return true;
+    }
     async function patchEvent(id,changes){
       requireKey();
       const row=await request(db.transaction("events").objectStore("events").get(id));
@@ -220,6 +245,6 @@ export async function openIdentityHistory(owner){
       return encrypted.length;
     }
     return {owner,ready:()=>!!key,needsMigration:()=>needsMigration,
-      migrate,read,persist,patchEvent,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
+      migrate,read,persist,persistFile,patchEvent,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
   }catch(error){db.close();throw error}
 }
