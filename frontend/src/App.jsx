@@ -93,6 +93,18 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
   </div>;
 }
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
+/* Inlined filled SVGs: locally bundled by Vite; no icon CDN or font download. */
+function RailIcon({kind}){
+  return <svg viewBox="0 0 24 24" width="25" height="25" fill="currentColor"
+    focusable="false" aria-hidden="true">
+    {kind==="chats"?
+      <path d="M12 2.6c-5.72 0-10.4 3.74-10.4 8.3 0 2.52 1.43 4.72 3.64 6.23L4.2 21a.7.7 0 0 0 .99.84l3.93-1.99c.92.27 1.9.41 2.88.41 5.72 0 10.4-3.74 10.4-8.3S17.72 2.6 12 2.6ZM7 11a1.4 1.4 0 1 1 2.8 0A1.4 1.4 0 0 1 7 11Zm3.6 0a1.4 1.4 0 1 1 2.8 0 1.4 1.4 0 0 1-2.8 0Zm3.6 0a1.4 1.4 0 1 1 2.8 0 1.4 1.4 0 0 1-2.8 0Z"/>
+    :kind==="contacts"?
+      <><path d="M9.1 12.3a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z"/><path d="M2.3 20.7A1.3 1.3 0 0 1 1 19.4v-1.2c0-3.1 3.4-4.8 8.1-4.8s8.1 1.7 8.1 4.8v1.2a1.3 1.3 0 0 1-1.3 1.3H2.3Z"/><path d="M16.5 4.1a3.6 3.6 0 0 1 .2 7 8.8 8.8 0 0 1 2.7 2c2.4.9 3.6 2.5 3.6 4.7v1h-4.3v-.6c0-2.9-1.3-4.9-3.5-6.3a5.8 5.8 0 0 0 1.3-7.8Z"/></>
+    : <path d="m10 1.7-.4 2.2c-.5.2-1 .4-1.5.6L6.2 3.3 3.3 6.2l1.2 1.9c-.3.5-.5 1-.6 1.5l-2.2.4v4l2.2.4c.1.5.3 1 .6 1.5l-1.2 1.9 2.9 2.9 1.9-1.2c.5.2 1 .4 1.5.6l.4 2.2h4l.4-2.2c.5-.2 1-.4 1.5-.6l1.9 1.2 2.9-2.9-1.2-1.9c.2-.5.4-1 .6-1.5l2.2-.4v-4l-2.2-.4c-.2-.5-.4-1-.6-1.5l1.2-1.9-2.9-2.9-1.9 1.2c-.5-.2-1-.4-1.5-.6L14 1.7h-4ZM12 16.4a4.4 4.4 0 1 1 0-8.8 4.4 4.4 0 0 1 0 8.8Z"/>
+    }
+  </svg>;
+}
 
 export default function App(){
   const [user,setUser]=useState(null),[loading,setLoading]=useState(true);
@@ -970,19 +982,19 @@ export default function App(){
         <div className="wechat-rail-primary">
           <button type="button" className={"wechat-rail-button "+(section==="chats"?"is-active":"")}
             aria-label="聊天" aria-current={section==="chats"?"page":undefined}
-            onClick={()=>{setSection("chats");setMobileChat(false)}}>
-            <MessageOutlined/><span>聊天</span>
+            title="聊天" onClick={()=>{setSection("chats");setMobileChat(false)}}>
+            <RailIcon kind="chats"/>
           </button>
           <button type="button" className={"wechat-rail-button "+(section==="contacts"?"is-active":"")}
             aria-label="通讯录" aria-current={section==="contacts"?"page":undefined}
-            onClick={()=>{setSection("contacts");setMobileChat(false)}}>
-            <ContactsOutlined/><span>通讯录</span>
+            title="通讯录" onClick={()=>{setSection("contacts");setMobileChat(false)}}>
+            <RailIcon kind="contacts"/>
           </button>
         </div>
         <div className="wechat-rail-bottom">
           <button type="button" className="wechat-rail-button"
-            aria-label="设置与备份" onClick={()=>setModal("settings")}>
-            <SettingOutlined/><span>设置</span>
+            aria-label="设置与备份" title="设置" onClick={()=>setModal("settings")}>
+            <RailIcon kind="settings"/>
           </button>
         </div>
       </nav>
