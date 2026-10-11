@@ -38,12 +38,12 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
   const completed=file.file_state==="completed";
   const canDownload=file.direction==="incoming"&&completed;
   useEffect(()=>{
-    if(!canDownload||!isPicture||!file.file_id)return;
+    if(!isPicture||!file.file_id)return;
     let alive=true,url="";
     (async()=>{
       try{
         let blob=historyHandle?.ready()?await historyHandle.cachedImage(file.file_id):null;
-        if(!blob){
+        if(!blob&&canDownload){
           blob=await(await api("/api/files/"+encodeURIComponent(file.file_id)+"/download")).blob();
           if(blob.size>5*1024*1024)return;
           const mime=/\.png$/i.test(file.file_name)?"image/png":
@@ -52,6 +52,7 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
           blob=new Blob([blob],{type:mime});
           if(historyHandle?.ready())await historyHandle.cacheImage(file.file_id,blob);
         }
+        if(!blob)return;
         url=URL.createObjectURL(blob);
         if(alive)setPreview(url);
         else URL.revokeObjectURL(url);
@@ -67,12 +68,14 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
   const state=transferText[file.file_state]||file.file_state;
   return <div className={"wtox-attachment-row "+(mine?"out":"")} role="group"
      aria-label={"附件 "+file.file_name}>
-    <div className="wtox-attachment-bubble">
-      {preview&&<img className="wtox-attachment-image" src={preview}
-        alt={file.file_name} loading="lazy"/>}
-      <strong>📎 {file.file_name}</strong>
-      <small>{Math.round(file.file_size/1024)} KiB · {state}
-        {percentage>0&&percentage<100?" · "+percentage+"%":""}</small>
+    <Card size="small" className="wtox-attachment-bubble">
+      {preview&&<Image className="wtox-attachment-image" src={preview}
+        alt={file.file_name} loading="lazy" width={220}
+        preview={{mask:"查看图片"}}/>}
+      <FileCard name={file.file_name} byte={file.file_size} size="small"/>
+      <Typography.Text type="secondary">
+        {state}{percentage>0&&percentage<100?" · "+percentage+"%":""}
+      </Typography.Text>
       {file.direction==="incoming"&&file.file_state==="offered"&&
         <div className="wtox-attachment-actions">
           <Button onClick={()=>accept(file.file_id)}>接受</Button>
@@ -82,8 +85,10 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
         下载文件
       </Button>}
       {completed&&mine&&<small>已由 Toxcore 完成文件传输</small>}
-      {completed&&!preview&&isPicture&&<small>图片预览不可用或已过期</small>}
-    </div>
+      {completed&&!preview&&isPicture&&<Typography.Text type="secondary">
+        图片预览不可用或已过期
+      </Typography.Text>}
+    </Card>
     <time>{new Date(file.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</time>
   </div>;
 }
