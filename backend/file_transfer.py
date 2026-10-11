@@ -1,8 +1,8 @@
-"""Bounded in-memory, native Toxcore FILE_KIND_DATA transfers.
+"""Native, online-only Tox FILE_KIND_DATA backed by encrypted VPS disk chunks.
 
-A deliberately small, online-only implementation. Incoming offers require a
-browser click to accept. No unbounded allocation, automatic file execution,
-path writes, database persistence or restart/resume support.
+All file bytes are spooled in 64-KiB AES-GCM blocks, not held as entire payloads
+by a ToxSession. Users still must be online for native transfer; completed
+incoming files can be downloaded from the authenticated VPS for up to 7 days.
 """
 from __future__ import annotations
 import ctypes as C
@@ -45,7 +45,7 @@ class Transfer:
     size: int
     state: str
     when: float
-    payload: bytes | bytearray | None = None
+    document: object | None = None
     progress: int = 0
     public_key: str = ""
 
@@ -54,6 +54,8 @@ class FileTransfers:
     def __init__(self, session):
         self.session=session
         self.items={}
+        self.disk=None
+        self.uid=None
         self.bind_native()
 
     def bind_native(self):
@@ -93,6 +95,8 @@ class FileTransfers:
             if now-item.when>TTL:
                 if item.state in ("offered","waiting","receiving","sending"):
                     self._native_cancel(item)
+                    if item.document is not None:
+                        item.document.abort()
                 del self.items[uid]
         # Also cap completed buffers. A peer can send unlimited sequential
         # files; keep at most eight temporary items per account in memory.
@@ -120,10 +124,13 @@ class FileTransfers:
                      v.file_number==file_number and v.direction==direction and
                      v.state in ("offered","waiting","receiving","sending")),None)
 
-    def send(self,key,name,data):
+    def send(self,key,name,document):
         name=safe_filename(name)
-        if not isinstance(data,bytes) or not 1<=len(data)<=MAX_FILE:
-            raise ValueError("附件必须为 1 字节至 5 MiB")
+        if (not getattr(document,"complete",False) or
+                not 1<=document.size<=MAX_FILE or
+                document.uid!=self.uid or document.direction!="outgoing" or
+                document.name!=name):
+            raise ValueError("附件未完成硬盘加密暂存或身份不匹配")
         with self.session.lock:
             self.session._require_live()
             self.prune()
@@ -144,9 +151,10 @@ class FileTransfers:
             encoded=name.encode("utf-8")
             filename=(U8*len(encoded)).from_buffer_copy(encoded)
             err.value=0
-            n=self.send_native(self.session.tox,friend,0,len(data),None,filename,len(encoded),C.byref(err))
+            n=self.send_native(self.session.tox,friend,0,document.size,None,filename,len(encoded),C.byref(err))
             if err.value:raise ValueError("原生 Tox 附件发送失败（错误码 %d）"%err.value)
-            item=Transfer(uuid.uuid4().hex,friend,int(n),"outgoing",name,len(data),"waiting",time.time(),data,0,key.upper())
+            item=Transfer(document.id,friend,int(n),"outgoing",name,document.size,
+                          "waiting",time.time(),document,0,key.upper())
             self.items[item.id]=item
             self._emit(item)
             return self._public(item)
@@ -155,7 +163,9 @@ class FileTransfers:
         for item in self.items.values():
             if item.friend==friend_number and item.state in ("offered","waiting","receiving","sending"):
                 item.state="failed"
-                item.payload=None
+                if item.document is not None:
+                    item.document.abort()
+                    item.document=None
                 self._emit(item)
 
     def list(self):
@@ -170,21 +180,27 @@ class FileTransfers:
                 raise ValueError("此附件不在等待接收状态")
             err=C.c_int()
             if accept:
-                item.payload=bytearray(item.size)
+                if self.disk is None or self.uid is None:
+                    raise ValueError("磁盘附件暂存服务不可用")
+                item.document=self.disk.begin(self.uid,item.name,expected=item.size,
+                                              direction="incoming",ident=item.id)
             ok=self.control_native(self.session.tox,item.friend,item.file_number,0 if accept else 2,C.byref(err))
-            if not ok or err.value:raise ValueError("Tox 文件控制失败（错误码 %d）"%err.value)
+            if not ok or err.value:
+                if item.document is not None:
+                    item.document.abort()
+                    item.document=None
+                raise ValueError("Tox 文件控制失败（错误码 %d）"%err.value)
             item.state="receiving" if accept else "cancelled"
             item.when=time.time()
-            if not accept:item.payload=None
             self._emit(item)
             return self._public(item)
 
     def download(self,ident):
-        with self.session.lock:
-            item=self.get(ident)
-            if item.direction!="incoming" or item.state!="completed" or item.payload is None:
-                raise ValueError("附件尚未接收完成")
-            return item.name,bytes(item.payload)
+        """Compatibility helper for existing callers; HTTP now streams blocks."""
+        if not self.disk or not self.uid:
+            raise ValueError("附件磁盘存储不可用")
+        name,_,chunks=self.disk.download(self.uid,ident)
+        return name,b"".join(chunks)
 
     def _on_receive(self,_tox,friend,file_number,kind,size,filename,length,_user):
         try:
@@ -206,39 +222,59 @@ class FileTransfers:
     def _on_receive_chunk(self,_tox,friend,file_number,position,data,length,_user):
         try:
             item=self._find(friend,file_number,"incoming")
-            if item is None or item.state!="receiving" or item.payload is None:return
+            if item is None or item.state!="receiving" or item.document is None:return
             if length==0:
                 if position==item.size and item.progress==item.size:
-                    item.state="completed"
+                    try:
+                        item.document.finish()
+                        item.state="completed"
+                    except (OSError,ValueError):
+                        item.document.abort()
+                        item.document=None
+                        item.state="failed"
                 else:
-                    item.state="failed";item.payload=None
+                    item.state="failed"
+                    item.document.abort()
+                    item.document=None
                 self._emit(item)
                 return
             if position!=item.progress or position+length>item.size:
-                item.state="failed";item.payload=None
+                item.state="failed"
+                item.document.abort()
+                item.document=None
                 self._native_cancel(item);self._emit(item)
                 return
-            item.payload[position:position+length]=C.string_at(data,length)
+            item.document.write(C.string_at(data,length))
             item.progress+=length
             item.when=time.time()
-            # Keep UI update volume modest.
             if item.progress==item.size:self._emit(item)
         except Exception as exc:
+            if item is not None:
+                item.state="failed"
+                if item.document is not None:
+                    item.document.abort()
+                    item.document=None
+                self._native_cancel(item)
+                self._emit(item)
             print("Tox file receiving chunk failed:",type(exc).__name__,flush=True)
 
     def _on_chunk_request(self,_tox,friend,file_number,position,length,_user):
         try:
             item=self._find(friend,file_number,"outgoing")
-            if not item or item.payload is None:return
+            if not item or item.document is None:return
             if length==0:
-                item.state="completed";item.payload=None;self._emit(item);return
-            if position+length>item.size:return
-            data=item.payload[position:position+length]
+                item.state="completed";self._emit(item);return
+            if length>64*1024 or position+length>item.size:return
+            data=item.document.read(position,length)
             buf=(U8*len(data)).from_buffer_copy(data)
             err=C.c_int()
             ok=self.send_chunk(self.session.tox,friend,file_number,position,buf,len(data),C.byref(err))
             if not ok or err.value:
-                item.state="failed";item.payload=None;self._emit(item)
+                item.state="failed"
+                if item.document is not None:
+                    item.document.abort()
+                    item.document=None
+                self._emit(item)
                 return
             item.state="sending";item.progress=max(item.progress,int(position+length))
             item.when=time.time()
@@ -252,7 +288,10 @@ class FileTransfers:
             if not item:item=self._find(friend,file_number,"incoming")
             if item is None:return
             if control==2:
-                item.state="cancelled";item.payload=None
+                item.state="cancelled"
+                if item.document is not None and not item.document.complete:
+                    item.document.abort()
+                    item.document=None
             elif control==1:
                 item.state="waiting"
             elif control==0 and item.direction=="outgoing":
