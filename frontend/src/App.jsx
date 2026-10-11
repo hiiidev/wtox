@@ -1092,8 +1092,8 @@ export default function App(){
             <AntButton type="text" className="wechat-mobile-avatar" aria-label="我的 Tox 资料"
               onClick={()=>setModal("profile")}>
               <Tooltip title={ownStatusLabel}>
-                <Badge dot color={ownBadgeColor} offset={[-2,25]}>
-                  <Avatar size={32} shape="square" gap={3} style={{backgroundColor:avatarColor(user.public_key)}}
+                <Badge dot color={ownBadgeColor} offset={[-3,35]}>
+                  <Avatar size={40} shape="square" gap={3} style={{backgroundColor:avatarColor(user.public_key)}}
                     >
                     {selfAvatarText}
                   </Avatar>

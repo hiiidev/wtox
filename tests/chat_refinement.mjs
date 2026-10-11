@@ -109,3 +109,9 @@ assert.match(app,/className="wt-conversation-bubble"/);
 assert.match(refined,/\.wt-conversation-bubble \.ant-bubble-body/);
 assert.match(refined,/width:max-content!important/);
 assert.match(refined,/\.wechat-conversation\.is-selected \.wechat-presence\.online/);
+
+assert.match(refined,/height:calc\(76px \+ env\(safe-area-inset-top\)\)!important/);
+assert.match(refined,/\.ant-messenger\[data-theme\] \.ant-chat-avatar\{/);
+assert.match(refined,/\.ant-messenger\[data-theme\] \.wechat-mobile-avatar \.ant-avatar\{/);
+assert.match(refined,/\.ant-messenger\[data-theme\] \.ant-peer-title strong\{/);
+assert.match(app,/size=\{40\} shape="square" gap=\{3\}/);
