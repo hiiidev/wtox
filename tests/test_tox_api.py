@@ -21,6 +21,15 @@ PEER = "CC" * 32
 class FakeSession:
     last_connection = 1
     session_id = "fake-toxcore-instance"
+    profile = {"name":"wTox Tester","status_message":"Available","user_status":0}
+
+    def self_profile(self):
+        return dict(self.profile)
+
+    def update_self_profile(self,name,status_message,user_status):
+        self.profile = {"name":name,"status_message":status_message,
+                        "user_status":user_status}
+        return dict(self.profile)
 
     def friends(self):
         return [{"public_key": PEER, "name": "Friend", "status": 1}]
@@ -83,9 +92,28 @@ class ChatApiTests(unittest.TestCase):
             "public_key": PEER, "text": "Hello!"
         })
         self.assertEqual(msg.status_code, 200, msg.text)
-        self.assertEqual(msg.json()["message_id"], 42)
-        self.assertEqual(msg.json()["session_id"], "fake-toxcore-instance")
-        self.assertEqual(msg.json()["status"], "sent")
+        self.assertEqual(msg.json()["status"], "queued")
+        self.assertEqual(msg.json()["public_key"], PEER)
+        self.assertEqual(self.client.get("/api/outbox").json()["messages"][0]["status"],"queued")
+
+    def test_edit_native_profile_and_validate_origin(self):
+        current=self.client.get("/api/profile/self")
+        self.assertEqual(current.status_code,200,current.text)
+        self.assertEqual(current.json()["name"],"wTox Tester")
+        update=self.client.put("/api/profile/self", json={
+            "name":"Alice","status_message":"Away for lunch","user_status":1
+        })
+        self.assertEqual(update.status_code,200,update.text)
+        self.assertEqual(update.json()["user_status"],1)
+        self.assertEqual(self.client.get("/api/profile/self").json()["name"],"Alice")
+        bad=self.client.put("/api/profile/self",json={
+            "name":"bad","status_message":"","user_status":9
+        })
+        self.assertEqual(bad.status_code,422)
+        cross=self.client.put("/api/profile/self",json={
+            "name":"bad","status_message":"","user_status":2
+        },headers={"Origin":"https://evil.invalid"})
+        self.assertEqual(cross.status_code,403)
 
     def test_gate_and_origins(self):
         resp = self.client.post("/api/messages", json={
@@ -111,10 +139,11 @@ class ChatApiTests(unittest.TestCase):
             self.assertEqual(ws.receive_json()["type"], "pong")
         self.assertEqual(store.get_pending(self.uid), [])
 
-    def test_vps_queue_is_opt_in_and_encrypted(self):
-        self.assertFalse(self.client.get("/api/settings").json()["offline_queue"])
-        enabled = self.client.put("/api/settings", json={"offline_queue": True})
-        self.assertEqual(enabled.status_code, 200, enabled.text)
+    def test_all_messages_use_encrypted_vps_queue(self):
+        self.assertTrue(self.client.get("/api/settings").json()["offline_queue"])
+        # Former per-account switch no longer exists.
+        self.assertEqual(self.client.put("/api/settings",
+                         json={"offline_queue":False}).status_code,405)
         client_id = "e" * 32
         response = self.client.post("/api/messages", json={
             "public_key": PEER, "text": "queue-secret-text", "client_id": client_id
