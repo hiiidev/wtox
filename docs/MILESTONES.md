@@ -18,7 +18,10 @@
 - [x] Add/accept friend requests, Bootstrap/relay connections, send/receive messages (source implemented; live verification pending)
 - [x] Authenticated WebSocket push and reconnect (source implemented)
 - [x] Seven-day encrypted pending message queue and browser ack processing (source implemented)
-- [x] Browser encrypted IndexedDB histories (source implemented; browser verification pending)
+- [x] Browser IndexedDB AES-256-GCM histories, automatically unlocked using per-Tox-identity device keys (code implemented)
+- [x] One-time safe conversion path for earlier password-encrypted history
+- [ ] Verify automatic unlock and legacy history migration on real mobile/desktop browsers
+- [ ] Encrypted local chat history export/import for transfer between devices
 - [ ] Confirm raw .tox identity compatibility using exported files from real aTox/qTox
 - [ ] Real qTox/aTox bidirectional interoperability tests
 - [ ] Security review, backup procedure and end-to-end VPS deployment tests
