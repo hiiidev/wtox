@@ -1,4 +1,8 @@
-"""Contract tests for authenticated chat endpoints, without live Tox network."""
+"""Current Tox-savedata login contract for friend, messaging and websocket APIs.
+
+These tests deliberately use a fake native session and DO NOT enter FastAPI's
+production lifespan or connect to the real Tox network.
+"""
 import os
 import tempfile
 import unittest
@@ -6,21 +10,30 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
+
+from backend import store
 from backend.main import app
+
+
+PEER = "CC" * 32
 
 
 class FakeSession:
     last_connection = 1
+    session_id = "fake-toxcore-instance"
+
     def friends(self):
-        return [{"public_key":"CC"*32,"name":"Friend","status":1}]
-    def add_friend(self,address,text):
-        assert len(address)==76 and text
-        return "CC"*32
-    def accept_friend(self,key):
+        return [{"public_key": PEER, "name": "Friend", "status": 1}]
+
+    def add_friend(self, address, text):
+        assert len(address) == 76 and text
+        return PEER
+
+    def accept_friend(self, key):
         return key.upper()
-    def send_message(self,key,text):
-        assert len(key)==64 and text
+
+    def send_message(self, key, text):
+        assert key == PEER and text
         return 42
 
 
@@ -29,54 +42,93 @@ class ChatApiTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.env = patch.dict(os.environ, {
             "WTOX_DATA_DIR": self.temp.name,
-            "WTOX_MASTER_KEY": "ab"*32,
+            "WTOX_MASTER_KEY": "ab" * 32,
             "WTOX_ACCESS_PASSWORD": "this-is-a-long-web-gate-passphrase",
             "WTOX_INSECURE_HTTP": "1",
         })
         self.env.start()
-        self.client_ctx=TestClient(app)
-        self.client=self.client_ctx.__enter__()
-        self.client.post("/api/gate/login",json={"password":"this-is-a-long-web-gate-passphrase"})
-        self.client.post("/api/register",json={"username":"alice","password":"long-account-password"})
-        self.core_mock=patch("backend.tox_api.manager.get", return_value=FakeSession())
+        store.init()
+        identity = SimpleNamespace(
+            address="A" * 76, secret_proof=b"a" * 32,
+            savedata=b"synthetic-tox-savedata-for-api-test",
+        )
+        self.uid = store.create_tox_identity(identity)
+        self.client = TestClient(app)
+        gate = self.client.post("/api/gate/login", json={
+            "password": "this-is-a-long-web-gate-passphrase"
+        })
+        self.assertEqual(gate.status_code, 200, gate.text)
+        self.client.cookies.set("wtox_tox_session", store.create_tox_session(self.uid))
+        self.core_mock = patch("backend.tox_api.manager.get", return_value=FakeSession())
         self.core_mock.start()
 
     def tearDown(self):
         self.core_mock.stop()
-        self.client_ctx.__exit__(None,None,None)
+        self.client.close()
         self.env.stop()
         self.temp.cleanup()
 
     def test_friend_and_text_api(self):
-        self.assertEqual(self.client.get("/api/network").json()["status"],1)
-        self.assertEqual(len(self.client.get("/api/friends").json()["friends"]),1)
-        add=self.client.post("/api/friends",json={"address":"AA"*38,"message":"Hello"})
-        self.assertEqual(add.status_code,200,add.text)
-        accept=self.client.post("/api/friends/accept",json={"public_key":"CC"*32})
-        self.assertEqual(accept.status_code,200,accept.text)
-        msg=self.client.post("/api/messages",json={"public_key":"CC"*32,"text":"Hello!"})
-        self.assertEqual(msg.status_code,200,msg.text)
-        self.assertEqual(msg.json()["message_id"],42)
+        network = self.client.get("/api/network")
+        self.assertEqual(network.status_code, 200, network.text)
+        self.assertEqual(network.json()["status"], 1)
+        self.assertEqual(len(self.client.get("/api/friends").json()["friends"]), 1)
+        add = self.client.post("/api/friends", json={
+            "address": "AA" * 38, "message": "Hello"
+        })
+        self.assertEqual(add.status_code, 200, add.text)
+        accept = self.client.post("/api/friends/accept", json={"public_key": PEER})
+        self.assertEqual(accept.status_code, 200, accept.text)
+        msg = self.client.post("/api/messages", json={
+            "public_key": PEER, "text": "Hello!"
+        })
+        self.assertEqual(msg.status_code, 200, msg.text)
+        self.assertEqual(msg.json()["message_id"], 42)
+        self.assertEqual(msg.json()["session_id"], "fake-toxcore-instance")
+        self.assertEqual(msg.json()["status"], "sent")
 
     def test_gate_and_origins(self):
-        resp=self.client.post("/api/messages",json={"public_key":"CC"*32,"text":"hey"},
-                              headers={"Origin":"https://not-our-site.example"})
-        self.assertEqual(resp.status_code,403)
+        resp = self.client.post("/api/messages", json={
+            "public_key": PEER, "text": "hey"
+        }, headers={"Origin": "https://not-our-site.example"})
+        self.assertEqual(resp.status_code, 403, resp.text)
+        self.client.cookies.delete("wtox_tox_session")
+        self.assertEqual(self.client.get("/api/network").status_code, 401)
         self.client.cookies.delete("wtox_gate")
-        self.assertEqual(self.client.get("/api/friends").status_code,401)
+        self.assertEqual(self.client.get("/api/friends").status_code, 401)
 
     def test_pending_ack_and_websocket_origin(self):
-        from backend import store
-        uid=store.session_user(self.client.cookies.get("wtox_session"))
-        eid=store.append_pending(uid,{"type":"message","public_key":"CC"*32,"text":"Hi"})
-        with self.client.websocket_connect("/ws",headers={"origin":"http://testserver"}) as ws:
-            event=ws.receive_json()
-            self.assertEqual(event["id"],eid)
-            ws.send_json({"type":"ack","ids":[eid]})
-            ws.send_json({"type":"ping"})
-            self.assertEqual(ws.receive_json()["type"],"pong")
-        self.assertEqual(store.get_pending(uid),[])
+        eid = store.append_pending(self.uid, {
+            "type": "message", "public_key": PEER, "text": "Hi"
+        })
+        with self.client.websocket_connect(
+            "/ws", headers={"origin": "http://testserver"}
+        ) as ws:
+            event = ws.receive_json()
+            self.assertEqual(event["id"], eid)
+            ws.send_json({"type": "ack", "ids": [eid]})
+            ws.send_json({"type": "ping"})
+            self.assertEqual(ws.receive_json()["type"], "pong")
+        self.assertEqual(store.get_pending(self.uid), [])
+
+    def test_vps_queue_is_opt_in_and_encrypted(self):
+        self.assertFalse(self.client.get("/api/settings").json()["offline_queue"])
+        enabled = self.client.put("/api/settings", json={"offline_queue": True})
+        self.assertEqual(enabled.status_code, 200, enabled.text)
+        client_id = "e" * 32
+        response = self.client.post("/api/messages", json={
+            "public_key": PEER, "text": "queue-secret-text", "client_id": client_id
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "queued")
+        self.assertEqual(response.json()["id"], client_id)
+        self.assertEqual(self.client.get("/api/outbox").json()["messages"][0]["status"], "queued")
+        with store.db() as connection:
+            encrypted = connection.execute(
+                "SELECT data FROM outbox WHERE id=?", (client_id,)
+            ).fetchone()[0]
+        self.assertNotIn(b"queue-secret-text", encrypted)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     unittest.main()
