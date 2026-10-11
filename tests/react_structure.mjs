@@ -10,7 +10,7 @@ const python=readFileSync("backend/tox_api.py","utf8");
 const store=readFileSync("backend/store.py","utf8");
 const mgr=readFileSync("backend/session_manager.py","utf8");
 
-for(const component of ["Bubble","Conversations","Sender","ConfigProvider","Segmented"]){
+for(const component of ["Bubble","Sender","ConfigProvider","Segmented","Avatar"]){
   assert.ok(app.includes(component),"Missing Ant Design/X component: "+component);
 }
 const packageJson=JSON.parse(readFileSync("frontend/package.json","utf8"));
@@ -65,8 +65,18 @@ assert.ok(app.includes('modal==="settings"') && !app.includes('modal==="identity
 assert.ok(app.includes('AttachmentBubble') && app.includes('wtox-attachment-image'),
   "Native Tox files should appear in chat bubbles with image preview");
 assert.ok(!app.includes("MainContainer"),"Legacy ChatScope layout must not remain");
-assert.ok(app.includes("onActiveChange")&&app.includes("onSubmit={text=>sendText"),
-  "Ant Design X conversations and sender must be active");
+assert.ok(app.includes('className="wechat-rail"') &&
+  app.includes('className="wechat-mobile-tabs"') &&
+  app.includes('className="wechat-conversation "') &&
+  app.includes("onSubmit={text=>sendText"),
+  "WeChat-style navigation, conversation list and Ant Design X sender must be active");
+const wechatStyles=readFileSync("frontend/src/wechat-style.css","utf8");
+assert.ok(wechatStyles.includes("grid-template-columns:70px") &&
+  wechatStyles.includes("@media(max-width:767px)") &&
+  wechatStyles.includes(".wechat-mobile-tabs"),
+  "Desktop three-column and mobile single-pane layouts must exist");
+assert.ok(app.includes("latestByPeer") && app.includes("unreadFor"),
+  "Conversations must display recent messages and unread counts");
 assert.ok(app.includes("startLongPress")&&app.includes("requestDelete"),
   "Long-press message deletion is required");
 assert.ok(history.includes("cacheImage")&&history.includes("expireImages"),
