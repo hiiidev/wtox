@@ -59,7 +59,13 @@ def network(uid: str = Depends(require_user)):
 @router.get("/api/friends")
 def friends(uid: str = Depends(require_user)):
     try:
-        return {"friends": session(uid).friends()}
+        addresses = store.friend_tox_ids(uid)
+        result = session(uid).friends()
+        # Only the original complete 76-hex Tox ID may be displayed as a
+        # Tox ID. Native toxcore can supply the 64-hex public key only.
+        for friend in result:
+            friend["tox_id"] = addresses.get(friend["public_key"])
+        return {"friends": result}
     except (ValueError, ToxActionError) as exc:
         raise HTTPException(409, str(exc)) from exc
 
@@ -68,6 +74,7 @@ def add_friend(body: FriendAdd, request: Request, uid: str = Depends(require_use
     check_origin(request)
     try:
         key = session(uid).add_friend(body.address, body.message)
+        store.remember_friend_tox_id(uid, key, body.address)
         return {"public_key": key, "ok": True}
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -79,6 +86,7 @@ def delete_friend(public_key: str, request: Request, uid: str = Depends(require_
     check_origin(request)
     try:
         session(uid).delete_friend(public_key)
+        store.forget_friend_tox_id(uid,public_key)
         return {"ok": True}
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
