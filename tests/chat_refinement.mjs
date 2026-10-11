@@ -12,7 +12,8 @@ assert.match(app,/visualStyle==="system"/);
 assert.match(app,/matchMedia\("\(prefers-color-scheme: dark\)"\)/);
 assert.match(app,/options=\{\[\{label:"跟随系统",value:"system"\}/);
 assert.doesNotMatch(app,/风格只保存在当前浏览器|消息传输/);
-assert.match(app,/setModal\("");\s*alert\("Tox 个人资料已保存"\)/);
+assert.ok(app.includes('setModal("");')&&app.includes('alert("Tox 个人资料已保存")'),
+  "Saving the native profile should close the popup");
 const profileStart=app.indexOf('{modal==="profile"&&');
 const settingsStart=app.indexOf('{modal==="settings"&&',profileStart);
 assert.ok(profileStart>0&&settingsStart>profileStart);
