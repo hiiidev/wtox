@@ -943,26 +943,14 @@ export default function App(){
             aria-current={section==="contacts"?"page":undefined}
             onClick={()=>setSection("contacts")}><ContactsOutlined/><span>通讯录</span></button>
           <button type="button" onClick={()=>{setSection("me");setMobileChat(false)}}>
-            <UserOutlined/><span>我</span>
+            <SettingOutlined/><span>设置</span>
           </button>
         </nav>
       </aside>
-      <section className="wt-mobile-me-page" aria-label="我的设置">
-        <header className="wt-mobile-me-header"><Typography.Title level={4}>我</Typography.Title></header>
-        <AntButton type="text" className="wt-mobile-profile-card"
-          onClick={()=>setModal("profile")} aria-label="查看并修改我的 Tox 资料">
-          <Badge dot color={ownBadgeColor} offset={[-2,44]}>
-            <Avatar size={56} shape="square" gap={4} style={{backgroundColor:avatarColor(user.public_key)}}
-              icon={!ownProfile.name?<UserOutlined/>:undefined}>
-              {ownProfile.name?avatarLabel(ownProfile.name):undefined}
-            </Avatar>
-          </Badge>
-          <span className="wt-mobile-profile-name">
-            <strong>{ownProfile.name||"Tox 用户"}</strong>
-            <Typography.Text type="secondary">{ownStatusLabel}</Typography.Text>
-          </span>
-          <span className="wt-mobile-profile-arrow">›</span>
-        </AntButton>
+      <section className="wt-mobile-me-page" aria-label="设置">
+        <header className="wt-mobile-me-header">
+          <Typography.Title level={4}>设置</Typography.Title>
+        </header>
         <div className="wt-mobile-settings-scroll">
           {settingsContent}
         </div>
@@ -974,7 +962,7 @@ export default function App(){
             <ContactsOutlined/><span>通讯录</span>
           </button>
           <button type="button" className="active" aria-current="page">
-            <UserOutlined/><span>我</span>
+            <SettingOutlined/><span>设置</span>
           </button>
         </nav>
       </section>
