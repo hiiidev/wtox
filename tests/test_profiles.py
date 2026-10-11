@@ -1,6 +1,8 @@
 """Tox-only authentication: no username/password login, preserve legacy identities."""
 import os
 import tempfile
+import hashlib
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -106,11 +108,20 @@ class ToxLoginTests(unittest.TestCase):
 
     def test_legacy_savedata_and_pending_survive_migration(self):
         # A formerly password-based account with an existing native Tox profile.
-        uid=store.add_account("olduser","a-long-legacy-password")
-        store.claim_profile(uid,self.alice.savedata,self.alice.address)
-        pending_id=store.append_pending(uid,{"type":"message","text":"stored-before-upgrade"})
+        uid="legacy-user-id"
+        old_cookie="existing-legacy-session-token"
         with store.db() as c:
-            c.execute("UPDATE accounts SET tox_secret_hash=NULL WHERE id=?",(uid,))
+            c.execute(
+                "INSERT INTO accounts(id,username,password_hash,profile,tox_address,tox_pubkey) "
+                "VALUES(?,?,?,?,?,?)",
+                (uid, "olduser", "legacy-argon2-hash", store.encrypt(self.alice.savedata),
+                 self.alice.address, self.alice.address[:64])
+            )
+            c.execute("INSERT INTO sessions(token_hash,account_id,expires) VALUES(?,?,?)",
+                      (hashlib.sha256(old_cookie.encode()).hexdigest(), uid, int(time.time())+86400))
+        pending_id=store.append_pending(uid,{"type":"message","text":"stored-before-upgrade"})
+        self.client.cookies.set("wtox_session",old_cookie)
+        self.assertEqual(self.client.get("/api/legacy/export").content,self.alice.savedata)
         self.assertTrue(store.needs_legacy_migration())
         native=self.native()
         store.migrate_legacy_identities(native)
