@@ -19,7 +19,7 @@ function stateText(record){
   if(record.delivery_status==="delivered"||record.delivery_status==="read")return "已送达";
   if(record.delivery_status==="failed")return "发送失败";
   if(record.delivery_status==="uncertain")return "发送结果待确认";
-  if(record.delivery_status==="queued"||record.delivery_status==="dispatching")return "正在发送";
+  if(["queued","dispatching","queued_local","dispatching_local"].includes(record.delivery_status))return "正在发送";
   if(record.message_id===undefined&&!record.outbox_id&&!record.delivery_status)return "历史消息";
   return "已发送";
 }
@@ -48,7 +48,7 @@ export default function App(){
   const [filter,setFilter]=useState(""),[draft,setDraft]=useState("");
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
-  const [offlineQueue,setOfflineQueue]=useState(true),[sending,setSending]=useState(false);
+  const [offlineQueue,setOfflineQueue]=useState(false),[sending,setSending]=useState(false);
   const [modal,setModal]=useState(""),[notice,setNotice]=useState("");
   const [loginFile,setLoginFile]=useState(null),[busy,setBusy]=useState(false);
   const [friendId,setFriendId]=useState(""),[requestKey,setRequestKey]=useState("");
@@ -80,6 +80,42 @@ export default function App(){
     const result=await getJson("/api/outbox");
     if(await h.applyOutboxStatuses(result.messages||[]))await refreshHistory(h);
   },[refreshHistory]);
+  const browserFlushBusy=useRef(false);
+  const flushBrowserQueue=useCallback(async(list=null,h=history.current)=>{
+    if(browserFlushBusy.current||!h?.ready())return;
+    browserFlushBusy.current=true;
+    try{
+      const peers=list||(await getJson("/api/friends")).friends||[];
+      const pending=(await h.read()).filter(m=>m.type==="message"&&
+        m.direction==="outgoing"&&m.delivery_status==="queued_local");
+      for(const item of pending.slice(0,30)){
+        if(!online(peers.find(f=>f.public_key===item.public_key)))continue;
+        // Claim locally before an HTTP request. After an uncertain network
+        // failure we must NOT resend silently (could duplicate a Tox message).
+        await h.patchEvent(item.id,{delivery_status:"dispatching_local"});
+        try{
+          const result=await postJson("/api/messages",{
+            public_key:item.public_key,text:item.text,client_id:item.id
+          });
+          await h.patchEvent(item.id,{
+            delivery_status:result.status==="queued"?"queued":"sent",
+            outbox_id:result.id||undefined,
+            session_id:result.session_id,
+            message_id:result.message_id
+          });
+        }catch(error){
+          // A definite server-side status code means no native send occurred.
+          // Network loss or 5xx can be ambiguous and require user action.
+          await h.patchEvent(item.id,{
+            delivery_status:(error.status>=400&&error.status<500)?"queued_local":"uncertain",
+            delivery_error:error.message
+          });
+        }
+      }
+      await refreshHistory(h);
+    }catch(error){alert("浏览器待发队列检查失败："+error.message)}
+    finally{browserFlushBusy.current=false}
+  },[alert,refreshHistory]);
   const recoverPending=useCallback(async(h=history.current)=>{
     if(!h?.ready())return;
     const data=await getJson("/api/pending");
@@ -151,7 +187,10 @@ export default function App(){
         if(dead){h.close();return}
         history.current=h;
         setHistoryReady(h.ready());setMigrateRequired(h.needsMigration());
-        if(h.ready())await recoverPending(h);
+        if(h.ready()){
+          await recoverPending(h);
+          await flushBrowserQueue(null,h);
+        }
       }catch(error){if(!dead)alert("无法打开本地加密历史："+error.message)}
     })();
     return()=>{dead=true;history.current?.close();history.current=null};
@@ -169,7 +208,7 @@ export default function App(){
       lastMessage.current=Date.now();
       ws.onopen=()=>{
         lastMessage.current=Date.now();
-        Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending()]);
+        Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),flushBrowserQueue()]);
       };
       ws.onmessage=msg=>{
         lastMessage.current=Date.now();
@@ -179,10 +218,10 @@ export default function App(){
     };
     connect();
     const friendTimer=setInterval(()=>{
-      if(!dead){refreshFriends().catch(()=>{});refreshNetwork().catch(()=>{})}
+      if(!dead){refreshFriends().catch(()=>{});refreshNetwork().catch(()=>{});flushBrowserQueue().catch(()=>{})}
     },12000);
     const pendingTimer=setInterval(()=>{
-      if(!dead)recoverPending().catch(()=>{});
+      if(!dead){recoverPending().catch(()=>{});flushBrowserQueue().catch(()=>{})}
     },8000);
     const pingTimer=setInterval(()=>{
       if(ws?.readyState===WebSocket.OPEN){
@@ -207,7 +246,7 @@ export default function App(){
       if(ws){ws.onclose=null;ws.close()}
       socket.current=null;
     };
-  },[user?.public_key,onRealtime,recoverPending,refreshFriends,refreshNetwork,alert]);
+  },[user?.public_key,onRealtime,recoverPending,flushBrowserQueue,refreshFriends,refreshNetwork,alert]);
 
   useEffect(()=>{
     if(!user?.public_key)return;
@@ -264,32 +303,37 @@ export default function App(){
     const peer=selectedRef.current;
     const text=String(innerText||textContent||innerHtml||"").replace(/<[^>]+>/g,"").trim();
     if(!text)return;
-    if(!history.current?.ready()){setModal("history");alert("请先完成本地加密历史迁移");return}
-    if(!offlineQueue&&!online(friends.find(f=>f.public_key===peer))){
-      alert("好友离线且已关闭离线排队，消息未发送");return;
-    }
-    sendBusy.current=true;setSending(true);
+    const h=history.current;
+    if(!h?.ready()){setModal("settings");alert("请先完成本地加密历史迁移");return}
     const client_id=crypto.randomUUID().replaceAll("-","");
+    const isPeerOnline=online(friends.find(f=>f.public_key===peer));
+    sendBusy.current=true;setSending(true);
     try{
-      const res=await postJson("/api/messages",{public_key:peer,text,client_id});
-      // Native send or durable encrypted VPS enqueue must succeed first.
-      drafts.current.set(peer,"");
-      if(selectedRef.current===peer)setDraft("");
-      try{
-        await history.current.persist({
-          id:client_id,type:"message",direction:"outgoing",
-          public_key:peer,text,at:Date.now(),
-          outbox_id:res.id||undefined,
-          session_id:res.session_id,message_id:res.message_id,
-          delivery_status:res.status==="queued"?"queued":"sent"
-        });
-        await recoverPending();
-      }catch(error){alert("消息已进入服务器，但本地历史保存失败："+error.message)}
+      if(!isPeerOnline&&!offlineQueue){
+        // No plaintext leaves the browser. Encrypted IndexedDB survives
+        // reloads, but sending only resumes while this browser is running.
+        await h.persist({id:client_id,type:"message",direction:"outgoing",
+          public_key:peer,text,at:Date.now(),delivery_status:"queued_local"});
+        drafts.current.set(peer,"");
+        if(selectedRef.current===peer)setDraft("");
+        await refreshHistory(h);
+        alert("已加入本浏览器加密队列；网页运行且好友上线后自动发送");
+      }else{
+        const result=await postJson("/api/messages",{public_key:peer,text,client_id});
+        drafts.current.set(peer,"");
+        if(selectedRef.current===peer)setDraft("");
+        try{
+          await h.persist({id:client_id,type:"message",direction:"outgoing",
+            public_key:peer,text,at:Date.now(),outbox_id:result.id||undefined,
+            session_id:result.session_id,message_id:result.message_id,
+            delivery_status:result.status==="queued"?"queued":"sent"});
+          await recoverPending(h);
+        }catch(error){alert("服务器已接受请求，但本地历史保存失败："+error.message)}
+      }
     }catch(error){
       drafts.current.set(peer,text);
       if(selectedRef.current===peer)setDraft(text);
       alert(error.message);
-      refreshFriends().catch(()=>{});
     }finally{sendBusy.current=false;setSending(false)}
   }
   async function addFriend(){
@@ -466,13 +510,12 @@ export default function App(){
           </MessageList>
           <MessageInput className="wtox-send-input" placeholder="输入消息…" attachButton={false}
             value={draft} onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
-            onSend={sendText} disabled={!selected||!historyReady||sending||
-              (!offlineQueue&&!online(selectedFriend))}/>
+            onSend={sendText} disabled={!selected||!historyReady||sending}/>
           <InputToolbox className="wtox-send-tip">
             {!selected?"先选择好友"
               :!historyReady?"请完成本地历史迁移"
-              :offlineQueue&&!online(selectedFriend)?"对方离线，点击发送会进入 VPS 队列（正在发送）"
-              :!online(selectedFriend)?"对方离线，已关闭离线排队"
+              :offlineQueue&&!online(selectedFriend)?"对方离线，将加密存入 VPS 队列，关闭网页后继续等待"
+              :!online(selectedFriend)?"对方离线，暂存本浏览器；需保持网页运行或再打开才能发送"
               :sending?"正在处理发送请求":"Enter 发送 · Shift + Enter 换行"}
           </InputToolbox>
         </ChatContainer>
