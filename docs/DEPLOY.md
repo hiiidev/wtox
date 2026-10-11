@@ -1,5 +1,7 @@
 # VPS 部署和互通验收（wtox）
 
+**如果 VPS 已经有原生 Caddy，请优先看 [原生 Caddy 专用部署方案](HOST_CADDY.md)，不要执行本页默认带 Docker Caddy 的 `docker compose up`。**
+
 > **状态提示：** 代码已包含原生 Toxcore 会话与 WebSocket/聊天接口，但尚未在干净 VPS 上验证 Docker 构建及 qTox/aTox 双向聊天。请先当作测试实例，**不要直接开放给不受信任的用户**。
 
 ## 1. VPS
