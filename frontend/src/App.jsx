@@ -1,8 +1,8 @@
 import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
   Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal,
-  Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid } from "antd";
-import { Bubble, Conversations, Sender } from "@ant-design/x";
+  Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid, Card, Image, Upload } from "antd";
+import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, MoreOutlined, SmileOutlined, FolderOutlined, ArrowDownOutlined } from "@ant-design/icons";
@@ -118,18 +118,28 @@ export default function App(){
   const ownBadgeColor=network>0?["#52c41a","#faad14","#ff4d4f"][ownStatus]||"#52c41a":"#8c8c8c";
 
   const [visualStyle,setVisualStyle]=useState(()=>{
-    try {
-      const stored=localStorage.getItem("wtox-visual-style");
-      return stored==="dark"||["wechat","midnight","ocean"].includes(stored)?"dark":"light";
-    } catch {return "light"}
+    try{
+      const saved=localStorage.getItem("wtox-visual-style");
+      return ["system","light","dark"].includes(saved)?saved:"system";
+    }catch{return "system"}
   });
+  const [systemDark,setSystemDark]=useState(()=>
+    typeof window!=="undefined"&&window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+  const effectiveTheme=visualStyle==="system"?(systemDark?"dark":"light"):visualStyle;
   const designTokens=useMemo(()=>antdTheme.getDesignToken({
-    algorithm:visualStyle==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
-  }),[visualStyle]);
+    algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
+  }),[effectiveTheme]);
   useEffect(()=>{
-    document.documentElement.setAttribute("data-wtox-theme",visualStyle);
+    const mq=window.matchMedia("(prefers-color-scheme: dark)");
+    const listener=event=>setSystemDark(event.matches);
+    setSystemDark(mq.matches);
+    mq.addEventListener?.("change",listener);
+    return()=>mq.removeEventListener?.("change",listener);
+  },[]);
+  useEffect(()=>{
+    document.documentElement.setAttribute("data-wtox-theme",effectiveTheme);
     try{localStorage.setItem("wtox-visual-style",visualStyle)}catch{}
-  },[visualStyle]);
+  },[visualStyle,effectiveTheme]);
   const [modal,setModal]=useState(""),[notice,setNotice]=useState("");
   const [loginFile,setLoginFile]=useState(null),[busy,setBusy]=useState(false);
   const [friendId,setFriendId]=useState("");
@@ -650,7 +660,8 @@ export default function App(){
       });
       const updated=await response.json();
       setOwnProfile(updated);
-      alert("Tox 昵称、状态消息和状态已保存，并同步到身份配置");
+      setModal("");
+      alert("Tox 个人资料已保存");
     }catch(error){alert(error.message)}
     finally{setProfileSaving(false)}
   }
@@ -774,10 +785,10 @@ export default function App(){
   </div>;
 
   return <ConfigProvider theme={{
-    algorithm:visualStyle==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
+    algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
   }}>
   <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat ":"")+(section==="me"?"show-me":"")}
-    data-theme={visualStyle}
+    data-theme={effectiveTheme}
     style={{
       "--wt-bg":designTokens.colorBgLayout,
       "--wt-panel":designTokens.colorBgContainer,
