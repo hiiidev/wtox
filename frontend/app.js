@@ -94,6 +94,8 @@ async function beginHistoryForIdentity(){
   if(!check && count>0){
     throw new Error("本地历史验证信息丢失，已保留现有记录，请先备份浏览器数据");
   }
+  // If a previous password-based database exists, generate the new key
+  // without replacing any old events or their validation record.
   let keyRecord = await getMeta(AUTO_KEY_ID);
   if(!keyRecord){
     const key = await crypto.subtle.generateKey(
@@ -179,7 +181,7 @@ async function migrateLegacyHistory(){
   updateComposer();
 }
 async function persistEvent(event) {
-  if (!historyDb || !historyKey) return false;
+  if (!historyDb || !historyKey) throw new Error("本地历史密钥不可用，消息未保存");
   if (!["message","friend_request"].includes(event.type)) return false;
   const id=event.id || crypto.randomUUID().replaceAll("-","");
   const record={
@@ -375,7 +377,11 @@ async function updateState(){
   $("#welcome").textContent="当前身份："+profileKey.slice(0,18)+"…";
   if(historyDb && !historyKey){
     try{await beginHistoryForIdentity()}
-    catch(e){error("本地历史无法自动解锁："+e.message)}
+    catch(e){
+      $("#historyLock").hidden = true;
+      $("#historyActive").hidden = true;
+      error("本地历史无法自动解锁："+e.message);
+    }
   }
   await refreshIdentity();
 }
