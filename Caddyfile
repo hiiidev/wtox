@@ -1,6 +1,6 @@
 {$SITE_DOMAIN} {
     encode zstd gzip
-    reverse_proxy web:8000
+    reverse_proxy web:6066
 
     header {
         X-Content-Type-Options "nosniff"
