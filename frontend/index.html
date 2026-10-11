@@ -28,6 +28,10 @@ small,.muted{color:#afbdd1}#error{color:#ff9e9e;min-height:1.4em}
 <input type="file" id="profileFile" accept=".tox,application/octet-stream">
 <button id="import" class="secondary">使用 .tox 登录 / 首次导入</button>
 <p class="hint">仅支持原始 Tox Savedata。配置文件包含私钥，只能在可信 HTTPS 页面上传；Tox ID（76 位）本身不能作为登录凭证。</p>
+<details><summary>以前用网站账号登录过？</summary>
+<p class="hint">如果旧浏览器的账号登录会话尚未过期，可先导出旧身份的 .tox 备份，再用上方文件登录。旧用户名/密码不再提供登录入口。</p>
+<button id="legacyExport" class="secondary">下载旧登录会话中的 .tox 备份</button>
+</details>
 </section>
 <section id="account" hidden><div class="card"><span id="welcome"></span>
 <button id="logout" class="secondary" style="float:right">退出账号</button><div style="clear:both"></div></div>
