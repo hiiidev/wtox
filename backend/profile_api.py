@@ -8,7 +8,7 @@ from threading import Lock
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from . import access, store
-from .tox_backup import encrypt_savedata, decrypt_savedata
+from .tox_backup import encrypt_savedata, decrypt_savedata, is_encrypted
 from .tox_identity import MAX_SAVEDATA, ToxCore, ToxIdentityError
 from .session_manager import manager
 
@@ -129,13 +129,16 @@ async def login_with_savedata(request: Request, response: Response):
     data = b"".join(parts)
     if len(data) < password_size:
         raise HTTPException(400, "密码数据不完整")
+    backup = data[password_size:]
+    if len(backup) > MAX_SAVEDATA + (80 if is_encrypted(backup) else 0):
+        raise HTTPException(413, "配置文件超过 8 MiB")
     try:
         password = data[:password_size].decode("utf-8") if password_size else None
     except UnicodeDecodeError as exc:
         raise HTTPException(400, "备份密码编码无效") from exc
     try:
         native = core()
-        plaintext = decrypt_savedata(data[password_size:], password)
+        plaintext = decrypt_savedata(backup, password)
         identity = native.identity(plaintext)
         uid, is_new = store.login_or_import_tox(identity, native)
     except ToxIdentityError as exc:
@@ -155,6 +158,8 @@ def export_encrypted_profile(body: BackupPassword, request: Request,
     """Export a standard ToxEncryptSave backup; do not store its password."""
     require_same_origin(request)
     rate_check(request)
+    if not body.password:
+        raise HTTPException(400, "请设置备份密码")
     savedata = store.read_profile(uid)
     if savedata is None:
         raise HTTPException(404, "没有此 Tox 身份")
