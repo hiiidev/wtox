@@ -125,3 +125,29 @@ sudo journalctl -u caddy -n 100 --no-pager
 wtox 的 `/health` 不需要网站密码，所以只暴露没有凭据的健康状态；登录入口以及业务 API 由后端验证统一访问密码和个人登录态。不要通过公网 `http://VPS-IP:6066` 暴露应用。VPS 中的 Toxcore 仍能访问身份私钥和收发明文，不是零知识服务器。
 
 用户 2–3 人时只需这一个 VPS。纯浏览器 WASM 暂不开展。
+
+## React 页面空白 / CSS 404 排查（2026-10 修复）
+
+如果 `docker compose ... ps` 显示 **healthy** 且 `/health` 返回 `{"ok":true}`，但浏览器下载 `/assets/index-*.js` 得到 `{"detail":"Not Found"}`，不是 Caddy 的 6066 端口问题。此前后端误把 `/assets` 映射到 `/app/frontend`，正确目录应是 **`/app/frontend/assets`**，已修复。
+
+```bash
+cd /opt/wtox
+git pull
+docker compose -f compose.host-caddy.yml build web
+docker compose -f compose.host-caddy.yml up -d --no-build
+curl -fsS http://127.0.0.1:6066/health
+curl -fsS http://127.0.0.1:6066/health/ui
+docker compose -f compose.host-caddy.yml exec -T web sh -c 'ls -l /app/frontend/assets'
+```
+
+确认实际打包出来的哈希文件 URL 返回 200：
+
+```bash
+JS=$(docker compose -f compose.host-caddy.yml exec -T web sh -c \
+  "find /app/frontend/assets -maxdepth 1 -name '*.js' -print -quit" | tr -d '\r')
+curl -I "http://127.0.0.1:6066/assets/$(basename "$JS")"
+```
+
+正常应返回 HTTP 200，`content-type` 为 JavaScript；`/health/ui` 也应显示 `"ok":true`。注意 Vite 每次构建的文件名可能不同，**不要写死旧的哈希文件名**。若成功后浏览器仍加载旧内容，使用强制刷新或清除当前网站的 HTTP 缓存（不要清除站点数据/IndexedDB，以免丢失加密聊天历史）。
+
+GitHub Actions 的 Python API 单元测试不再开启生产 FastAPI 生命周期，避免启动无限运行的 Tox 离线队列。CI 按测试模块分开运行，单模块 90 秒后会打印卡住时的线程栈，而不是一直挂着。
