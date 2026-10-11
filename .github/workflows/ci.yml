@@ -30,6 +30,7 @@ jobs:
         working-directory: frontend
       - run: node tests/check_static_assets.mjs
       - run: node tests/react_structure.mjs
+      - run: node tests/chat_ui.mjs
       - run: node tests/history_io.mjs
       - name: Check default queue and profile API invariants
         run: |
