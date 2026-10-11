@@ -156,6 +156,22 @@ export async function openIdentityHistory(owner){
       }
       return false;
     }
+    async function patchEvent(id,changes){
+      requireKey();
+      const row=await request(db.transaction("events").objectStore("events").get(id));
+      if(!row)throw new Error("本地消息不存在");
+      const original=await cryptoOpen(row,key);
+      if(original.type!=="message"||original.direction!=="outgoing")
+        throw new Error("只能更新自己发送的消息");
+      const modified={...original,...changes,id,at:original.at,
+                      text:original.text,public_key:original.public_key};
+      const ciphertext=await cryptoSeal(modified,key);
+      const tx=db.transaction("events","readwrite");
+      tx.objectStore("events").put({id,...ciphertext});
+      await completed(tx);
+      return modified;
+    }
+
     async function applyOutboxStatuses(statuses){
       requireKey();
       if(!Array.isArray(statuses)||!statuses.length)return 0;
@@ -204,6 +220,6 @@ export async function openIdentityHistory(owner){
       return encrypted.length;
     }
     return {owner,ready:()=>!!key,needsMigration:()=>needsMigration,
-      migrate,read,persist,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
+      migrate,read,persist,patchEvent,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
   }catch(error){db.close();throw error}
 }
