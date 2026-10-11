@@ -17,14 +17,16 @@ Browser --HTTPS/WSS--> Host Caddy (:80/:443)
 ```bash
 gh repo clone hiiidev/wtox    # 如果已经克隆，改为进入仓库后 git pull
 cd wtox
-cp .env.example .env
+test -f .env || cp .env.example .env
 chmod 600 .env
 nano .env
 ```
 
-设置强随机网站入口密码 `WTOX_ACCESS_PASSWORD`（最少 6 个字符，但建议使用更长的随机密码）和独立随机的 `WTOX_MASTER_KEY`（32 字节，64 位 hex）。可用 `python3 -c 'import secrets; print(secrets.token_hex(32))'` 生成 master key。不要提交或泄露 `.env`。主密钥务必离线备份。
+首次部署时设置强随机网站入口密码 `WTOX_ACCESS_PASSWORD`（最少 6 个字符，但建议使用更长的随机密码）和独立随机的 `WTOX_MASTER_KEY`（32 字节，64 位 hex）。可用 `python3 -c 'import secrets; print(secrets.token_hex(32))'` 生成 master key。不要提交或泄露 `.env`。主密钥务必离线备份。
 
 `SITE_DOMAIN` 对宿主机 Caddy 模式不是必需字段，但填入实际域名便于切换部署方案。
+
+**升级旧版本时不要覆盖已存在的 `.env`，尤其不能更换 `WTOX_MASTER_KEY`。在重建容器前备份 `wtox_data` 数据卷。新版不再使用网站用户名和个人账号密码，改为下载/上传 `.tox` 配置创建或登录身份；旧登录 Cookie 尚有效时可在新页面导出原身份备份。**
 
 ## 2. **只运行 wtox Web 容器**
 
