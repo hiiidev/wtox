@@ -217,7 +217,7 @@ function blankChat(title, subtitle, icon="✦"){
 }
 async function renderHistory(){
   if(!selectedPeer){blankChat("你的私人通讯空间","从左侧选择好友，开始一段对话");return}
-  if(!historyDb||!historyKey){blankChat("聊天记录已加密","请先解锁本地历史以查看及发送消息","▣");return}
+  if(!historyDb||!historyKey){blankChat("本地历史暂未就绪","如需迁移旧数据，请打开「本地加密聊天记录」","▣");return}
   const rows=await reqResult(historyDb.transaction("events").objectStore("events").getAll());
   const entries=[];
   for(const row of rows){
@@ -353,7 +353,7 @@ async function updateState(){
   try{info=await json("/api/me")}
   catch{
     if(socket){socket.onclose=null;socket.close();socket=null}
-    profileKey=null;historyKey=null;selectedPeer=null;contacts=[];
+    profileKey=null;historyKey=null;deviceHistoryKey=null;selectedPeer=null;contacts=[];
     $("#account").classList.remove("chat-open");
     if(historyDb)historyDb.close();historyDb=null;
     $("#login").hidden=false;$("#account").hidden=true;
@@ -361,19 +361,22 @@ async function updateState(){
   }
   if(!info.public_key){error("没有有效的 Tox 身份信息");return}
   if(profileKey!==info.public_key){
-    historyKey=null;selectedPeer=null;contacts=[];drafts=new Map();
+    historyKey=null;deviceHistoryKey=null;selectedPeer=null;contacts=[];drafts=new Map();
     $("#peer").value="";
     $("#account").classList.remove("chat-open");
     $("#selected").textContent="选择一个好友开始聊天";
     if(historyDb)historyDb.close();
     try{historyDb=await openHistory(info.public_key)}
     catch(e){historyDb=null;error("无法打开浏览器本地历史："+e.message)}
-    $("#historyLock").hidden=false;$("#historyActive").hidden=true;
     $("#messages").replaceChildren();
   }
   profileKey=info.public_key;
   $("#login").hidden=true;$("#account").hidden=false;
   $("#welcome").textContent="当前身份："+profileKey.slice(0,18)+"…";
+  if(historyDb && !historyKey){
+    try{await beginHistoryForIdentity()}
+    catch(e){error("本地历史无法自动解锁："+e.message)}
+  }
   await refreshIdentity();
 }
 function downloadBlob(blob,name){
@@ -444,8 +447,9 @@ $("#export").onclick=async()=>{
 };
 $("#unlock").onclick=async()=>{
   try{
-    await unlockLocal();updateComposer();closeDialog("#historyDialog");
-    error("本地历史已解锁",false);
+    await migrateLegacyHistory();
+    closeDialog("#historyDialog");
+    error("旧聊天历史已加密迁移，以后无需再输入本地口令",false);
   }catch(e){error(e.message)}
 };
 $("#refresh").onclick=async()=>{
@@ -488,7 +492,7 @@ async function sendNow(){
   if(sending)return;
   const peer=selectedPeer,text=$("#message").value;
   if(!peer){error("请先选择一个好友");return}
-  if(!historyKey){showDialog("#historyDialog");error("请先解锁本地加密历史");return}
+  if(!historyKey){showDialog("#historyDialog");error("本地历史尚未就绪，如有旧历史请迁移");return}
   if(!online(selectedFriend())){
     error("好友离线或尚未接受请求。Tox 无法发送，草稿会保留在当前页面。");return
   }
