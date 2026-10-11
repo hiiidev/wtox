@@ -15,6 +15,7 @@ from typing import Callable
 
 from .tox_identity import ToxCore, ToxIdentityError
 from .file_transfer import FileTransfers
+from .tox_message import decode_tox_message
 
 U8 = C.c_uint8
 U32 = C.c_uint32
@@ -168,9 +169,10 @@ class ToxSession:
     def _on_message(self, _tox, friend, kind, data, length, _user):
         try:
             public_key = self._friend_key(friend)
-            self._emit({"type": "message", "public_key": public_key,
-                        "text": C.string_at(data, length).decode("utf-8", "replace"),
-                        "kind": int(kind)})
+            text = decode_tox_message(C.string_at(data, length), int(kind))
+            if text is not None:
+                self._emit({"type": "message", "public_key": public_key,
+                            "text": text, "kind": int(kind)})
         except Exception as exc:
             print("Tox message callback failed:", type(exc).__name__, flush=True)
 
