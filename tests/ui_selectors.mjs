@@ -31,8 +31,8 @@ assert.ok(js.includes('record.session_id===event.session_id'),
   "Must match receipts by Tox session, not only message number");
 assert.ok(js.includes('record.message_id===event.message_id'),
   "Must match receipt message ID");
-assert.ok(js.includes('e.delivery_status==="sent"?" · 已发送":" · 已提交"'),
-  "Missing submitted-to-sent UI labels");
+assert.ok(js.includes('e.delivery_status==="read"?" · 已读取":" · 已发送"'),
+  "Missing sent-to-read UI labels");
 assert.ok(js.includes('await recoverPending();'),
   "Out-of-order receipts must be retried");
 console.log("wtox receipt status UI checks OK");
