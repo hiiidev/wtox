@@ -32,7 +32,8 @@ class FakeSession:
         return dict(self.profile)
 
     def friends(self):
-        return [{"public_key": PEER, "name": "Friend", "status": 1}]
+        return [{"public_key": PEER, "name": "Friend", "status": 1,
+                 "status_message": "Testing with aTox", "user_status": 1}]
 
     def add_friend(self, address, text):
         assert len(address) == 76 and text
@@ -81,11 +82,19 @@ class ChatApiTests(unittest.TestCase):
         network = self.client.get("/api/network")
         self.assertEqual(network.status_code, 200, network.text)
         self.assertEqual(network.json()["status"], 1)
-        self.assertEqual(len(self.client.get("/api/friends").json()["friends"]), 1)
+        original=self.client.get("/api/friends").json()["friends"]
+        self.assertEqual(len(original),1)
+        self.assertIsNone(original[0]["tox_id"])
+        self.assertEqual(original[0]["status_message"],"Testing with aTox")
+        self.assertEqual(original[0]["user_status"],1)
+        full_tox_id=PEER+"000000000000"
         add = self.client.post("/api/friends", json={
-            "address": "AA" * 38, "message": "Hello"
+            "address": full_tox_id, "message": "Hello"
         })
         self.assertEqual(add.status_code, 200, add.text)
+        updated=self.client.get("/api/friends").json()["friends"][0]
+        self.assertEqual(updated["tox_id"],full_tox_id)
+        self.assertEqual(updated["public_key"],PEER)
         accept = self.client.post("/api/friends/accept", json={"public_key": PEER})
         self.assertEqual(accept.status_code, 200, accept.text)
         msg = self.client.post("/api/messages", json={
@@ -95,6 +104,19 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(msg.json()["status"], "queued")
         self.assertEqual(msg.json()["public_key"], PEER)
         self.assertEqual(self.client.get("/api/outbox").json()["messages"][0]["status"],"queued")
+
+    def test_complete_friend_address_is_private_to_owner(self):
+        tox_id=PEER+"000000000000"
+        self.assertEqual(self.client.post("/api/friends",json={
+            "address":tox_id,"message":"test"}).status_code,200)
+        self.assertEqual(store.friend_tox_ids(self.uid)[PEER],tox_id)
+        with store.db() as con:
+            encrypted=con.execute(
+                "SELECT tox_address FROM friend_addresses WHERE account_id=?",
+                (self.uid,)).fetchone()[0]
+        self.assertNotIn(tox_id.encode(),encrypted)
+        with self.assertRaises(ValueError):
+            store.remember_friend_tox_id(self.uid,PEER,"DD"*38)
 
     def test_edit_native_profile_and_validate_origin(self):
         current=self.client.get("/api/profile/self")
