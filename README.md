@@ -13,14 +13,14 @@
 
 通过网站密码后：
 
-- **创建新 Tox 身份**：服务器创建独立 Tox ID，浏览器立即下载含私钥的原始 `.tox` 备份，并建立登录会话。
-- **使用 `.tox` 登录**：上传自己的原始 Tox Savedata。如果该私钥以前已登记，则进入原身份；否则首次导入并建立新身份。
+- **创建新 Tox 身份**：输入非空备份密码（不设固定最少位数）后，服务器生成独立 Tox ID；浏览器立即下载采用标准 ToxEncryptSave 加密的 `.tox` 文件，并建立登录会话。备份密码不会保存在服务器，丢失密码将无法解密该份备份。
+- **使用 `.tox` 登录**：可上传原始 Tox Savedata，也可上传兼容 ToxEncryptSave 的加密 `.tox`，后者需提供对应的备份密码。密码仅用于这次导入的文件解密，不成为网站登录密码；历史未加密备份仍可导入。如果该私钥已登记则进入原身份，否则首次导入。
 - **公开 Tox ID 不能登录**：后端利用原生 Toxcore 恢复上传文件，取出私钥的哈希凭证，与服务器原存身份核对；仅比较 Tox ID 是不够的。
 - **登录不会覆盖服务器上较新的 Savedata**，以免从旧备份登录时丢失已经更新的好友信息。
 - 登录后使用 HttpOnly 的 `wtox_tox_session` 会话 Cookie；注销后需要重新上传 `.tox` 文件。
 - 每个 Tox 公钥只属于一个服务器身份，不设固定账号数量（VPS 资源仍有限）。
 
-**重要：`.tox` 文件就是身份私钥。谁拿到这个文件就可能登录为你。** 请单独加密备份，不要在聊天、截图、GitHub 或不受信任网页中传输。只支持原始 Savedata，不能直接使用 qTox/aTox 的其他加密或私有数据库格式。不要在两个 Toxcore 客户端同时运行同一个身份。
+**重要：`.tox` 文件含身份私钥。** 新创建及通过设置导出的备份使用标准 ToxEncryptSave 加密，请同时保管好加密备份和密码，切勿向他人分享。加密的 `.tox` 可与支持该标准的 Tox 客户端互通，但 **aTox/qTox 的应用专有数据库及聊天历史格式不等于 `.tox`**。不要同时在两个 Toxcore 客户端运行同一个身份。
 
 浏览器的聊天历史按 **Tox 公钥隔离**，使用**本浏览器自动生成、不可导出的 AES-256-GCM 设备密钥**加密保存至 IndexedDB。同一浏览器登录对应 Tox 身份后自动解锁，**不再单独设置历史口令**。旧版已经按口令加密的历史会保留，第一次升级时需输入旧口令完成一次性本地迁移。设备密钥不会上传 VPS，也不会把公开 Tox ID 直接当成密钥。**同一浏览器配置文件不提供不同 Tox 用户之间的强隔离**；共用设备建议使用不同浏览器用户配置文件。仅有 `.tox` 文件无法把另一台设备的本地历史自动带过来。VPS 使用 AES-256-GCM 加密保存原生 Tox Savedata 和短期消息队列（最长 7 天）；但 VPS 上运行的 Toxcore 能访问密钥及消息明文，此方案并非零知识。
 
@@ -127,10 +127,11 @@ chat.example.com {
 ### API 概览
 
 - `POST /api/gate/login` — 网站统一访问密码
-- `POST /api/tox/create` — 新建原生 Tox 身份，响应下载 `.tox`，写入安全登录 Cookie
-- `POST /api/tox/login` — 上传原始 `.tox` 登录或首次导入
+- `POST /api/tox/create` — JSON 包含 `password`，下载原生 ToxEncryptSave 加密的 `.tox`，写入安全登录 Cookie
+- `POST /api/tox/login` — 上传原始 `.tox` 登录或首次导入；加密备份采用前置 UTF-8 密码字节、以 `X-Tox-Password-Bytes` 标注字节数的二进制请求体
 - `GET /api/me`、`GET /api/profile/status` — 当前 Tox 身份
-- `GET /api/profile/export` — 下载此身份最新备份
+- `POST /api/profile/export/encrypted` — JSON 包含 `password`，下载最新身份的标准加密 `.tox` 备份（推荐）。
+- `GET /api/profile/export` — 旧版兼容的原始未加密备份 API，仅限已登录身份；前端不再使用
 - `GET /api/legacy/export` — **仅旧 Cookie 尚未过期时**的一次性迁移辅助导出
 - `POST /api/logout` — 退出 Tox 身份
 - `GET/POST/DELETE /api/friends`、`POST /api/messages` — 好友及文字消息
