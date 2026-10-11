@@ -108,6 +108,7 @@ function RailIcon({kind}){
 export default function App(){
   const [user,setUser]=useState(null),[loading,setLoading]=useState(true);
   const [friends,setFriends]=useState([]),[network,setNetwork]=useState(-1);
+  const [networkDiagnostics,setNetworkDiagnostics]=useState(null);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
   const [section,setSection]=useState("chats");
   const [friendRequests,setFriendRequests]=useState([]);
@@ -406,7 +407,9 @@ export default function App(){
     });
   },[user?.public_key,friendRequests,friendMessageApi]);
   const refreshNetwork=useCallback(async()=>{
-    setNetwork((await getJson("/api/network")).status??-1);
+    const data=await getJson("/api/network");
+    setNetwork(data.status??-1);
+    setNetworkDiagnostics(data);
   },[]);
   const refreshTransfers=useCallback(async()=>{
     const files=(await getJson("/api/files")).files||[];
@@ -1025,6 +1028,31 @@ export default function App(){
   // Shared Ant Design settings, rendered as a full mobile "Me" page or
   // a desktop modal; do not duplicate form state or export controls.
   const settingsContent=<div className="wt-settings-content">
+    <Card size="small" title="VPS Tox 网络与消息队列" className="wt-settings-card">
+      <Space orientation="vertical" size="small" style={{width:"100%"}}>
+        <Typography.Text>
+          VPS Tox 网络：{network===2?"UDP 已连接":network===1?"TCP 已连接":
+            network===0?"未连接（好友无法向 VPS 发送消息）":"正在启动或检查"}
+        </Typography.Text>
+        <Typography.Text type="secondary">
+          在线好友：{networkDiagnostics?.online_friends??"-"}/
+          {networkDiagnostics?.total_friends??"-"} · 
+          待发送：{networkDiagnostics?.queued??"-"} ·
+          正在发送：{networkDiagnostics?.dispatching??"-"}
+        </Typography.Text>
+        {!!networkDiagnostics?.uncertain&&
+          <Typography.Text type="warning">
+            有 {networkDiagnostics.uncertain} 条消息发送结果待确认，请避免重复发送
+          </Typography.Text>}
+        <Typography.Paragraph type="secondary" style={{marginBottom:0}}>
+          浏览器关闭不应影响 VPS 上的 Tox 身份。对方离线时，文字消息先进入 VPS 待发队列；
+          网络连接恢复且好友在线后才尝试发送。
+        </Typography.Paragraph>
+        <AntButton onClick={()=>refreshNetwork().catch(error=>alert(error.message))}>
+          刷新网络状态
+        </AntButton>
+      </Space>
+    </Card>
     <Card size="small" title="外观" className="wt-settings-card">
       <Segmented block value={visualStyle} onChange={setVisualStyle}
         options={[{label:"跟随系统",value:"system"},{label:"浅色",value:"light"},
