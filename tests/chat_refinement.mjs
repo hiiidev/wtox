@@ -137,3 +137,14 @@ assert.match(refined,/\.wechat-conversation \.wechat-presence\.online\{[\s\S]*?o
 assert.equal((app.match(/<RailIcon kind="chats"\/>/g)||[]).length,2);
 assert.equal((app.match(/<RailIcon kind="contacts"\/>/g)||[]).length,2);
 assert.equal((app.match(/<RailIcon kind="settings"\/>/g)||[]).length,2);
+
+assert.equal((app.match(/trigger=\{\["contextMenu"\]\}/g)||[]).length,2);
+assert.match(app,/const messageMenu=item=>\(\{/);
+assert.match(app,/key:"copy",label:item\.type==="file"\?"复制文件名":"复制"/);
+assert.match(app,/key:"delete",label:"删除",icon:<DeleteOutlined\/>/);
+assert.match(app,/key:"multi",label:"多选",icon:<CheckSquareOutlined\/>/);
+assert.match(app,/open=\{!!singleDeleteId\} title="删除聊天记录"/);
+assert.match(app,/onOk=\{deleteSingleMessage\}/);
+assert.match(app,/await h\.deleteEvent\(item\.id\)/);
+assert.match(app,/await h\.deleteCachedImage\(item\.file_id\)/);
+assert.doesNotMatch(app,/onContextMenu=\{event=>\{event\.preventDefault\(\);setSelectedMessageIds/);
