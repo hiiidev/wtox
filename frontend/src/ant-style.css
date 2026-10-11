@@ -196,3 +196,25 @@ html:has(.ant-messenger),body:has(.ant-messenger){
 .ant-messenger .wtox-profile-status:focus-visible{
   outline:2px solid var(--w-accent);
 }
+
+/* Peer details use Ant Design Modal on desktop, Drawer on touch phones.
+   Leave colors to ConfigProvider's light/dark design tokens. */
+.wt-peer-profile{display:flex;flex-direction:column;gap:8px;min-width:0}
+.wt-peer-status-message{white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:12px!important}
+.wt-peer-id{overflow-wrap:anywhere;word-break:break-all;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.wt-peer-avatar-button.ant-btn{border:0;padding:3px;width:46px;height:46px;
+  display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.wt-message-incoming{display:flex;gap:8px;align-items:flex-start}
+.wt-message-incoming .ant-bubble{min-width:0;flex:1}
+.wt-message-peer-avatar.ant-btn{width:44px;height:44px;min-width:44px;padding:3px;
+  flex:0 0 44px;display:inline-flex;align-items:center;justify-content:center}
+.ant-drawer-bottom .ant-drawer-body:has(.wt-peer-profile){
+  padding-bottom:calc(22px + env(safe-area-inset-bottom))!important;
+  -webkit-overflow-scrolling:touch;
+}
+@media(max-width:767px){
+  .wt-message-incoming{gap:5px}
+  .wt-message-peer-avatar.ant-btn{width:40px;min-width:40px;flex-basis:40px}
+  .wt-peer-id{font-size:12px}
+}
