@@ -1,8 +1,9 @@
-"""Website gate, accounts and native Tox identity HTTP API (chat not yet implemented)."""
+"""Website gate, accounts, Tox identity and live messaging API."""
 import asyncio
 import html
 import os
 import time
+from pathlib import Path
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from threading import Lock
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
         await manager.shutdown()
 
 app = FastAPI(title="wtox",docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 class GateMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -55,7 +57,7 @@ class GateMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(GateMiddleware)
-app.mount("/assets", StaticFiles(directory="/app/frontend"), name="assets")
+app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR)), name="assets")
 
 class PasswordRequest(BaseModel):
     password: str = Field(min_length=1,max_length=512)
@@ -133,7 +135,7 @@ def me(uid=Depends(require_user)):
 
 @app.get("/")
 def index():
-    return FileResponse("/app/frontend/index.html",headers={"Cache-Control":"no-store"})
+    return FileResponse(str(FRONTEND_DIR / "index.html"),headers={"Cache-Control":"no-store"})
 
 app.include_router(profile_router)
 app.include_router(tox_router)
