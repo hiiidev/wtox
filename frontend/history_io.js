@@ -1,6 +1,6 @@
-// Browser-only interoperable text-history import/export.
-// qTox real "Export to file" layout: YYYY-MM-DD<TAB>hh:mm:ss<TAB>sender<TAB>text.
-// aTox exports are NOT assumed identical; unsupported layouts are rejected.
+// Browser-only wTox JSON history backup. aTox has an export feature,
+// but its proprietary file schema has not been validated; never mislabel
+// these JSON backups as directly importable by aTox.
 export const MAX_HISTORY_IMPORT = 8 * 1024 * 1024;
 const MAX_RECORDS = 20000;
 const KEY_RE = /^[0-9A-F]{64}$/;
@@ -35,45 +35,4 @@ export function fromWtoxJson(text, owner) {
     throw new Error("这不是当前 Tox 身份的 wtox 聊天历史备份");
   if (obj.messages.length>MAX_RECORDS)throw new Error("记录数量过多");
   return obj.messages.map(r=>validateRecord(r,owner));
-}
-export function toQtoxTsv(records, friendKey, friendName) {
-  if (!KEY_RE.test(friendKey)) throw new Error("请选择一个有效好友");
-  const name=(friendName||"Friend").replace(/[\t\r\n]/g," ");
-  const lines=[];
-  for(const r of records) {
-    if (r.type!=="message"||r.public_key!==friendKey)continue;
-    const date=new Date(r.at);
-    const localDate=[date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");
-    const clock=[date.getHours(),date.getMinutes(),date.getSeconds()].map(n=>String(n).padStart(2,"0")).join(":");
-    const sender=r.direction==="outgoing"?"wtox-me":name;
-    lines.push([localDate,clock,sender,r.text.replace(/\r?\n/g,"\n")].join("\t"));
-  }
-  return lines.join("\n")+(lines.length?"\n":"");
-}
-export function fromQtoxTsv(text, peer, ownName) {
-  if (!KEY_RE.test(peer)) throw new Error("请先选择目标好友");
-  if (!ownName || !ownName.trim()) throw new Error("导入 qTox 历史需要填写导出文件中自己的昵称，才能正确区分收发方向");
-  const lines=text.replace(/\r\n?/g,"\n").replace(/\n$/, "").split("\n");
-  if(lines.length>MAX_RECORDS*6)throw new Error("历史文本行数过多");
-  const records=[];
-  const prefix=/^(\d{4}-\d{2}-\d{2})\t(\d{2}:\d{2}:\d{2})\t([^\t]*)\t(.*)$/;
-  for(const line of lines){
-    if(!line && !records.length)continue;
-    const match=line.match(prefix);
-    if(match){
-      if(records.length>=MAX_RECORDS)throw new Error("记录数量过多");
-      const [,date,clock,sender,body]=match;
-      const at=validTime(date+"T"+clock);
-      records.push({type:"message",direction:sender===ownName?"outgoing":"incoming",
-                    public_key:peer,text:body,at});
-    }else if(records.length){
-      // qTox writes embedded line breaks as-is. Continuation lines belong
-      // to the previous message, not to a new message.
-      records[records.length-1].text+="\n"+line;
-      if(records[records.length-1].text.length>65536)throw new Error("单条历史消息过长");
-    }else if(line.trim()){
-      throw new Error("不是 qTox 导出的制表符聊天日志（日期 / 时间 / 作者 / 内容）");
-    }
-  }
-  return records;
 }
