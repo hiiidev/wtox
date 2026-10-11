@@ -581,9 +581,13 @@ export default function App(){
     <header className="wtox-top ant-topbar">
       <div className="wtox-brand">
         <img className="wtox-logo" src="/logo.svg" alt="wtox logo"/>
-        <div><strong>wTox</strong></div>
+        <div><strong>wTox</strong>
+          {ownProfile.name&&<small>{ownProfile.name}</small>}
+        </div>
       </div>
       <nav className="wtox-tools">
+        <Tag color={ownProfile.user_status===2?"error":ownProfile.user_status===1?"warning":"processing"}
+          bordered={false}>{["在线","离开","忙碌"][ownProfile.user_status]||"在线"}</Tag>
         <Tag color={network>0?"success":"warning"} bordered={false}>
           <StatusDot active={network>0}/>
           {network>0?statusLabel(network):"网络连接中"}
