@@ -1,4 +1,4 @@
-# Local-only development. No HTTPS. NEVER expose port 8000 publicly.
+# Local-only development. No HTTPS. NEVER expose port 6066 publicly.
 services:
   web:
     build: .
@@ -6,7 +6,7 @@ services:
     environment:
       WTOX_INSECURE_HTTP: "1"
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:6066:6066"
     volumes:
       - wtox_dev_data:/data
 volumes:
