@@ -26,7 +26,11 @@ def main():
         session = ToxSession(created.savedata, events.append, saved.append)
         try:
             session.start()
-            time.sleep(0.5)
+            deadline = time.monotonic() + 5
+            while session.last_connection == -1 and time.monotonic() < deadline:
+                if session.thread is not None and not session.thread.is_alive():
+                    break
+                time.sleep(0.05)
             assert session.thread is not None and session.thread.is_alive(), "native loop exited"
             assert session.friends() == [], "new identity unexpectedly has friends"
             assert session.last_connection in (0, 1, 2), "invalid network status"
