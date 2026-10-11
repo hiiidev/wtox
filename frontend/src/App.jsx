@@ -1174,25 +1174,6 @@ export default function App(){
         </List.Item>}/>
     </AntModal>}
 
-    {modal==="files"&&<AntModal open title="附件收发" onCancel={closeModal} footer={null} centered destroyOnHidden>
-      <p>附件使用原生 Tox 协议，需好友在线，单文件最多 5 MiB；接收文件需要手动同意。</p>
-      <label>选择发送文件
-        <input type="file" onChange={e=>setUploadFile(e.target.files?.[0]||null)}/></label>
-      <Button kind="primary" disabled={busy||!online(selectedFriend)} onClick={sendFile}>向当前好友发送</Button>
-      <div className="wtox-separator">传输任务</div>
-      <Button onClick={()=>refreshTransfers().catch(e=>alert(e.message))}>刷新附件列表</Button>
-      {transfers.map(file=><div className="wtox-transfer" key={file.id}>
-        <strong>{file.name}</strong><small>{file.direction==="incoming"?"收件":"发件"} ·
-          {transferText[file.state]||file.state} · {Math.round(file.size/1024)} KiB
-          {file.progress>0&&" · "+Math.round(file.progress/file.size*100)+"%"}</small>
-        {file.direction==="incoming"&&file.state==="offered"&&
-          <div><Button onClick={()=>controlFile(file.id,"accept")}>接受</Button>
-            <Button onClick={()=>controlFile(file.id,"reject")}>拒绝</Button></div>}
-        {file.direction==="incoming"&&file.state==="completed"&&
-          <Button onClick={()=>downloadFile(file)}>下载文件</Button>}
-      </div>)}
-      <small>附件只在 VPS 内存短暂保留，不支持断线续传。</small>
-    </AntModal>}
     {notice&&<div className="wtox-toast" role="status">{notice}</div>}
   </div></ConfigProvider>;
 }
