@@ -67,7 +67,7 @@ assert.ok(app.includes('AttachmentBubble') && app.includes('wtox-attachment-imag
 assert.ok(!app.includes("MainContainer"),"Legacy ChatScope layout must not remain");
 assert.ok(app.includes('className="wechat-rail"') &&
   app.includes('className="wechat-mobile-tabs"') &&
-  app.includes('className="wechat-conversation "') &&
+  app.includes('"wechat-conversation "+') &&
   app.includes("onSubmit={text=>sendText"),
   "WeChat-style navigation, conversation list and Ant Design X sender must be active");
 const wechatStyles=readFileSync("frontend/src/wechat-style.css","utf8");
