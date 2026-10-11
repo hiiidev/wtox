@@ -55,7 +55,8 @@ def create_profile(request: Request, uid: str = Depends(owner)):
     require_same_origin(request)
     if store.has_profile(uid):
         raise HTTPException(409, "已有身份，请不要重复创建")
-    identity = core().identity()
+    info = store.user_info(uid)
+    identity = core().identity(nickname=info["username"])
     return save_new_profile(uid, identity)
 
 @router.post("/api/profile/import")
