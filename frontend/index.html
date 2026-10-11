@@ -20,19 +20,17 @@ small,.muted{color:#afbdd1}#error{color:#ff9e9e;min-height:1.4em}
 @media(max-width:660px){.cols{grid-template-columns:1fr} main{padding:14px}}
 </style></head><body><main>
 <h1>wtox</h1><p class="muted">原版 Tox · VPS 自托管客户端</p>
-<section id="login"><h2>登录 / 创建账号</h2>
-<input id="username" autocomplete="username" placeholder="账号名">
-<input id="password" type="password" autocomplete="current-password" placeholder="账号密码（至少12位）">
-<button id="signin">登录</button><button id="signup" class="secondary">创建账号</button></section>
+<section id="login" class="card"><h2>用 Tox 配置登录</h2>
+<p class="muted">不需要网站个人账号或账号密码。每份 Tox 配置都有独立身份和私钥。</p>
+<button id="create">创建新的 Tox 身份并下载 .tox</button>
+<p class="hint">新建后请立即妥善保存下载的 .tox 文件，下次在其他浏览器或设备登录需要它。</p>
+<label for="profileFile">已有 qTox / aTox 或 wtox 导出的原始 .tox 文件：</label>
+<input type="file" id="profileFile" accept=".tox,application/octet-stream">
+<button id="import" class="secondary">使用 .tox 登录 / 首次导入</button>
+<p class="hint">仅支持原始 Tox Savedata。配置文件包含私钥，只能在可信 HTTPS 页面上传；Tox ID（76 位）本身不能作为登录凭证。</p>
+</section>
 <section id="account" hidden><div class="card"><span id="welcome"></span>
 <button id="logout" class="secondary" style="float:right">退出账号</button><div style="clear:both"></div></div>
-<section id="setup" hidden class="card"><h2>设置 Tox 身份</h2>
-<button id="create">创建新的 Tox ID</button>
-<label for="profileFile">或者导入 aTox / qTox 导出的原始 .tox 配置</label>
-<input type="file" id="profileFile" accept=".tox,application/octet-stream">
-<button id="import" class="secondary">导入 .tox 文件</button>
-<p class="hint">仅支持原始 Tox Savedata，不包含旧客户端聊天记录。不要同时在其他客户端运行同一身份。</p>
-</section>
 <section id="ready" hidden><div class="card"><h2>我的 Tox ID</h2>
 <p id="toxid" class="toxid"></p><button id="copyid" class="secondary">复制 ID</button>
 <button id="export" class="secondary">下载身份备份</button><p class="hint">备份包含身份私钥，必须妥善保管。VPS 会持有运行中的身份密钥。</p>
