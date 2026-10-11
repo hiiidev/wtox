@@ -79,7 +79,6 @@ html:has(.ant-messenger),body:has(.ant-messenger){
   white-space:nowrap;font-weight:700;color:var(--w-text);font-size:14px}
 .ant-contact-label small{font-size:11px;color:var(--w-sub)}
 .ant-contact-avatar,.ant-chat-avatar{
-  background:linear-gradient(135deg,#7ca9ec,#778aec)!important;
   color:white!important;font-weight:750!important;flex-shrink:0;
 }
 .ant-list-empty{display:flex;align-items:center;flex-direction:column;
