@@ -1,4 +1,8 @@
-"""SQLite accounts, sessions and encrypted Tox identity storage."""
+"""Encrypted Tox identities, temporary messages and Tox-backed sessions.
+
+Legacy account tables remain only to preserve previous identities and allow a
+one-way profile export from still-valid pre-upgrade sessions.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -12,11 +16,9 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
-from argon2 import PasswordHasher
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 _LOCK = threading.RLock()
-_HASHER = PasswordHasher()
 
 def data_root() -> Path:
     root = Path(os.environ.get("WTOX_DATA_DIR", "/data"))
@@ -90,77 +92,18 @@ def init():
             expires INTEGER NOT NULL
         )""")
 
-def add_account(username: str, password: str) -> str:
-    if not (3 <= len(username) <= 40 and username.isascii()
-            and all(c.isalnum() or c in "_-" for c in username)):
-        raise ValueError("账号名应为 3–40 位英文字母、数字、- 或 _")
-    if not 12 <= len(password) <= 256:
-        raise ValueError("账号密码应为 12–256 个字符")
-    hashed = _HASHER.hash(password)
-    uid = uuid.uuid4().hex
-    try:
-        with db() as c:
-            c.execute("INSERT INTO accounts(id,username,password_hash) VALUES(?,?,?)", (uid,username,hashed))
-    except sqlite3.IntegrityError as exc:
-        raise ValueError("账号名已存在") from exc
-    return uid
-
-def verify_account(username: str, password: str) -> str | None:
-    with db() as c:
-        row = c.execute("SELECT id,password_hash FROM accounts WHERE username=?", (username,)).fetchone()
-    if row is None: return None
-    try:
-        return row[0] if _HASHER.verify(row[1],password) else None
-    except Exception:
+def legacy_session_user(token: str | None) -> str | None:
+    """Recognize only an already-issued OLD session, for one-way .tox export."""
+    if not token or len(token) > 512:
         return None
-
-def create_session(uid: str) -> str:
-    token = secrets.token_urlsafe(48)
+    digest = hashlib.sha256(token.encode()).hexdigest()
     with db() as c:
-        c.execute("INSERT INTO sessions(token_hash,account_id,expires) VALUES(?,?,?)",
-                  (hashlib.sha256(token.encode()).hexdigest(),uid,int(time.time())+7*86400))
-    return token
-
-def session_user(token: str | None) -> str | None:
-    if not token: return None
-    key = hashlib.sha256(token.encode()).hexdigest()
-    with db() as c:
-        row = c.execute("SELECT account_id FROM sessions WHERE token_hash=? AND expires>?",
-                        (key,int(time.time()))).fetchone()
+        row = c.execute(
+            "SELECT account_id FROM sessions WHERE token_hash=? AND expires>?",
+            (digest, int(time.time()))
+        ).fetchone()
     return row[0] if row else None
 
-def revoke_session(token: str | None):
-    if not token: return
-    with db() as c:
-        c.execute("DELETE FROM sessions WHERE token_hash=?",
-                  (hashlib.sha256(token.encode()).hexdigest(),))
-
-def user_info(uid: str):
-    with db() as c:
-        row = c.execute("SELECT username,profile IS NOT NULL FROM accounts WHERE id=?",(uid,)).fetchone()
-    return {"username":row[0],"has_profile":bool(row[1])} if row else None
-
-def profile_address(uid: str) -> str | None:
-    with db() as c:
-        row = c.execute("SELECT tox_address FROM accounts WHERE id=?", (uid,)).fetchone()
-    return row[0] if row else None
-
-def claim_profile(uid: str, savedata: bytes, address: str) -> None:
-    """First creation/import only: atomically prevent overwrite and ID duplicates."""
-    if not isinstance(savedata, bytes) or not 1 <= len(savedata) <= 8 * 1024 * 1024:
-        raise ValueError("Tox 配置大小无效")
-    if not isinstance(address, str) or len(address) != 76 or any(ch not in "0123456789ABCDEF" for ch in address):
-        raise ValueError("Tox ID 无效")
-    ciphertext = encrypt(savedata)
-    try:
-        with db() as c:
-            result = c.execute(
-                "UPDATE accounts SET profile=?,tox_address=?,tox_pubkey=? WHERE id=? AND profile IS NULL",
-                (ciphertext, address, address[:64], uid))
-            if result.rowcount != 1:
-                raise ValueError("该账号已有 Tox 身份，不能覆盖；请先导出备份")
-    except sqlite3.IntegrityError as exc:
-        raise ValueError("这个 Tox 公钥已经属于其他网站账号") from exc
 
 def active_profiles():
     with db() as c:
@@ -176,9 +119,6 @@ def write_profile(uid: str, savedata: bytes):
         raise ValueError("Tox 配置文件无效或超过 8 MiB")
     with db() as c:
         c.execute("UPDATE accounts SET profile=? WHERE id=?",(encrypt(savedata),uid))
-
-def has_profile(uid: str) -> bool:
-    return user_info(uid)["has_profile"]
 
 def append_pending(uid: str, event: dict) -> str:
     import json
