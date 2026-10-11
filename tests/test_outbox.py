@@ -118,6 +118,42 @@ class OutboxTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.enqueue("f"*32)
 
+    def test_dead_tox_session_recovers_for_offline_outbox(self):
+        from unittest.mock import Mock
+        manager=SessionManager()
+        sessions=[]
+        def mock_native(savedata,on_event,on_save):
+            native=SimpleNamespace(
+                files=SimpleNamespace(),
+                thread=SimpleNamespace(is_alive=lambda:True),
+                start=Mock(),
+                friends=Mock(return_value=[{"public_key":self.peer,"status":2}]),
+                send_message=Mock(return_value=567),
+                session_id="native-restarted",
+            )
+            sessions.append(native)
+            return native
+        with patch("backend.session_manager.ToxSession",side_effect=mock_native):
+            first=manager.get(self.uid)
+            self.assertIs(manager.get(self.uid),first)
+            first.thread=SimpleNamespace(is_alive=lambda:False)
+            self.enqueue()
+            manager.dispatch_outbox(self.uid)
+        self.assertEqual(len(sessions),2)
+        sessions[1].start.assert_called_once()
+        sessions[1].send_message.assert_called_once_with(self.peer,"offline-plaintext-secret")
+        self.assertEqual(store.outbox_status(self.uid)[0]["status"],"sent")
+        self.assertEqual(manager.sockets,{})
+
+    def test_failure_start_does_not_cache_broken_identity(self):
+        manager=SessionManager()
+        with patch("backend.session_manager.ToxSession") as native:
+            native.return_value.files=SimpleNamespace()
+            native.return_value.start.side_effect=RuntimeError("start failed")
+            with self.assertRaisesRegex(RuntimeError,"start failed"):
+                manager.get(self.uid)
+        self.assertNotIn(self.uid,manager.sessions)
+
 
 if __name__=="__main__":
     unittest.main()
