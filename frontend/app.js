@@ -6,6 +6,8 @@ let historyDb = null;
 let historyKey = null;
 let selectedPeer = null;
 let contacts = [];
+let drafts = new Map();
+let sending = false;
 let toastTimer;
 const te = new TextEncoder();
 const td = new TextDecoder();
@@ -173,11 +175,13 @@ function updateComposer(){
   $("#peerAvatar").textContent=f?(f.name||f.public_key).slice(0,1).toUpperCase():"✦";
   const hint=$("#sendHint");hint.classList.toggle("warn",!!f&&!online(f));
   hint.textContent=!f?"选择联系人后可以发送消息。"
-    :!online(f)?"好友离线或尚未接受请求；Tox 目前只能向在线好友即时发送。草稿会保留。"
+    :!online(f)?"好友离线或尚未接受请求；Tox 目前只能向在线好友即时发送。草稿会保留在当前页面。"
     :!historyKey?"好友在线，请先解锁本地加密历史。":"好友在线 · Enter 发送，Shift + Enter 换行。";
 }
 function selectPeer(key){
+  if(selectedPeer && selectedPeer!==key) drafts.set(selectedPeer,$("#message").value);
   selectedPeer=key;$("#peer").value=key;
+  $("#message").value=drafts.get(key)||"";
   const f=selectedFriend();$("#selected").textContent=f?(f.name||"Tox 好友 "+key.slice(0,10)+"…"):"Tox 好友";
   $("#account").classList.add("chat-open");
   renderContacts();updateComposer();renderHistory().catch(e=>error(e.message));
@@ -213,6 +217,7 @@ function renderContacts(){
 async function refreshFriends(){
   const data=await json("/api/friends");contacts=data.friends||[];
   if(selectedPeer&&!selectedFriend()){
+    drafts.delete(key);
     selectedPeer=null;$("#peer").value="";$("#selected").textContent="选择一个好友开始聊天";
     $("#account").classList.remove("chat-open");await renderHistory();
   }
@@ -280,7 +285,7 @@ async function updateState(){
   }
   if(!info.public_key){error("没有有效的 Tox 身份信息");return}
   if(profileKey!==info.public_key){
-    historyKey=null;selectedPeer=null;contacts=[];
+    historyKey=null;selectedPeer=null;contacts=[];drafts=new Map();
     $("#peer").value="";
     $("#account").classList.remove("chat-open");
     $("#selected").textContent="选择一个好友开始聊天";
@@ -404,27 +409,36 @@ $("#deleteFriend").onclick=async()=>{
   }catch(e){error(e.message)}
 };
 async function sendNow(){
+  if(sending)return;
   const peer=selectedPeer,text=$("#message").value;
   if(!peer){error("请先选择一个好友");return}
   if(!historyKey){showDialog("#historyDialog");error("请先解锁本地加密历史");return}
   if(!online(selectedFriend())){
-    error("好友离线或尚未接受请求。Tox 无法发送，草稿已保留。");return
+    error("好友离线或尚未接受请求。Tox 无法发送，草稿会保留在当前页面。");return
   }
   if(!text.trim()){error("请输入消息内容");return}
-  $("#send").disabled=true;
+  sending=true;$("#send").disabled=true;
   try{
     await post("/api/messages",{public_key:peer,text});
-    await persistEvent({type:"message",direction:"outgoing",public_key:peer,text});
-    $("#message").value="";
-    await renderHistory();
-    error("");
+    // Native Toxcore accepted the send. Never leave the old draft in the
+    // editor if IndexedDB fails, as re-sending could duplicate the message.
+    drafts.delete(peer);
+    if(selectedPeer===peer)$("#message").value="";
+    try{
+      await persistEvent({type:"message",direction:"outgoing",public_key:peer,text});
+      await renderHistory();
+      error("");
+    }catch(e){error("已提交 Tox 发送，但本地历史保存失败："+e.message)}
   }catch(e){
-    // An offline race means this message was NOT sent; keep it in the editor.
+    // Tox error 3 means nothing was sent. Keep per-peer unsent draft.
+    drafts.set(peer,text);
+    if(selectedPeer===peer)$("#message").value=text;
     error(e.message);
     await refreshFriends().catch(()=>{});
-  }finally{updateComposer()}
+  }finally{sending=false;updateComposer()}
 }
 $("#send").onclick=sendNow;
+$("#message").oninput=()=>{if(selectedPeer) drafts.set(selectedPeer,$("#message").value)};
 $("#message").onkeydown=event=>{
   if(event.key==="Enter"&&!event.shiftKey&&!event.isComposing){
     event.preventDefault();sendNow().catch(e=>error(e.message));
