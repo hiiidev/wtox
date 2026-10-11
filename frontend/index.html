@@ -1,65 +1,131 @@
 <!doctype html>
-<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>wtox</title>
-<style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{font:15px system-ui;background:#0d1625;color:#eaf0fc;margin:0;min-height:100dvh;display:grid;place-items:center}
-main{width:min(94vw,900px);background:#19263a;border:1px solid #354459;padding:24px;border-radius:18px}
-h1{letter-spacing:.6px}input,button,textarea{font:inherit}
-input,textarea{width:100%;margin:7px 0;padding:10px;border-radius:8px;background:#0d1523;color:white;border:1px solid #65748c}
-button{padding:10px 14px;border:0;border-radius:8px;background:#4077e5;color:white;cursor:pointer;margin:5px 3px 5px 0}
-button.secondary{background:#34475f}button:disabled{opacity:.5;cursor:default}
-small,.muted{color:#afbdd1}#error{color:#ff9e9e;min-height:1.4em}
-.card{border:1px solid #364960;background:#142034;padding:15px;border-radius:12px;margin:14px 0}
-.toxid{font-family:ui-monospace,monospace;overflow-wrap:anywhere;background:#0d1523;border-radius:8px;padding:12px}
-.cols{display:grid;grid-template-columns:260px 1fr;gap:14px}
-#messages{height:280px;overflow-y:auto;background:#0d1523;border:1px solid #364960;border-radius:8px;padding:10px}
-.event{margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}
-.event time{color:#a3b6d3;font-size:12px;margin-right:8px}
-.friend{display:block;width:100%;text-align:left;margin:4px 0;background:#293f5b;overflow:hidden;text-overflow:ellipsis}
-.hint{font-size:12px;color:#9fb2ca;overflow-wrap:anywhere}
-@media(max-width:660px){.cols{grid-template-columns:1fr} main{padding:14px}}
-</style></head><body><main>
-<h1>wtox</h1><p class="muted">原版 Tox · VPS 自托管客户端</p>
-<section id="login" class="card"><h2>用 Tox 配置登录</h2>
-<p class="muted">不需要网站个人账号或账号密码。每份 Tox 配置都有独立身份和私钥。</p>
-<button id="create">创建新的 Tox 身份并下载 .tox</button>
-<p class="hint">新建后请立即妥善保存下载的 .tox 文件，下次在其他浏览器或设备登录需要它。</p>
-<label for="profileFile">已有 qTox / aTox 或 wtox 导出的原始 .tox 文件：</label>
-<input type="file" id="profileFile" accept=".tox,application/octet-stream">
-<button id="import" class="secondary">使用 .tox 登录 / 首次导入</button>
-<p class="hint">仅支持原始 Tox Savedata。配置文件包含私钥，只能在可信 HTTPS 页面上传；Tox ID（76 位）本身不能作为登录凭证。</p>
-<details><summary>以前用网站账号登录过？</summary>
-<p class="hint">如果旧浏览器的账号登录会话尚未过期，可先导出旧身份的 .tox 备份，再用上方文件登录。旧用户名/密码不再提供登录入口。</p>
-<button id="legacyExport" class="secondary">下载旧登录会话中的 .tox 备份</button>
-</details>
-</section>
-<section id="account" hidden><div class="card"><span id="welcome"></span>
-<button id="logout" class="secondary" style="float:right">退出账号</button><div style="clear:both"></div></div>
-<section id="ready" hidden><div class="card"><h2>我的 Tox ID</h2>
-<p id="toxid" class="toxid"></p><button id="copyid" class="secondary">复制 ID</button>
-<button id="export" class="secondary">下载身份备份</button><p class="hint">备份包含身份私钥，必须妥善保管。VPS 会持有运行中的身份密钥。</p>
-</div>
-<div class="card"><h2>浏览器本地加密历史</h2>
-<div id="historyLock"><p class="muted">本地历史需要单独的口令解锁。口令不发送至服务器；忘记口令无法恢复此浏览器的历史。</p>
-<input id="historyPass" type="password" autocomplete="off" placeholder="本地历史口令（至少 12 位）">
-<button id="unlock">解锁 / 首次设置</button></div>
-<p id="historyActive" hidden>本地历史已解锁；收到消息写入加密 IndexedDB 后，才向 VPS 确认领取。</p></div>
-<div class="cols">
-<div class="card"><h3>连接</h3><div id="network" class="hint">正在获取状态…</div>
-<button id="refresh" class="secondary">刷新好友</button>
-<h3>好友</h3><div id="friends"></div><hr>
-<input id="friendAddress" placeholder="好友 Tox ID（76 位）">
-<input id="requestText" value="你好，我想添加你为 Tox 好友" placeholder="好友请求内容">
-<button id="addFriend">发送好友请求</button>
-<button id="deleteFriend" class="secondary">删除当前选中的好友</button>
-<h3>接受好友请求</h3><input id="friendKey" placeholder="请求者公钥（64 位）">
-<button id="acceptFriend" class="secondary">接受请求</button></div>
-<div class="card"><h3>文字聊天</h3>
-<p class="hint" id="selected">选择好友或输入公钥。首次使用请先解锁本地历史。</p>
-<div id="messages" role="log" aria-live="polite"></div>
-<input id="peer" placeholder="好友公钥（64 位）">
-<textarea id="message" rows="3" maxlength="1000" placeholder="输入文字消息"></textarea>
-<button id="send">发送</button>
-<p class="hint">原生 Tox 网络功能已接入代码，仍需在 VPS 上测试 qTox/aTox 实际互通。</p></div>
-</div></section></section><p id="error" role="alert"></p>
-</main><script type="module" src="/assets/app.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1221">
+  <meta name="description" content="wtox - self-hosted Tox messenger">
+  <title>wtox · 消息</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <section id="login" class="auth-scene" hidden>
+    <div class="auth-card">
+      <div class="brand-mark" aria-hidden="true">w</div>
+      <div class="eyebrow">PRIVATE MESSENGER</div>
+      <h1>欢迎来到 wtox</h1>
+      <p class="muted">使用你的 Tox 配置文件进入聊天，无须额外的账号和密码。</p>
+      <button id="create" class="button primary full">创建 Tox 身份并下载备份</button>
+      <div class="separator"><span>或使用已有的配置文件</span></div>
+      <label class="field-label" for="profileFile">选择原始 .tox 配置</label>
+      <input type="file" id="profileFile" accept=".tox,application/octet-stream">
+      <button id="import" class="button outline full">使用 .tox 配置登录</button>
+      <p class="footnote">Tox 配置包含私钥，请只通过可信的 HTTPS 网站上传，并妥善保存备份。</p>
+      <details class="legacy"><summary>从旧账号迁移身份</summary>
+        <p class="muted">如旧浏览器的登录状态尚有效，可以下载旧 .tox 备份，再用文件登录。</p>
+        <button class="button subtle" id="legacyExport">下载旧身份备份</button>
+      </details>
+    </div>
+  </section>
+
+  <div id="account" class="app-window" hidden>
+    <header class="app-header">
+      <div class="brand"><span class="brand-mark small" aria-hidden="true">w</span>
+        <div><strong>wtox</strong><small>私人即时通讯</small></div>
+      </div>
+      <div class="app-head-right">
+        <span class="network-pill"><i id="networkDot" class="presence" aria-hidden="true"></i><span id="network">连接中</span></span>
+        <button id="openIdentity" class="icon-button" title="我的 Tox 身份" aria-label="我的 Tox 身份">◉</button>
+        <button id="logout" class="icon-button" title="退出登录" aria-label="退出登录">⇥</button>
+      </div>
+    </header>
+    <div class="workspace">
+      <aside class="sidebar" aria-label="联系人列表">
+        <div class="sidebar-heading">
+          <div><div class="eyebrow">CONVERSATIONS</div><h2>消息 <span id="friendCount" class="count-pill">0</span></h2></div>
+          <button id="refresh" class="icon-button refresh" title="刷新联系人" aria-label="刷新联系人">↻</button>
+        </div>
+        <div class="search-wrap"><span aria-hidden="true">⌕</span>
+          <input id="contactSearch" type="search" placeholder="搜索好友或公钥" autocomplete="off" aria-label="搜索好友">
+        </div>
+        <div id="friends" class="contact-list" aria-label="好友"></div>
+        <div class="sidebar-actions">
+          <button id="openAdd" class="button primary full">＋ 添加好友</button>
+          <button id="historyButton" class="button subtle full">▣ 本地加密聊天记录</button>
+        </div>
+      </aside>
+
+      <section class="chat-pane" aria-label="聊天窗口">
+        <div class="chat-top">
+          <button id="backToContacts" class="icon-button mobile-back" aria-label="返回联系人列表">←</button>
+          <div id="peerAvatar" class="avatar chat-avatar">✦</div>
+          <div class="chat-title">
+            <strong id="selected">选择一个好友开始聊天</strong>
+            <small id="selectedStatus">与 qTox / aTox 兼容的原版 Tox 网络</small>
+          </div>
+          <button id="deleteFriend" class="icon-button danger" title="删除当前好友" aria-label="删除当前好友" disabled>⋯</button>
+        </div>
+        <div id="messages" class="message-list" role="log" aria-live="polite" aria-label="消息列表">
+          <div class="conversation-empty"><span class="empty-symbol">✦</span><strong>你的私人通讯空间</strong><span>从左侧选择好友，开始安全对话。</span></div>
+        </div>
+        <div class="composer">
+          <div id="sendHint" class="send-hint">选择联系人后可以发送消息。</div>
+          <div class="composer-row">
+            <input type="hidden" id="peer">
+            <textarea id="message" rows="2" maxlength="1000" placeholder="发送一条消息…" aria-label="消息内容"></textarea>
+            <button id="send" class="button primary send-button" disabled>发送 ↗</button>
+          </div>
+          <small class="composer-footnote">消息保存在此浏览器的加密存储中 · Tox 好友必须在线才能即时发送</small>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <dialog id="addDialog" class="dialog-panel">
+    <div class="dialog-heading"><div><div class="eyebrow">CONTACTS</div><h2>添加好友</h2></div>
+      <button id="closeAdd" class="icon-button" aria-label="关闭">×</button></div>
+    <p class="muted">输入对方的完整 Tox ID（76 位），好友接受请求后才能发送消息。</p>
+    <label class="field-label" for="friendAddress">对方 Tox ID</label>
+    <textarea id="friendAddress" rows="3" maxlength="76" placeholder="76 位十六进制 Tox ID"></textarea>
+    <label class="field-label" for="requestText">附言</label>
+    <input id="requestText" maxlength="256" value="你好，我想添加你为 Tox 好友">
+    <button id="addFriend" class="button primary full">发送好友请求</button>
+    <div class="separator"><span>收到好友请求？</span></div>
+    <label class="field-label" for="friendKey">对方公钥（64 位）</label>
+    <input id="friendKey" maxlength="64" placeholder="好友请求中的公钥">
+    <button id="acceptFriend" class="button outline full">接受好友请求</button>
+  </dialog>
+
+  <dialog id="identityDialog" class="dialog-panel">
+    <div class="dialog-heading"><div><div class="eyebrow">YOUR IDENTITY</div><h2>我的 Tox 身份</h2></div>
+      <button id="closeIdentity" class="icon-button" aria-label="关闭">×</button></div>
+    <p id="welcome" class="muted"></p>
+    <label class="field-label">我的 Tox ID（可以分享）</label>
+    <div id="toxid" class="toxid"></div>
+    <div class="button-row">
+      <button id="copyid" class="button outline">复制 ID</button>
+      <button id="export" class="button primary">下载 .tox 备份</button>
+    </div>
+    <p class="footnote">ID 可以分享，.tox 配置文件不可以分享：备份包含私人身份密钥。</p>
+  </dialog>
+
+  <dialog id="historyDialog" class="dialog-panel">
+    <div class="dialog-heading"><div><div class="eyebrow">ON THIS DEVICE</div><h2>本地加密聊天记录</h2></div>
+      <button id="closeHistory" class="icon-button" aria-label="关闭">×</button></div>
+    <div id="historyLock">
+      <p class="muted">聊天记录使用你自己设置的本地口令加密，保存在这个浏览器的 IndexedDB 中。口令不会发送到服务器。</p>
+      <label class="field-label" for="historyPass">本地历史口令</label>
+      <input id="historyPass" type="password" autocomplete="off" placeholder="至少 12 位字符">
+      <button id="unlock" class="button primary full">解锁 / 首次设置</button>
+      <p class="footnote">忘记本地口令、清理浏览器数据都可能导致历史丢失。</p>
+    </div>
+    <div id="historyActive" hidden>
+      <p class="unlock-success">✓ 已解锁本地加密历史</p>
+      <p class="muted">新消息写入 IndexedDB 后才会向 VPS 确认领取。</p>
+    </div>
+  </dialog>
+
+  <div id="error" class="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>
