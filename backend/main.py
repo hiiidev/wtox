@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     finally:
         await manager.shutdown()
 
-app = FastAPI(title="wtox",docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
+app = FastAPI(title="wTox",docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 # Docker copies compiled Vite files directly into /app/frontend.
 # Developer/CI checkouts keep build output at frontend/dist.
