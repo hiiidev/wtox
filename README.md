@@ -1,94 +1,84 @@
 # wtox
 
-A small self-hosted multi-user browser client for the **original Tox network**.
-Target deployment: **VPS + Docker Compose + Caddy HTTPS/WSS + native c-toxcore**.
-No Cloudflare Worker is required.
+使用 **原版 Tox 网络**的自托管网页客户端。基于 native c-toxcore + Python/FastAPI + Docker + Caddy HTTPS/WSS。
 
-> **Current status (prototype, unverified):** Native c-toxcore long-running sessions, friend requests, friend list/removal, one-to-one text API, WebSocket events, encrypted pending queue and browser encrypted IndexedDB history are now in source. **Docker native smoke test and real qTox/aTox interoperability have not been confirmed on an actual VPS.** Do not treat this as production-ready or deploy to untrusted users.
+> **开发状态：** 原生会话、好友和文字消息接口已有代码；Docker 真正构建成功及与 qTox / aTox 的双向互通仍需在 VPS 上验证。暂时只适合可信用户测试，不能视为生产安全版本。
 
-See [VPS installation and test plan](docs/DEPLOY.md) before attempting to run it.
+## 登录方式：只用 Tox 身份
 
-## Agreed product decisions
+网站有两层访问控制：
 
-- **One shared website access password** before any private app UI/API.
-- After entering it, **any visitor who knows the password** may create their own web account; no invite list or fixed registration count.
-- Each web account will own its **own independent Tox identity**, created or imported from **raw Tox savedata** (often a `.tox` export from aTox/qTox).
-- Web account authentication stays separate from the shared site password; users cannot access each other's savedata.
-- No fixed application-enforced number of accounts, but actual concurrent Tox sessions will be limited by VPS RAM, CPU and available ports. Rate-limits and queue-size protections still apply.
-- Encrypted Tox savedata stays on VPS; message history is planned for encrypted browser IndexedDB, plus **short-lived encrypted pending message queue** on VPS. Server admins can still read plaintext while native Toxcore runs.
-- 2–3 trusted users, text messaging first, no files or calls in the first phase.
-- **WASM/browser-held keys deferred**, described in [browser research](docs/BROWSER_ONLY.md).
+1. **网站统一访问密码**（`WTOX_ACCESS_PASSWORD`，最少 6 个字符），用于阻止未获授权的人访问网站。
+2. **Tox 配置文件是个人登录凭证**：**不再提供网站用户名、个人账号密码或注册表单。**
 
-## VPS sizing
+通过网站密码后：
 
-Start with **1 vCPU, 2GB RAM, 20GB SSD**, Ubuntu 24.04 (estimate, not benchmarked). Allow outbound UDP/TCP for Tox, inbound TCP 80/443 for Caddy. You only need **one** VPS for three people.
+- **创建新 Tox 身份**：服务器创建独立 Tox ID，浏览器立即下载含私钥的原始 `.tox` 备份，并建立登录会话。
+- **使用 `.tox` 登录**：上传自己的原始 Tox Savedata。如果该私钥以前已登记，则进入原身份；否则首次导入并建立新身份。
+- **公开 Tox ID 不能登录**：后端利用原生 Toxcore 恢复上传文件，取出私钥的哈希凭证，与服务器原存身份核对；仅比较 Tox ID 是不够的。
+- **登录不会覆盖服务器上较新的 Savedata**，以免从旧备份登录时丢失已经更新的好友信息。
+- 登录后使用 HttpOnly 的 `wtox_tox_session` 会话 Cookie；注销后需要重新上传 `.tox` 文件。
+- 每个 Tox 公钥只属于一个服务器身份，不设固定账号数量（VPS 资源仍有限）。
 
-## Which Caddy setup?
+**重要：`.tox` 文件就是身份私钥。谁拿到这个文件就可能登录为你。** 请单独加密备份，不要在聊天、截图、GitHub 或不受信任网页中传输。只支持原始 Savedata，不能直接使用 qTox/aTox 的其他加密或私有数据库格式。不要在两个 Toxcore 客户端同时运行同一个身份。
 
-**If Caddy is already installed on the VPS host**, use [the native Caddy guide](docs/HOST_CADDY.md) and launch **only the web container**:
+浏览器的聊天历史仍使用**单独的本地加密口令**，它不是网站登录密码；聊天历史长期留在本地 IndexedDB。VPS 使用 AES-256-GCM 加密保存原生 Tox Savedata 和短期消息队列（最长 7 天）；但 VPS 上运行的 Toxcore 能访问密钥及消息明文，此方案并非零知识。
+
+## 已装原生 Caddy 的 VPS（你的部署方式）
+
+具体配置见 [宿主机原生 Caddy 部署文档](docs/HOST_CADDY.md)。Docker 只运行 wtox，使用本机端口 **6066**；Caddy 负责外部 443 HTTPS/WSS。
+
+**升级既有安装时：不要复制示例文件覆盖正在使用的 `.env`，也不要删 Docker 卷。** 确保现有 `WTOX_MASTER_KEY` 不变，否则旧身份无法解密。
 
 ```bash
+cd wtox
+git pull
 docker compose -f compose.host-caddy.yml up -d --build
+curl -fsS http://127.0.0.1:6066/health
 ```
 
-Your host Caddy proxies the chosen subdomain to `127.0.0.1:6066`. This avoids a second Caddy binding 80/443.
+Caddy 对应的站点配置：
 
-**If the VPS has no Caddy**, use the bundled Docker Caddy deployment (`compose.yml`) below.
+```caddyfile
+chat.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:6066
+}
+```
 
-## Deploy on your own VPS (unverified interoperability)
+将域名改成你自己的。**不需要对公网开放 6066。** 已有 Caddy 的服务器不要运行默认带另一个 Caddy 的 `docker compose up`。
 
-For step-by-step instructions and a real-client test checklist see [VPS_DEPLOY.md](docs/VPS_DEPLOY.md).
+没有安装原生 Caddy 的 VPS 仍可使用默认 `compose.yml` 中的 Docker Caddy 方案。
 
-### Deployment configuration
+## 从旧“用户名/密码”版本升级
 
-1. Set DNS of `chat.example.com` to VPS public IP. Ensure port 80/443 is reachable for Caddy's automatic certificate.
-2. `cp .env.example .env`.
-3. In `.env`, set `SITE_DOMAIN`, a `WTOX_ACCESS_PASSWORD` (minimum 6 characters; a longer random password is strongly recommended), and `WTOX_MASTER_KEY` as 64 random hex characters:
+旧的 `accounts`、`sessions` 和消息表不会自动被删除，因此以前加密保存在服务器的 Tox 身份、好友及未领取消息可以继续使用。
 
-   ```sh
-   python3 -c 'import secrets; print(secrets.token_hex(32))'
-   ```
+- **已有 `.tox` 备份**：部署新版后直接上传，进入原来的身份（按 Tox 公钥匹配）。
+- **还没有备份但浏览器仍持有未过期的旧 `wtox_session` Cookie**：新版登录页底部有“以前用网站账号登录过？”→“下载旧登录会话中的 .tox 备份”。下载后使用新入口上传。
+- **旧登录会话已过期且没有 `.tox` 备份**：不要删 SQLite 数据库或主密钥；需要由服务器管理员安全地离线恢复，而不是重新注册一个同名账号。新版本不接受旧用户名密码登录。
+- 以前按网站用户名命名的浏览器本地 IndexedDB 历史不会被删除，**但不会自动映射到新的 Tox 公钥历史库**。在实现本地历史迁移前不要清除浏览器站点数据。
 
-4. Keep `.env` private (`chmod 600 .env`) and back up the master key securely off-VPS.
-5. **Only if Caddy is not already installed on the VPS:** `docker compose up -d --build`. If the host has its own Caddy, use `docker compose -f compose.host-caddy.yml up -d --build` instead. The build runs `python -m backend.tox_smoke` to check identity creation/restore, callbacks, native event loop and basic friend-list access. If this fails, **do not bypass the check**. Build success does not prove network interoperability.
-6. Open `https://chat.example.com`: enter the shared website access password, register or sign into a personal account, then create or import a **raw unencrypted** Tox savedata file and download an encrypted-at-rest but **raw on export** private backup. Encrypted aTox-specific file formats and historic messages cannot be imported yet.
+强烈建议先对 `wtox_data` 命名卷及 `.env` 主密钥分别做安全备份。**不要运行 `docker compose down -v`。**
 
-Caddy is bundled in the default `compose.yml` for machines without an existing web proxy. On machines with a host-installed Caddy, use `compose.host-caddy.yml` to avoid any second Caddy process. The app port 6066 is *not published* to the public internet.
+## 基础要求
 
-For local development only, run `docker compose -f compose.dev.yml up --build` and use `http://localhost:6066`. Plain HTTP must **never** be exposed publicly.
+建议 Ubuntu 24.04 LTS，1 vCPU / 2 GB RAM / 20 GB SSD（尚未实测容量上限），Docker Compose、可用域名和 Caddy。站点 HTTPS 需要 80/443，Tox 网络需要出站 UDP/TCP。
 
-## Trust / security
+- [VPS 部署和真实客户端验收](docs/DEPLOY.md)
+- [当前进度](docs/MILESTONES.md)
+- [浏览器原生 WASM 研究：暂缓](docs/BROWSER_ONLY.md)
 
-- The shared site password is **not** a replacement for per-user login. Knowing it grants registration access, not access to another user's messages or profile.
-- The shared password and encryption master key are loaded from server environment variables, **never embedded in frontend JavaScript**.
-- The shared password must be high entropy. Rate limits reduce guessing but do not eliminate DoS risk.
-- The backend stores hashed per-account passwords using Argon2, issues separate HttpOnly cookies, and encrypts Tox savedata and unclaimed message events using AES-256-GCM.
-- Toxcore running on a VPS can see plaintext and hold private Tox identity keys while the account is online; this architecture is **not zero-knowledge**.
-- Do **not** run the same imported Tox identity in aTox/qTox and wtox simultaneously.
-- Backend must stay single-process (`uvicorn --workers 1`) if in-memory native Tox sessions are used.
-- Protect VPS backups, apply updates, and never commit real `.env` files. This repository is **not** production-ready.
+### API 概览
 
-## API endpoints (implemented, real-network testing pending)
+- `POST /api/gate/login` — 网站统一访问密码
+- `POST /api/tox/create` — 新建原生 Tox 身份，响应下载 `.tox`，写入安全登录 Cookie
+- `POST /api/tox/login` — 上传原始 `.tox` 登录或首次导入
+- `GET /api/me`、`GET /api/profile/status` — 当前 Tox 身份
+- `GET /api/profile/export` — 下载此身份最新备份
+- `GET /api/legacy/export` — **仅旧 Cookie 尚未过期时**的一次性迁移辅助导出
+- `POST /api/logout` — 退出 Tox 身份
+- `GET/POST/DELETE /api/friends`、`POST /api/messages` — 好友及文字消息
+- `GET /api/pending`、`POST /api/ack`、`WS /ws` — 短期消息暂存与实时收发
 
-- `GET /gate` — site password page
-- `POST /api/gate/login` — check website password, set signed entrance cookie
-- `POST /api/register` — open account registration (after site password)
-- `POST /api/login` / `POST /api/logout` — personal web account session
-- `GET /api/me` / `GET /api/profile/status` — personal account and Tox identity status
-- `POST /api/profile/create` — generate and save a new native Tox identity
-- `POST /api/profile/import` — upload raw binary `.tox` savedata (up to 8 MiB, only if account has no identity)
-- `GET /api/profile/export` — download raw identity backup (contains private key)
-- `GET /api/network` — 0 offline / 1 TCP / 2 UDP
-- `GET /api/friends`, `POST /api/friends`, `POST /api/friends/accept` — friend management
-- `POST /api/messages` — direct text send to a friend public key
-- `GET /api/pending`, `POST /api/ack` — encrypted pending queue with browser acknowledgement
-- `WS /ws` — same-origin authenticated message/friend/connection event stream
-- `GET /api/network` — per-user Tox network status
-- `GET /api/friends`, `POST /api/friends`, `POST /api/friends/accept` — native friend operations
-- `DELETE /api/friends/{public_key}` — remove friend and save profile
-- `POST /api/messages` — send Tox one-to-one text
-- `GET /api/pending`, `POST /api/ack` — encrypted temporary message delivery and ACK
-- `WS /ws` — per-account authenticated messages / requests / status events
-- `GET /health` — minimal container health check
-
-See [development milestones](docs/MILESTONES.md). GitHub Actions checks Python/API tests, frontend JavaScript syntax and Compose syntax. The full native Docker build test remains to be confirmed. **Passing mocked Python tests does not prove native library interoperability.**
+**旧的 `POST /api/register` 和 `POST /api/login` 已移除。** HTTPS 仅保护浏览器到 VPS 的连接，VPS 上运行的 Toxcore 仍需被你信任。
