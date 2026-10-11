@@ -8,7 +8,7 @@ This is for the private **wtox** repository: https://github.com/hiiidev/wtox
 - Docker Engine + Compose plugin installed.
 - DNS A/AAAA pointing `SITE_DOMAIN` at the VPS.
 - Firewall allows inbound TCP **80/443**, outgoing TCP/UDP for the original Tox network.
-- Caddy is bundled in `compose.yml`; do not install a second listener on 80/443.
+- For a host that already runs Caddy, use `compose.host-caddy.yml` and the guide in `docs/HOST_CADDY.md` (do not start Docker Caddy).
 - Authorize private repository access **on your VPS** using a read-only GitHub deploy key or your own approved checkout method. Never paste private keys into chat.
 
 ## Deploy
@@ -16,29 +16,29 @@ This is for the private **wtox** repository: https://github.com/hiiidev/wtox
 ```sh
 # after cloning the private repository on the VPS
 cd wtox
-cp .env.example .env
+test -f .env || cp .env.example .env
 python3 -c 'import secrets; print(secrets.token_hex(32))'
 # edit .env; set real SITE_DOMAIN, WTOX_MASTER_KEY, WTOX_ACCESS_PASSWORD
 chmod 600 .env
 bash scripts/deploy.sh
-docker compose logs --tail=80 web caddy
+docker compose -f compose.host-caddy.yml logs --tail=80 web
 ```
 
 **The generated 32-byte hex value is the encrypted database master key; back it up securely.** Never commit the real `.env` or send it to anyone.
 
-Caddy automatically provisions HTTPS for the configured hostname and forwards WebSocket. The backend does not publish port 6066.
+Host-native Caddy handles HTTPS/WebSocket and proxies to host-local port 6066. Never publish 6066 to the internet.
 
 ## Smoke tests
 
-1. Visit `https://YOUR_DOMAIN/gate` and enter site password.
-2. Register two *different* web accounts.
-3. Create a fresh Tox ID in account A and download its raw `.tox` backup.
-4. Attempt to import the same Tox profile into account B: must be **rejected** (duplicate identity).
-5. Import a DIFFERENT raw aTox/qTox export into B; ensure the profile restores to exactly the same Tox ID.
-6. In A add qTox/aTox friend (76-char Tox ID); in qTox/aTox accept request.
+1. Visit `https://YOUR_DOMAIN/gate` and enter the shared site password.
+2. Create Tox identity A and save the downloaded raw `.tox` backup.
+3. Log out, upload A's `.tox` file, and confirm it reopens exactly the same identity without a username/password.
+4. Import a different raw aTox/qTox export as identity B and verify it restores the same Tox public key.
+5. Check that uploading a file with only A's public key cannot authenticate as A; the private key must match.
+6. In Tox identity A add qTox/aTox friend (76-char Tox ID); in qTox/aTox accept request.
 7. Both directions: send UTF-8 messages, confirm encrypted IndexedDB storage and 7-day pending queue clearing after browser ack.
 8. Close browser for several minutes while VPS stays online; on reopening, unlock history to retrieve queued messages.
-9. `docker compose restart web`; confirm identity and friend list survive restart.
+9. Restart the running web service with the Compose file used for deployment; confirm identity and friend list survive restart.
 10. Confirm same original Tox profile is NOT simultaneously running in aTox/qTox and wtox.
 
 Check connection `GET /api/network` after login: 0 offline, 1 TCP relay, 2 UDP. If always offline, inspect bootstrap node values and VPS outbound network rules. Public bootstrap node lists change; see https://nodes.tox.chat/.
@@ -56,10 +56,10 @@ Check connection `GET /api/network` after login: 0 offline, 1 TCP relay, 2 UDP. 
 ## Diagnostics
 
 ```sh
-docker compose ps
-docker compose logs --tail=100 web
-docker compose logs --tail=100 caddy
-docker compose exec web python -m backend.tox_identity
+docker compose -f compose.host-caddy.yml ps
+docker compose -f compose.host-caddy.yml logs --tail=100 web
+sudo journalctl -u caddy -n 100 --no-pager
+docker compose -f compose.host-caddy.yml exec web python -m backend.tox_identity
 ```
 
 Do not publish full logs containing security tokens or private identity dumps.
