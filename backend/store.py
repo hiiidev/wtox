@@ -17,8 +17,6 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives import hashes
 
 _LOCK = threading.RLock()
 
@@ -290,30 +288,3 @@ def needs_legacy_migration() -> bool:
             "AND (tox_secret_hash IS NULL OR tox_pubkey IS NULL) LIMIT 1"
         ).fetchone()
     return row is not None
-
-
-
-def derive_browser_history_key(uid: str) -> bytes:
-    """Deterministic per-Tox-identity AES-256 key for browser IndexedDB.
-
-    HKDF domain-separates browser storage from the existing private-key
-    ownership proof. The private key or Savedata is NEVER sent by this API.
-    A valid Tox login session can obtain this key; this design deliberately
-    trades a second passphrase for Tox-identity-based access.
-    """
-    with db() as c:
-        row = c.execute(
-            "SELECT tox_pubkey,tox_secret_hash FROM accounts "
-            "WHERE id=? AND profile IS NOT NULL", (uid,)
-        ).fetchone()
-    if not row or not row[0] or not row[1] or len(row[1]) != 32:
-        raise ValueError("Tox 身份密钥未就绪")
-    pubkey = bytes.fromhex(row[0])
-    if len(pubkey) != 32:
-        raise ValueError("Tox 公钥无效")
-    return HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=pubkey,
-        info=b"wtox-browser-history-aes256gcm-v2",
-    ).derive(bytes(row[1]))
