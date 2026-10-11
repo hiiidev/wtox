@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from backend import store
+from backend import store, profile_api
 from backend.main import app
 from backend.tox_identity import ToxIdentityError
 
@@ -32,6 +32,9 @@ class ToxLoginTests(unittest.TestCase):
         # starts the real 24/7 Tox native sessions and the infinite outbox task
         # against synthetic .tox fixtures. Test the lifecycle separately.
         store.init()
+        # Each test has its own isolated identity DB; isolate the IP rate window too.
+        with profile_api._LOCK:
+            profile_api._ATTEMPTS.clear()
         self.client = TestClient(app)
         response = self.client.post("/api/gate/login", json={"password":"123456"})
         self.assertEqual(response.status_code, 200, response.text)
