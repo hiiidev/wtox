@@ -106,6 +106,8 @@ class ToxSession:
         self.callback_self_status = bind("tox_callback_self_connection_status", None, P, SelfStatusCB)
         self.friend_add = bind("tox_friend_add", U32, P, IP, IP, C.c_size_t, ERR)
         self.friend_accept = bind("tox_friend_add_norequest", U32, P, IP, ERR)
+        self.friend_by_key = bind("tox_friend_by_public_key", U32, P, IP, ERR)
+        self.friend_delete_native = bind("tox_friend_delete", C.c_bool, P, U32, ERR)
         self.friend_send = bind("tox_friend_send_message", U32, P, U32, C.c_int, IP, C.c_size_t, ERR)
         self.friend_list_size = bind("tox_self_get_friend_list_size", C.c_size_t, P)
         self.friend_list = bind("tox_self_get_friend_list", None, P, C.POINTER(U32))
@@ -286,6 +288,20 @@ class ToxSession:
             self._save()
             return self._friend_key(number)
 
+    def delete_friend(self, key: str) -> None:
+        pubkey = hex_bytes(key.strip(), 32, "好友公钥")
+        with self.lock:
+            self._require_live()
+            error = C.c_int()
+            number = self.friend_by_key(self.tox, uint8_array(pubkey), C.byref(error))
+            if error.value:
+                raise ValueError("未找到该好友")
+            error.value = 0
+            if not self.friend_delete_native(self.tox, number, C.byref(error)) or error.value:
+                raise ToxActionError(f"tox_friend_delete error {error.value}")
+            self._dirty = True
+            self._save()
+
     def send_message(self, key: str, text: str) -> int:
         pubkey = hex_bytes(key.strip(), 32, "好友公钥").hex().upper()
         encoded = text.encode("utf-8")
@@ -293,16 +309,11 @@ class ToxSession:
             raise ValueError("文字消息需为 1–1000 字节")
         with self.lock:
             self._require_live()
-            friend = next((f for f in self.friends() if f["public_key"] == pubkey), None)
-            if friend is None:
-                raise ValueError("好友不在列表中")
-            numbers_count = self.friend_list_size(self.tox)
-            arr = (U32 * numbers_count)()
-            self.friend_list(self.tox, arr)
-            number = next((n for n in arr if self._friend_key(n) == pubkey), None)
-            if number is None:
-                raise ValueError("找不到好友")
             error = C.c_int()
+            number = self.friend_by_key(self.tox, uint8_array(bytes.fromhex(pubkey)), C.byref(error))
+            if error.value:
+                raise ValueError("好友不在列表中")
+            error.value = 0
             msg_id = self.friend_send(self.tox, number, 0, uint8_array(encoded),
                                       len(encoded), C.byref(error))
             if error.value:
