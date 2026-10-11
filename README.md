@@ -4,7 +4,8 @@ A small self-hosted multi-user browser client for the **original Tox network**.
 Target deployment: **VPS + Docker Compose + Caddy HTTPS/WSS + native c-toxcore**.
 No Cloudflare Worker is required.
 
-> **Current status (work in progress):** Caddy, entrance password, personal accounts, encrypted SQLite storage, native ctypes Tox **identity** adapter, and create/import/export API + UI have been committed. The Docker image includes a native identity roundtrip smoke test, but its execution has not been independently verified here. **Live network sessions, friends and messaging are NOT implemented yet. Do not expose this prototype to untrusted users.**
+> **Current status (pre-release):** Native c-toxcore network sessions, friend requests, one-to-one text APIs, browser WebSocket updates, seven-day encrypted pending queue, and browser AES-GCM/IndexedDB chat history are now **implemented in source**. Production Docker build and qTox/aTox real-world interoperability are **not yet verified**. Do not treat this as security-audited or production-ready.
+
 
 ## Agreed product decisions
 
@@ -21,7 +22,11 @@ No Cloudflare Worker is required.
 
 Start with **1 vCPU, 2GB RAM, 20GB SSD**, Ubuntu 24.04 (estimate, not benchmarked). Allow outbound UDP/TCP for Tox, inbound TCP 80/443 for Caddy. You only need **one** VPS for three people.
 
-## Deployment configuration (identity prototype, not yet a functioning chat client)
+## Deploy on your own VPS (unverified interoperability)
+
+For step-by-step instructions and a real-client test checklist see [VPS_DEPLOY.md](docs/VPS_DEPLOY.md).
+
+### Deployment configuration
 
 1. Set DNS of `chat.example.com` to VPS public IP. Ensure port 80/443 is reachable for Caddy's automatic certificate.
 2. `cp .env.example .env`.
@@ -44,13 +49,13 @@ For local development only, run `docker compose -f compose.dev.yml up --build` a
 - The shared site password is **not** a replacement for per-user login. Knowing it grants registration access, not access to another user's messages or profile.
 - The shared password and encryption master key are loaded from server environment variables, **never embedded in frontend JavaScript**.
 - The shared password must be high entropy. Rate limits reduce guessing but do not eliminate DoS risk.
-- The backend currently stores hashed per-account passwords using Argon2, issues separate HttpOnly cookies, and encrypts Tox savedata using AES-256-GCM.
+- The backend stores hashed per-account passwords using Argon2, issues separate HttpOnly cookies, and encrypts Tox savedata and unclaimed message events using AES-256-GCM.
 - Toxcore running on a VPS can see plaintext and hold private Tox identity keys while the account is online; this architecture is **not zero-knowledge**.
 - Do **not** run the same imported Tox identity in aTox/qTox and wtox simultaneously.
 - Backend must stay single-process (`uvicorn --workers 1`) if in-memory native Tox sessions are used.
 - Protect VPS backups, apply updates, and never commit real `.env` files. This repository is **not** production-ready.
 
-## Current HTTP endpoints
+## API endpoints (implemented, real-network testing pending)
 
 - `GET /gate` — site password page
 - `POST /api/gate/login` — check website password, set signed entrance cookie
@@ -60,6 +65,11 @@ For local development only, run `docker compose -f compose.dev.yml up --build` a
 - `POST /api/profile/create` — generate and save a new native Tox identity
 - `POST /api/profile/import` — upload raw binary `.tox` savedata (up to 8 MiB, only if account has no identity)
 - `GET /api/profile/export` — download raw identity backup (contains private key)
+- `GET /api/network` — 0 offline / 1 TCP / 2 UDP
+- `GET /api/friends`, `POST /api/friends`, `POST /api/friends/accept` — friend management
+- `POST /api/messages` — direct text send to a friend public key
+- `GET /api/pending`, `POST /api/ack` — encrypted pending queue with browser acknowledgement
+- `WS /ws` — same-origin authenticated message/friend/connection event stream
 - `GET /health` — minimal container health check
 
-See [development milestones](docs/MILESTONES.md). GitHub Actions checks Python/API tests and Compose syntax; a full Docker native smoke build can be triggered manually. **A passed Python test does not prove the native library works on your VPS.**
+See [development milestones](docs/MILESTONES.md). GitHub Actions checks Python/API tests, frontend JavaScript syntax and Compose syntax. The full native Docker build test remains to be confirmed. **Passing mocked Python tests does not prove native library interoperability.**
