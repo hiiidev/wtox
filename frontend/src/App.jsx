@@ -423,7 +423,7 @@ export default function App(){
     try{
       const setting=await api("/api/settings",{method:"PUT",body:JSON.stringify({offline_queue:next})});
       setOfflineQueue((await setting.json()).offline_queue);
-      alert(next?"已启用 VPS 离线排队":"已关闭新消息的 VPS 离线排队，旧队列仍会继续发送");
+      alert(next?"已开启 VPS 离线代发，关闭网页后仍能发送":"已切换到浏览器队列（需网页运行），原有 VPS 队列仍会处理");
     }catch(error){alert(error.message)}
   }
   async function migrateHistory(){
@@ -524,9 +524,7 @@ export default function App(){
       <nav className="wtox-tools">
         <span className="wtox-network"><StatusDot active={network>0}/>{network>0?statusLabel(network):"Tox 连接中"}</span>
         <button title="设置" onClick={()=>setModal("settings")}>⚙</button>
-        <button title="聊天历史" onClick={()=>setModal("history")}>▤</button>
-        <button title="我的 Tox ID" onClick={()=>setModal("identity")}>◎</button>
-        <button title="退出" onClick={logout}>⇥</button>
+
       </nav>
     </header>
     <div className="wtox-workspace">
@@ -587,27 +585,21 @@ export default function App(){
       </MainContainer>
     </div>
 
-    {modal==="settings"&&<Modal title="聊天设置" close={closeModal}>
+    {modal==="settings"&&<Modal title="设置与备份" close={closeModal}>
+      <h3>消息与离线队列</h3>
       <label className="wtox-toggle">
-        <input type="checkbox" checked={offlineQueue} onChange={e=>changeOfflineQueue(e.target.checked)}/>
-        <span><strong>允许向离线好友发送</strong>
-        <small>默认开启。VPS 加密暂存消息，好友上线后自动发送；队列消息显示「正在发送」。</small></span>
+        <input type="checkbox" checked={offlineQueue}
+          onChange={e=>changeOfflineQueue(e.target.checked)}/>
+        <span><strong>通过 VPS 代发离线消息（可选）</strong>
+          <small>默认关闭：消息加密留在当前浏览器，页面运行且好友在线时发送。
+          开启后：VPS 加密保留队列，关闭页面也能等待好友上线后发送。</small>
+        </span>
       </label>
-      <p className="wtox-info">发送队列每 3 秒检查；待发送消息最多 250 条，最长暂存 7 天。服务器重启时无法确认结果的消息不会自动重复发送。</p>
-      <p className="wtox-info">好友在线状态每 12 秒刷新，未领取消息每 8 秒补领；WebSocket 断线自动重连。</p>
-    </Modal>}
-
-    {modal==="add"&&<Modal title="添加好友" close={closeModal}>
-      <label>好友 Tox ID（76 位）
-        <textarea rows="3" value={friendId} onChange={e=>setFriendId(e.target.value)} placeholder="完整 Tox ID"/></label>
-      <label>好友请求内容<input value={requestText} onChange={e=>setRequestText(e.target.value)}/></label>
-      <Button kind="primary" onClick={addFriend}>发送好友请求</Button>
-      <div className="wtox-separator">接受请求</div>
-      <label>请求者公钥（64 位）<input value={requestKey} onChange={e=>setRequestKey(e.target.value)}/></label>
-      <Button onClick={acceptFriend}>接受好友</Button>
-    </Modal>}
-
-    {modal==="identity"&&<Modal title="我的 Tox 身份" close={closeModal}>
+      <p className="wtox-info">浏览器队列可跨刷新恢复，但手机锁屏或切到后台可能暂停网页，
+      不保证持续运行。VPS 队列最长暂存 7 天、每个身份最多 250 条。
+      已经进入 VPS 的消息在关闭此开关后仍会完成现有队列。</p>
+      <p className="wtox-info">好友状态约每 12 秒刷新，消息每 8 秒补领，手机回到网页时主动同步。</p>
+      <div className="wtox-separator">Tox 身份与私钥备份</div>
       <p>当前 Tox ID 可以分享，但 .tox 备份含私钥，不要分享。</p>
       <div className="wtox-tox-id">{user.tox_id}</div>
       <Button onClick={()=>navigator.clipboard.writeText(user.tox_id).then(()=>alert("Tox ID 已复制")).catch(e=>alert(e.message))}>复制 Tox ID</Button>
@@ -615,9 +607,7 @@ export default function App(){
         try{downloadBlob(await(await api("/api/profile/export")).blob(),"wtox-profile.tox")}
         catch(e){alert(e.message)}
       }}>下载最新 .tox 备份</Button>
-    </Modal>}
-
-    {modal==="history"&&<Modal title="本地加密历史" close={closeModal}>
+      <div className="wtox-separator">本地加密历史与导入导出</div>
       <p>当前身份的消息使用此浏览器不可导出的 AES-256-GCM 密钥保存，无需反复输入口令。</p>
       <div className="wtox-info">{historyReady?"✓ 加密历史已自动解锁":
         migrateRequired?"需要迁移旧版口令加密历史":"本地历史尚未就绪"}</div>
@@ -634,6 +624,18 @@ export default function App(){
       <label>qTox TXT 导出时自己的昵称<input value={ownName} onChange={e=>setOwnName(e.target.value)}/></label>
       <Button kind="primary" onClick={importHistory}>导入到此浏览器</Button>
       <small>aTox 专有导出格式尚待样本验证。历史只保存在本机，换设备需自行导出导入。</small>
+      <div className="wtox-separator">当前登录会话</div>
+      <Button onClick={logout}>退出当前 Tox 身份</Button>
+    </Modal>}
+
+    {modal==="add"&&<Modal title="添加好友" close={closeModal}>
+      <label>好友 Tox ID（76 位）
+        <textarea rows="3" value={friendId} onChange={e=>setFriendId(e.target.value)} placeholder="完整 Tox ID"/></label>
+      <label>好友请求内容<input value={requestText} onChange={e=>setRequestText(e.target.value)}/></label>
+      <Button kind="primary" onClick={addFriend}>发送好友请求</Button>
+      <div className="wtox-separator">接受请求</div>
+      <label>请求者公钥（64 位）<input value={requestKey} onChange={e=>setRequestKey(e.target.value)}/></label>
+      <Button onClick={acceptFriend}>接受好友</Button>
     </Modal>}
 
     {modal==="files"&&<Modal title="附件收发" close={closeModal}>
