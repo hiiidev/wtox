@@ -87,12 +87,13 @@ def init():
         if "tox_secret_hash" not in columns:
             c.execute("ALTER TABLE accounts ADD COLUMN tox_secret_hash BLOB")
         if "offline_queue" not in columns:
-            c.execute("ALTER TABLE accounts ADD COLUMN offline_queue INTEGER NOT NULL DEFAULT 0")
+            c.execute("ALTER TABLE accounts ADD COLUMN offline_queue INTEGER NOT NULL DEFAULT 1")
         if "queue_mode_version" not in columns:
-            # One-time migration: old installs implicitly enabled VPS queue.
-            # Browser-local queue is now the default, VPS queue opt-in.
-            c.execute("ALTER TABLE accounts ADD COLUMN queue_mode_version INTEGER NOT NULL DEFAULT 2")
-            c.execute("UPDATE accounts SET offline_queue=0")
+            c.execute("ALTER TABLE accounts ADD COLUMN queue_mode_version INTEGER NOT NULL DEFAULT 3")
+        # All identities now use the encrypted VPS outbox. Preserve old
+        # pending rows rather than dropping them; no per-account switch.
+        c.execute("UPDATE accounts SET offline_queue=1,queue_mode_version=3 "
+                  "WHERE offline_queue!=1 OR queue_mode_version!=3")
         c.execute("""CREATE TABLE IF NOT EXISTS outbox (
             id TEXT PRIMARY KEY,
             account_id TEXT NOT NULL REFERENCES accounts(id),
@@ -327,14 +328,11 @@ OUTBOX_TTL = 7 * 86400
 OUTBOX_LIMIT = 250
 
 def offline_queue_enabled(uid: str) -> bool:
+    """Compatibility for callers that still inspect the setting."""
     with db() as c:
-        row=c.execute("SELECT offline_queue FROM accounts WHERE id=?", (uid,)).fetchone()
-    if not row: raise ValueError("Tox 身份不存在")
-    return bool(row[0])
-
-def set_offline_queue(uid: str, enabled: bool):
-    with db() as c:
-        c.execute("UPDATE accounts SET offline_queue=? WHERE id=?", (int(enabled),uid))
+        exists=c.execute("SELECT 1 FROM accounts WHERE id=?",(uid,)).fetchone()
+    if not exists: raise ValueError("Tox 身份不存在")
+    return True
 
 def enqueue_outbox(uid: str, peer: str, text: str, client_id: str) -> dict:
     """Encrypt a pending outgoing text, one idempotent browser-generated ID.
