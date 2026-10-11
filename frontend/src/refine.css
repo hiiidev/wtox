@@ -147,3 +147,119 @@ body:has(.ant-messenger){background:var(--wt-bg)!important}
   .ant-messenger .wt-mobile-me-page>.wechat-mobile-tabs{background:var(--wt-panel)!important;
     border-color:var(--wt-border)!important}
 }
+
+
+/* Unified light/dark application surfaces. Legacy WeChat theme fixed colors
+   used to override Ant Design tokens everywhere except inside modals. */
+html[data-wtox-theme="light"],html[data-wtox-theme="light"] body{
+  color-scheme:light;background:#f5f5f5!important;
+}
+html[data-wtox-theme="dark"],html[data-wtox-theme="dark"] body{
+  color-scheme:dark;background:#141414!important;
+}
+.ant-messenger[data-theme] .wechat-rail,
+.ant-messenger[data-theme] .ant-contact-sidebar,
+.ant-messenger[data-theme] .ant-chat-toolbar,
+.ant-messenger[data-theme] .ant-compose-area{
+  background:var(--wt-panel)!important;color:var(--wt-text)!important;
+  border-color:var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .wechat-rail-button:hover{
+  color:var(--wt-text)!important;background:var(--wt-hover)!important;
+}
+.ant-messenger[data-theme] .wechat-conversation{
+  color:var(--wt-text)!important;border-color:var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .wechat-list-head .ant-btn{
+  background:var(--wt-hover)!important;color:var(--wt-text)!important;
+}
+.ant-messenger[data-theme] .wechat-mobile-heading,
+.ant-messenger[data-theme] .wechat-no-contacts,
+.ant-messenger[data-theme] .ant-empty-chat,
+.ant-messenger[data-theme] .ant-empty-chat h3{color:var(--wt-text)!important}
+.ant-messenger[data-theme] .wechat-mobile-tabs,
+.ant-messenger[data-theme] .wt-mobile-me-page>.wechat-mobile-tabs{
+  background:var(--wt-panel)!important;border-color:var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .wechat-mobile-tabs button,
+.ant-messenger[data-theme] .wt-mobile-me-page .wechat-mobile-tabs button{
+  color:var(--wt-muted)!important;
+}
+.ant-messenger[data-theme] .wechat-mobile-tabs button.active,
+.ant-messenger[data-theme] .wt-mobile-me-page .wechat-mobile-tabs button.active{
+  color:var(--wt-primary)!important;
+}
+.ant-messenger[data-theme] .ant-compose-area .ant-sender,
+.ant-messenger[data-theme] .ant-compose-area .ant-sender textarea{
+  background:var(--wt-panel)!important;color:var(--wt-text)!important;
+  border-color:var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .ant-compose-area .ant-sender .ant-btn-primary{
+  background:var(--wt-primary)!important;border-color:var(--wt-primary)!important;
+}
+.ant-messenger .wt-list-actions{display:flex;align-items:center;gap:10px;}
+.ant-messenger .wt-list-actions .ant-badge-count{box-shadow:0 0 0 1px var(--wt-panel);}
+.ant-messenger .wt-peer-profile-heading{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+}
+.ant-messenger .wt-empty-conversation{max-width:min(330px,100%);gap:8px;}
+.ant-messenger .wt-empty-conversation h3{font-size:18px;font-weight:620;margin:4px 0 0;}
+.ant-messenger .wt-empty-conversation p{font-size:13px;color:var(--wt-muted)!important;line-height:1.5;}
+.ant-messenger .wt-empty-icon{width:72px;height:72px;border-radius:22px;
+  display:grid;place-items:center;background:var(--wt-panel);
+  border:1px solid var(--wt-border);color:var(--wt-muted);margin-bottom:7px;}
+.ant-messenger .wt-empty-icon .anticon{font-size:31px;}
+/* Compact, readable bubbles with a deliberate but short time-label gap. */
+.ant-messenger .wt-message-row .ant-bubble-content{
+  padding:8px 12px!important;min-height:unset!important;
+  line-height:1.45!important;border-radius:13px!important;
+}
+.ant-messenger .wt-message-row .ant-bubble-footer{
+  margin-top:5px!important;line-height:1.35!important;
+}
+.ant-messenger .wt-message-row .ant-bubble{max-width:min(76%,650px)!important}
+.ant-messenger .wt-message-row{align-items:flex-start!important}
+.ant-messenger .wt-selectable-message{position:relative;}
+.ant-messenger .wt-selectable-message.is-selecting{
+  cursor:pointer;user-select:none;-webkit-user-select:none;
+}
+.ant-messenger .wt-select-indicator{display:inline-grid;place-items:center;
+  position:absolute;left:-17px;top:10px;width:18px;height:18px;
+  border:1px solid var(--wt-muted);border-radius:50%;background:var(--wt-panel);
+  color:var(--wt-primary);font-size:12px;font-weight:800;z-index:1;
+}
+.ant-messenger .wt-selectable-message.is-batch-selected .wt-select-indicator{
+  border-color:var(--wt-primary);background:var(--wt-primary);color:#fff;
+}
+.ant-messenger .wt-selectable-message.is-batch-selected .ant-bubble-content,
+.ant-messenger .wt-selectable-message.is-batch-selected .wtox-attachment-bubble{
+  outline:2px solid var(--wt-primary)!important;outline-offset:2px;
+}
+.ant-messenger .wt-batch-toolbar{position:absolute;top:10px;left:50%;
+  transform:translateX(-50%);z-index:10;max-width:calc(100% - 22px);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:9px 12px;background:var(--wt-panel);border:1px solid var(--wt-border);
+  box-shadow:0 5px 25px #0002;border-radius:12px;color:var(--wt-text);white-space:nowrap;
+}
+.ant-messenger .wt-batch-toolbar strong{font-size:12px;font-weight:600;}
+@media(max-width:767px){
+  .ant-messenger .wt-message-row .ant-bubble{max-width:min(85%,440px)!important}
+  .ant-messenger .wt-select-indicator{left:0;top:7px}
+  .ant-messenger .wt-selectable-message.is-selecting{padding-left:24px}
+  .ant-messenger .wt-batch-toolbar{gap:5px;padding:7px;}
+  .ant-messenger .wt-batch-toolbar .ant-btn{padding-inline:7px;}
+  .ant-messenger[data-theme] .wechat-search,
+  .ant-messenger[data-theme] .wechat-list-head,
+  .ant-messenger[data-theme] .wechat-list{background:var(--wt-panel)!important}
+  .ant-messenger[data-theme] .wechat-search .ant-input-affix-wrapper{
+    background:var(--wt-hover)!important;color:var(--wt-text)!important}
+  .ant-messenger[data-theme] .wechat-conversation{background:var(--wt-panel)!important}
+  .ant-messenger[data-theme] .wechat-conversation.is-selected,
+  .ant-messenger[data-theme] .wechat-conversation:hover{
+    background:var(--wt-hover)!important}
+  .ant-messenger[data-theme] .wechat-conversation-name{color:var(--wt-text)!important}
+  .ant-messenger[data-theme] .wechat-conversation-preview{color:var(--wt-muted)!important}
+  .ant-messenger[data-theme] .ant-chat-toolbar .ant-btn{color:var(--wt-text)!important}
+  .ant-messenger[data-theme] .ant-compose-area .ant-sender{
+    background:var(--wt-panel)!important;border-color:var(--wt-border)!important}
+}

@@ -37,3 +37,15 @@ assert.ok(refined.includes("wt-message-outgoing") &&
 assert.match(refined,/background:var\(--wt-bg\)/);
 assert.match(refined,/scrollbar-width:none/);
 console.log("System themes, settings, Sender attachments, timeline images and token-based layout checks OK");
+
+assert.match(app,/aria-label="好友请求"/);
+assert.match(app,/onClick=\{\(\)=>setModal\("requests"\)\}/);
+assert.match(app,/friend\.status_message\?\.trim\(\)/);
+assert.match(app,/avatarLabel\(ownProfile\.name\|\|"我",user\.public_key\)/);
+assert.match(app,/selectedMessageIds\.size>0/);
+assert.match(app,/onClickCapture=\{event=>messageSelectionClick\(event,item\.id\)\}/);
+assert.match(app,/wt-empty-conversation/);
+assert.match(refined,/\.wt-batch-toolbar/);
+assert.match(refined,/html\[data-wtox-theme="light"\]/);
+assert.match(refined,/html\[data-wtox-theme="dark"\]/);
+assert.match(refined,/\.wt-message-row \.ant-bubble-content/);

@@ -107,6 +107,8 @@ export default function App(){
   const [avatarColors,setAvatarColors]=useState({});
   const [newBelowCount,setNewBelowCount]=useState(0);
   const [threadScrolling,setThreadScrolling]=useState(false);
+  const [selectedMessageIds,setSelectedMessageIds]=useState(()=>new Set());
+  const [deletingMessages,setDeletingMessages]=useState(false);
   const threadEl=useRef(null);
   const followLatest=useRef(true);
   const previousThread=useRef({peer:null,ids:[]});
@@ -162,26 +164,51 @@ export default function App(){
   },[user?.public_key,friends]);
   const avatarColor=useCallback(key=>avatarColors[key]||avatarFallbackColor(key),[avatarColors]);
   const longPressTimer=useRef(null);
+  const suppressSelectionClick=useRef(false);
   const cancelLongPress=()=>{if(longPressTimer.current)clearTimeout(longPressTimer.current);longPressTimer.current=null};
-  async function requestDelete(item){
-    cancelLongPress();
-    if(!item?.id || !history.current?.ready())return;
-    const detail=item.delivery_status==="queued"
-      ? "注意：已进入 VPS 队列的消息不会因为删除本地记录而自动撤回。"
-      : "只删除这个浏览器中的聊天记录，不会撤回好友已经收到的消息。";
-    if(!window.confirm("删除这条聊天记录？\n"+detail))return;
-    try{
-      await history.current.deleteEvent(item.id);
-      if(item.type==="file"&&item.file_id){
-        await history.current.deleteCachedImage(item.file_id);
-      }
-      await refreshHistory(history.current);
-      alert("已删除当前浏览器中的该条消息");
-    }catch(e){alert("删除失败："+e.message)}
+  const clearSelection=()=>{cancelLongPress();setSelectedMessageIds(new Set())};
+  function toggleMessageSelection(id){
+    setSelectedMessageIds(previous=>{
+      const next=new Set(previous);
+      if(next.has(id))next.delete(id);else next.add(id);
+      return next;
+    });
   }
-  function startLongPress(item){
+  function startLongPress(item,event){
     cancelLongPress();
-    longPressTimer.current=setTimeout(()=>requestDelete(item),650);
+    if(!item?.id||deletingMessages||!history.current?.ready()||
+       (event?.pointerType==="mouse"&&event.button!==0)||
+       event?.target?.closest?.("button,a,input,textarea,[role=button]"))return;
+    longPressTimer.current=setTimeout(()=>{
+      suppressSelectionClick.current=true;
+      setSelectedMessageIds(previous=>new Set([...previous,item.id]));
+      longPressTimer.current=null;
+    },650);
+  }
+  function messageSelectionClick(event,id){
+    if(suppressSelectionClick.current){
+      suppressSelectionClick.current=false;event.preventDefault();event.stopPropagation();return;
+    }
+    if(selectedMessageIds.size){
+      event.preventDefault();event.stopPropagation();
+      toggleMessageSelection(id);
+    }
+  }
+  async function requestDelete(){
+    const h=history.current;
+    if(!h?.ready()||!selectedMessageIds.size||deletingMessages)return;
+    setDeletingMessages(true);
+    try{
+      const records=messages.filter(item=>selectedMessageIds.has(item.id));
+      for(const item of records){
+        await h.deleteEvent(item.id);
+        if(item.type==="file"&&item.file_id)await h.deleteCachedImage(item.file_id);
+      }
+      await refreshHistory(h);
+      setSelectedMessageIds(new Set());
+      alert("已从当前浏览器删除 "+records.length+" 条聊天记录");
+    }catch(e){await refreshHistory(h).catch(()=>{});alert("批量删除失败："+e.message)}
+    finally{setDeletingMessages(false)}
   }
   const closeModal=useCallback(()=>setModal(""),[]);
   const alert=useCallback(message=>{
@@ -446,22 +473,12 @@ export default function App(){
     ["success","warning","error"][selectedFriend.user_status]||"success";
   const peerProfileContent=selectedFriend?(
 <div className="wt-peer-profile">
-              <Space size="middle" align="center">
-                <Badge dot color={selectedFriend.status===0?"#8c8c8c":
-                  ["#52c41a","#faad14","#ff4d4f"][selectedFriend.user_status]||"#52c41a"}
-                  offset={[-2,37]}>
-                  <Avatar size={48} shape="square" gap={4}
-                    style={{backgroundColor:avatarColor(selectedFriend.public_key)}}>
-                    {avatarLabel(selectedFriend.name,selectedFriend.public_key)}
-                  </Avatar>
-                </Badge>
-                <div>
-                  <Typography.Title level={5} style={{margin:0}}>
-                    {selectedFriend.name||"Tox 好友"}
-                  </Typography.Title>
-                  <Badge status={peerStatusColor} text={peerStatus}/>
-                </div>
-              </Space>
+              <div className="wt-peer-profile-heading">
+                <Typography.Title level={5} style={{margin:0}}>
+                  {selectedFriend.name||"Tox 好友"}
+                </Typography.Title>
+                <Badge status={peerStatusColor} text={peerStatus}/>
+              </div>
               <Divider/>
               <Typography.Text type="secondary">状态消息</Typography.Text>
               <Typography.Paragraph className="wt-peer-status-message">
@@ -559,6 +576,7 @@ export default function App(){
   function selectFriend(key){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
     selectedRef.current=key;setSelected(key);
+    clearSelection();
     setPeerDetailsOpen(false);
     setDraft(drafts.current.get(key)||"");setMobileChat(true);
     // Opening the same conversation again also restores bottom following.
@@ -857,8 +875,8 @@ export default function App(){
             <Badge dot color={ownBadgeColor} offset={[-2,35]}>
               <Avatar size={44} shape="square" gap={3} className="wechat-self-avatar"
                 style={{backgroundColor:avatarColor(user.public_key)}}
-                icon={!ownProfile.name?<UserOutlined/>:undefined}>
-                {ownProfile.name?avatarLabel(ownProfile.name):undefined}
+                >
+                {avatarLabel(ownProfile.name||"我",user.public_key)}
               </Avatar>
             </Badge>
           </Tooltip>
@@ -890,8 +908,8 @@ export default function App(){
               <Tooltip title={ownStatusLabel}>
                 <Badge dot color={ownBadgeColor} offset={[-2,25]}>
                   <Avatar size={32} shape="square" gap={3} style={{backgroundColor:avatarColor(user.public_key)}}
-                    icon={!ownProfile.name?<UserOutlined/>:undefined}>
-                    {ownProfile.name?avatarLabel(ownProfile.name):undefined}
+                    >
+                    {avatarLabel(ownProfile.name||"我",user.public_key)}
                   </Avatar>
                 </Badge>
               </Tooltip>
@@ -899,10 +917,18 @@ export default function App(){
             <strong>wTox</strong>
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
-          <Tooltip title="添加好友">
-            <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
-              onClick={()=>setModal("add")}/>
-          </Tooltip>
+          <div className="wt-list-actions">
+            <Tooltip title="好友请求">
+              <Badge count={friendRequests.length} size="small">
+                <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
+                  onClick={()=>setModal("requests")}/>
+              </Badge>
+            </Tooltip>
+            <Tooltip title="添加好友">
+              <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
+                onClick={()=>setModal("add")}/>
+            </Tooltip>
+          </div>
         </div>
         <div className="wechat-search">
           <Input allowClear value={filter} placeholder="搜索"
@@ -913,11 +939,12 @@ export default function App(){
           {visibleFriends.map(friend=>{
             const recent=latestByPeer.get(friend.public_key);
             const draftsText=drafts.current.get(friend.public_key)||"";
+            const friendStatusMessage=friend.status_message?.trim()||"暂无状态消息";
             const preview=section==="contacts"
-              ?statusLabel(friend.status)
+              ?friendStatusMessage
               :draftsText?"[草稿] "+draftsText:
                 recent?.type==="file"?"[附件] "+(recent.file_name||"文件"):
-                recent?.text||statusLabel(friend.status);
+                recent?.text||friendStatusMessage;
             const when=recent?.at?new Date(recent.at):null;
             const clock=when ? (Date.now()-when.getTime()>86400000?
               when.toLocaleDateString("zh-CN",{month:"2-digit",day:"2-digit"}):
@@ -1014,6 +1041,19 @@ export default function App(){
           </Space>
         </div>
         <div className="wt-thread-shell">
+          {selectedMessageIds.size>0&&<div className="wt-batch-toolbar" role="toolbar" aria-label="批量删除聊天记录">
+            <strong>已选 {selectedMessageIds.size} 条</strong>
+            <AntButton size="small" onClick={()=>setSelectedMessageIds(new Set(thread.map(m=>m.id)))}>
+              全选
+            </AntButton>
+            <AntButton size="small" onClick={clearSelection}>取消</AntButton>
+            <Popconfirm title={`删除选中的 ${selectedMessageIds.size} 条记录？`}
+              description="仅删除此浏览器中的记录，不能撤回消息或取消 VPS 队列。"
+              okText="删除" cancelText="取消" okButtonProps={{danger:true}}
+              onConfirm={requestDelete}>
+              <AntButton size="small" danger loading={deletingMessages}>删除</AntButton>
+            </Popconfirm>
+          </div>}
           <div ref={threadEl}
             className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
             onScroll={onThreadScroll} role="log" aria-label="聊天记录">
@@ -1022,37 +1062,40 @@ export default function App(){
             <img src="/logo.svg" alt="" width="74" height="74"/>
             <h3>欢迎使用 wTox</h3><p>选择一位好友，开始私人对话</p>
           </div>}
-          {selected&&!thread.length&&<div className="ant-empty-chat">
-            <MessageOutlined style={{fontSize:42}}/><h3>还没有聊天记录</h3>
-            <p>发送第一条消息，或等待好友回复</p>
+          {selected&&!thread.length&&<div className="ant-empty-chat wt-empty-conversation">
+            <div className="wt-empty-icon"><MessageOutlined/></div>
+            <h3>还没有聊天记录</h3>
+            <p>发送一条消息，开始你们的对话</p>
           </div>}
           {thread.map(item=>item.type==="file"
-            ? <div key={item.id} className="ant-timeline-file"
-                onContextMenu={event=>{event.preventDefault();requestDelete(item)}}
-                onTouchStart={()=>startLongPress(item)}
-                onTouchEnd={cancelLongPress}
-                onTouchMove={cancelLongPress}>
+            ? <div key={item.id} className={"ant-timeline-file wt-selectable-message"+
+                (selectedMessageIds.has(item.id)?" is-batch-selected":"")+
+                (selectedMessageIds.size?" is-selecting":"")}
+                onContextMenu={event=>{event.preventDefault();setSelectedMessageIds(p=>new Set([...p,item.id]))}}
+                onPointerDown={event=>startLongPress(item,event)}
+                onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
+                onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
+                onClickCapture={event=>messageSelectionClick(event,item.id)}>
+                {selectedMessageIds.size>0&&<span className="wt-select-indicator" aria-hidden="true">
+                  {selectedMessageIds.has(item.id)?"✓":""}
+                </span>}
                 <AttachmentBubble file={item}
                   accept={id=>controlFile(id,"accept")}
                   reject={id=>controlFile(id,"reject")}
                   download={downloadFile} historyHandle={history.current}/>
               </div>
-            : <div key={item.id} className={"ant-message-wrap wt-message-row "+
-                (item.direction==="outgoing"?"wt-message-outgoing":"wt-message-incoming")}
-                onContextMenu={event=>{event.preventDefault();requestDelete(item)}}
-                onTouchStart={()=>startLongPress(item)}
-                onTouchEnd={cancelLongPress}
-                onTouchMove={cancelLongPress}>
-                {item.direction!=="outgoing"&&<AntButton type="text"
-                  className="wt-message-peer-avatar" aria-label="查看好友 Tox 资料"
-                  onClick={event=>{event.stopPropagation();setPeerDetailsOpen(true)}}
-                  onTouchStart={event=>event.stopPropagation()}
-                  onContextMenu={event=>event.stopPropagation()}>
-                  <Avatar size={34} shape="square" gap={3}
-                    style={{backgroundColor:avatarColor(item.public_key)}}>
-                    {avatarLabel(selectedFriend?.name,item.public_key)}
-                  </Avatar>
-                </AntButton>}
+            : <div key={item.id} className={"ant-message-wrap wt-message-row wt-selectable-message "+
+                (item.direction==="outgoing"?"wt-message-outgoing":"wt-message-incoming")+
+                (selectedMessageIds.has(item.id)?" is-batch-selected":"")+
+                (selectedMessageIds.size?" is-selecting":"")}
+                onContextMenu={event=>{event.preventDefault();setSelectedMessageIds(p=>new Set([...p,item.id]))}}
+                onPointerDown={event=>startLongPress(item,event)}
+                onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
+                onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
+                onClickCapture={event=>messageSelectionClick(event,item.id)}>
+                {selectedMessageIds.size>0&&<span className="wt-select-indicator" aria-hidden="true">
+                  {selectedMessageIds.has(item.id)?"✓":""}
+                </span>}
                 <Bubble content={String(item.text||"")}
                   placement={item.direction==="outgoing"?"end":"start"}
                   shape="round" variant="filled"

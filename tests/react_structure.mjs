@@ -77,8 +77,9 @@ assert.ok(wechatStyles.includes("grid-template-columns:70px") &&
   "Desktop three-column and mobile single-pane layouts must exist");
 assert.ok(app.includes("latestByPeer") && app.includes("unreadFor"),
   "Conversations must display recent messages and unread counts");
-assert.ok(app.includes("startLongPress")&&app.includes("requestDelete"),
-  "Long-press message deletion is required");
+assert.ok(app.includes("startLongPress")&&app.includes("selectedMessageIds")&&
+  app.includes("requestDelete")&&app.includes("wt-batch-toolbar"),
+  "Long-press must open a local batch-selection deletion toolbar");
 assert.ok(history.includes("cacheImage")&&history.includes("expireImages"),
   "Encrypted image cache expiry is required");
 assert.ok(existsSync("frontend/public/logo.svg"),"Generated wtox logo missing");
@@ -87,10 +88,10 @@ console.log("wTox Ant Design chat, mandatory VPS queue and native profile struct
 
 assert.ok(app.includes("wTox")&&html.includes("<title>wTox</title>"),"wTox branding must be uniform");
 assert.ok(!app.includes("exportQtox")&&!app.includes("toQtoxTsv"),"qTox history export must be removed");
-assert.ok(app.includes('aria-label="查看好友 Tox 资料"'),
-  "Both chat header and incoming bubble need a clickable peer avatar");
-assert.ok(app.includes('wt-message-peer-avatar')&&app.includes('wt-peer-avatar-button'),
-  "Incoming message and header avatars should use Ant Design buttons");
+assert.ok(app.includes('aria-label="查看好友 Tox 资料"') &&
+  app.includes('wt-peer-avatar-button'),"Chat header should open peer details");
+assert.ok(!app.includes('className="wt-message-peer-avatar"'),
+  "Incoming message bubbles should not have peer avatars");
 assert.ok(app.includes('placement="bottom"')&&app.includes('<Drawer open={peerDetailsOpen}'),
   "Touch layout should use native Ant Design bottom Drawer for friend details");
 assert.ok(app.includes('copyable={{')&&app.includes('selectedFriend.tox_id||selectedFriend.public_key'),
@@ -106,8 +107,8 @@ assert.ok(app.includes('className="wt-mobile-me-page"') &&
 assert.ok(app.includes('peerProfileContent') &&
   app.includes('isMobile') && app.includes('Grid.useBreakpoint'),
   "Peer details must use responsive Ant Design components");
-assert.ok(app.includes('onTouchStart={event=>event.stopPropagation()}'),
-  "Tapping an incoming avatar must not trigger long-press message deletion");
+assert.ok(app.includes('onPointerDown={event=>startLongPress(item,event)}'),
+  "Pointer long press must support mouse and touch in message timeline");
 assert.ok(app.includes('selectedFriend?.status_message?.trim()')&&
   app.includes('<Badge status={peerStatusColor} text={peerStatus}/>'),
   "Peer state should be an Ant Badge by the nickname and status message below");
