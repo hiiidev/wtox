@@ -710,6 +710,7 @@ export default function App(){
       alert("附件大小需为 1 字节至 5 MiB");return;
     }
     setBusy(true);
+    let transfer;
     try{
       const url="/api/files/send?peer="+encodeURIComponent(selected)+
         "&name="+encodeURIComponent(file.name);
@@ -718,25 +719,36 @@ export default function App(){
         headers:{"Content-Type":"application/octet-stream"},
         body:file
       });
-      const transfer=await response.json();
+      transfer=await response.json();
+    }catch(error){
+      alert("提交附件失败："+error.message);
+      setBusy(false);
+      return;
+    }
+    // The native API already accepted the send. Never suggest resending
+    // merely because a local image thumbnail or history write failed.
+    setUploadFile(null);
+    if(attachmentInput.current)attachmentInput.current.value="";
+    try{
       const h=history.current;
-      // Directly persist the returned transfer, independently of WebSocket
-      // timing; then it always appears among the current chat bubbles.
       if(h?.ready()){
         await h.persistFile(transfer);
-        if(/\.(png|jpe?g|webp|gif)$/i.test(file.name) && file.size<=5*1024*1024){
+        if(/\.(png|jpe?g|webp|gif)$/i.test(file.name)&&file.size<=5*1024*1024){
           const mime=file.type.startsWith("image/")?file.type:
-            /\.png$/i.test(file.name)?"image/png":"image/jpeg";
-          await h.cacheImage(transfer.id,new Blob([file],{type:mime}));
+            /\.png$/i.test(file.name)?"image/png":
+            /\.webp$/i.test(file.name)?"image/webp":
+            /\.gif$/i.test(file.name)?"image/gif":"image/jpeg";
+          try{
+            await h.cacheImage(transfer.id,new Blob([file],{type:mime}));
+          }catch(error){alert("附件已提交，但图片本地缓存失败："+error.message)}
         }
         await refreshHistory(h);
       }
-      setUploadFile(null);
-      if(attachmentInput.current)attachmentInput.current.value="";
-      await refreshTransfers();
-      alert("附件已加入聊天，等待对方接受");
-    }catch(error){alert("发送附件失败："+error.message)}
-    finally{setBusy(false)}
+    }catch(error){alert("附件已提交，但本地历史保存失败："+error.message)}
+    try{await refreshTransfers()}catch(error){
+      alert("附件已提交，但传输列表同步失败："+error.message)
+    }
+    setBusy(false);
   }
   async function controlFile(id,action){
     try{
