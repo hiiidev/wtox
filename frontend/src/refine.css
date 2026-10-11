@@ -675,3 +675,132 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     width:43px!important;min-width:43px!important;
   }
 }
+
+
+/* Online presence stays clean on inactive chat/contact cards.
+   Only the selected card receives a contrasting ring around the status dot. */
+.ant-messenger[data-theme] .wechat-conversation .wechat-presence.online{
+  background:#0bbd70!important;
+  opacity:1!important;
+  width:9px;height:9px;
+  outline:none!important;
+  box-shadow:none!important;
+}
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-presence.online{
+  outline:1.5px solid color-mix(in srgb,var(--wt-text) 65%,transparent)!important;
+  outline-offset:2px!important;
+  box-shadow:0 0 0 2px var(--wt-selected)!important;
+}
+/* Header action: clearer filled ellipsis rather than a tiny thin stroke. */
+.ant-messenger[data-theme] .wt-chat-more-button.ant-btn{
+  width:42px!important;min-width:42px!important;height:42px!important;
+  color:var(--wt-text)!important;
+  background:transparent!important;
+}
+.ant-messenger[data-theme] .wt-chat-more-button.ant-btn .anticon,
+.ant-messenger[data-theme] .wt-chat-more-button.ant-btn svg{
+  display:block;width:26px;height:26px;
+}
+.ant-messenger[data-theme] .wt-peer-profile{
+  gap:11px!important;
+}
+.ant-messenger[data-theme] .wt-peer-profile-heading{
+  display:flex!important;flex-direction:column!important;
+  align-items:stretch!important;gap:8px!important;
+  border:1px solid var(--wt-border);
+  background:var(--wt-hover);
+  border-radius:14px;padding:15px 17px!important;
+}
+.ant-messenger[data-theme] .wt-peer-profile-eyebrow{
+  font-size:12px!important;line-height:1.4;
+}
+.ant-messenger[data-theme] .wt-peer-profile-heading-main{
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;column-gap:16px;row-gap:10px;
+}
+.ant-messenger[data-theme] .wt-peer-profile-name.ant-typography{
+  margin:0!important;color:var(--wt-text)!important;
+  font-size:21px!important;font-weight:700!important;
+  line-height:1.35!important;overflow-wrap:anywhere;
+}
+.ant-messenger[data-theme] .wt-peer-profile-presence{
+  display:inline-flex;align-items:center;flex-shrink:0;
+  border:1px solid var(--wt-border);
+  border-radius:99px;padding:3px 9px;background:var(--wt-panel);
+}
+.ant-messenger[data-theme] .wt-peer-profile-presence .ant-badge-status-text{
+  color:var(--wt-muted);font-size:12px;
+}
+.ant-messenger[data-theme] .wt-own-tox-id-heading{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:8px;margin-bottom:7px;flex-wrap:wrap;
+}
+.wt-own-qr-content{display:flex;align-items:center;
+  flex-direction:column;gap:17px;padding:8px 0 10px;text-align:center}
+.wt-own-qr-content .ant-qrcode{background:white!important;
+  padding:10px!important;border-radius:12px}
+.wt-own-qr-content .ant-typography{font-size:12px;line-height:1.6}
+/* Relocate file selection to the top edge of the composer, outside Sender. */
+.ant-messenger[data-theme] .wt-compose-tools{
+  display:flex;gap:8px;align-items:center;min-height:42px;
+  padding:4px 0;
+}
+.ant-messenger[data-theme] .wt-compose-attach-button.ant-btn{
+  flex:0 0 40px;width:40px;height:40px;
+  border:1px solid var(--wt-border)!important;
+  border-radius:11px!important;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--wt-text)!important;background:var(--wt-panel)!important;
+  font-size:19px;
+}
+.ant-messenger[data-theme] .wt-compose-attach-button.ant-btn:hover:not(:disabled){
+  background:var(--wt-hover)!important;color:var(--wt-primary)!important;
+}
+.ant-messenger[data-theme] .wt-compose-tools .ant-compose-status{
+  padding:0!important;margin:0!important;
+  flex:1;min-width:0;font-size:12px!important;
+  color:var(--wt-muted)!important;
+}
+/* Ant Design message prompts have no custom old toast layer. */
+.wt-permission-message{display:inline-flex;align-items:center;
+  justify-content:center;gap:7px;flex-wrap:wrap}
+.wt-permission-message .ant-btn{padding:2px 6px!important}
+.wt-permission-invite .ant-message-notice-content{
+  border-radius:13px!important;padding:9px 13px!important;
+  box-shadow:0 6px 24px #0002!important;
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .ant-chat-toolbar .ant-mobile-back.ant-btn,
+  .ant-messenger[data-theme] .ant-chat-toolbar .ant-mobile-back.ant-btn:hover,
+  .ant-messenger[data-theme] .ant-chat-toolbar .ant-mobile-back.ant-btn:active,
+  .ant-messenger[data-theme] .ant-chat-toolbar .ant-mobile-back.ant-btn:focus,
+  .ant-messenger[data-theme] .ant-chat-toolbar .ant-mobile-back.ant-btn:focus-visible{
+    background:transparent!important;border:0!important;
+    box-shadow:none!important;outline:0!important;
+    color:var(--wt-text)!important;
+    -webkit-tap-highlight-color:transparent!important;
+  }
+  .ant-messenger[data-theme] .ant-mobile-back::before,
+  .ant-messenger[data-theme] .ant-mobile-back::after{
+    content:none!important;display:none!important;
+  }
+  .ant-messenger[data-theme] .ant-chat-toolbar .ant-mobile-back.ant-btn .ant-btn-icon{
+    box-shadow:none!important;background:transparent!important;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button svg{
+    width:24px;height:24px;display:block;flex:none;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button{
+    color:var(--wt-muted)!important;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button.active{
+    color:var(--wt-primary)!important;
+  }
+  .ant-messenger[data-theme] .wt-compose-tools{
+    padding:3px 0 7px;min-height:42px;gap:9px;
+  }
+  .ant-messenger[data-theme] .wt-compose-attach-button.ant-btn{
+    width:42px;height:42px;flex-basis:42px;
+  }
+}
