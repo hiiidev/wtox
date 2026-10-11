@@ -13,6 +13,7 @@ import time
 from typing import Callable
 
 from .tox_identity import ToxCore, ToxIdentityError
+from .file_transfer import FileTransfers
 
 U8 = C.c_uint8
 U32 = C.c_uint32
@@ -97,6 +98,8 @@ class ToxSession:
         self.callback_message(self.tox, self._message_cb)
         self.callback_friend_status(self.tox, self._friend_status_cb)
         self.callback_self_status(self.tox, self._self_status_cb)
+        self.files = FileTransfers(self)
+        self.files.attach()
 
     def _install_native_functions(self):
         bind = self.core._fn
@@ -152,6 +155,8 @@ class ToxSession:
 
     def _on_friend_status(self, _tox, friend, status, _user):
         try:
+            if int(status) == 0:
+                self.files.friend_disconnected(int(friend))
             self._emit({"type": "friend_connection", "public_key": self._friend_key(friend),
                         "status": int(status)})
         except Exception:
