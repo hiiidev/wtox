@@ -185,3 +185,14 @@ html:has(.ant-messenger),body:has(.ant-messenger){
   .ant-messenger .wtox-modal{max-height:calc(100dvh - 24px)}
 }
 @media(prefers-reduced-motion:reduce){.ant-messenger *{transition:none!important}}
+
+/* Native Tox profile editor in unified Ant Design settings. */
+.ant-messenger .wtox-profile-status{
+  display:block;width:100%;border:1px solid var(--w-border);
+  background:var(--w-surface);color:var(--w-text);
+  border-radius:11px;padding:10px 13px;font:inherit;
+  outline-offset:2px;
+}
+.ant-messenger .wtox-profile-status:focus-visible{
+  outline:2px solid var(--w-accent);
+}
