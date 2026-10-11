@@ -140,3 +140,21 @@ body{background:radial-gradient(circle at 10% -20%,#1d3252,transparent 55%),#0c1
 
 .wtox-logo{width:43px;height:43px;object-fit:contain;display:block;flex-shrink:0}
 .wtox-auth-card>.wtox-logo{width:70px;height:70px;margin:0 auto 7px}
+
+/* Tox-native attachments live next to text messages in the same timeline. */
+.wtox-attachment-row{display:flex;flex-direction:column;align-items:flex-start;
+ gap:3px;padding:6px 18px;max-width:100%}
+.wtox-attachment-row.out{align-items:flex-end}
+.wtox-attachment-bubble{display:flex;flex-direction:column;gap:7px;
+ max-width:min(390px,88%);padding:12px;border:1px solid #405b7d;
+ border-radius:15px 15px 15px 4px;background:#233b56;
+ color:#e8f3ff;overflow-wrap:anywhere}
+.wtox-attachment-row.out .wtox-attachment-bubble{background:#255999;
+ border-radius:15px 15px 4px 15px;border-color:#4682c2}
+.wtox-attachment-bubble strong{font-size:13px}
+.wtox-attachment-bubble small,.wtox-attachment-row time{font-size:11px;color:#bbcee5}
+.wtox-attachment-image{display:block;max-width:100%;width:auto;height:auto;
+ max-height:260px;object-fit:contain;border-radius:10px;background:#0e192a}
+.wtox-attachment-actions{display:flex;gap:6px}
+.wtox-attachment-bubble .wtox-btn{align-self:flex-start;font-size:12px;padding:7px 11px}
+@media(max-width:700px){.wtox-attachment-row{padding:5px 9px}.wtox-attachment-bubble{max-width:90%}}
