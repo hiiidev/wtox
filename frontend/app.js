@@ -195,7 +195,7 @@ async function persistEvent(event) {
     // Only native outgoing messages have receipt identifiers.
     message_id: event.direction==="outgoing" ? event.message_id : undefined,
     session_id: event.direction==="outgoing" ? event.session_id : undefined,
-    delivery_status: event.direction==="outgoing" ? (event.delivery_status||"submitted") : undefined,
+    delivery_status: event.direction==="outgoing" ? (event.delivery_status||"sent") : undefined,
   };
   const enc=await seal(record,historyKey);
   const tx=historyDb.transaction("events","readwrite");
@@ -209,7 +209,7 @@ async function applyMessageReceipt(event) {
   if(!historyDb||!historyKey)return false;
   // Restrict matching to a single native Toxcore instance. Message IDs can
   // be reused when a Tox profile is restored after a process restart.
-  if(event.type!=="message_receipt" || event.status!=="sent" ||
+  if(event.type!=="message_receipt" || !["read","sent"].includes(event.status) ||
      typeof event.public_key!=="string" ||
      typeof event.session_id!=="string" ||
      !Number.isInteger(event.message_id))return false;
@@ -220,8 +220,8 @@ async function applyMessageReceipt(event) {
        record.public_key===event.public_key &&
        record.session_id===event.session_id &&
        record.message_id===event.message_id){
-      if(record.delivery_status!=="sent"){
-        record.delivery_status="sent";
+      if(record.delivery_status!=="read"){
+        record.delivery_status="read";
         const encrypted=await seal(record,historyKey);
         const tx=historyDb.transaction("events","readwrite");
         tx.objectStore("events").put({id:row.id,...encrypted});
@@ -280,7 +280,8 @@ async function renderHistory(){
     const row=document.createElement("div");row.className="bubble-row"+(mine?" mine":"");
     const bubble=document.createElement("div");bubble.className="bubble";bubble.textContent=e.text||"";
     const stamp=document.createElement("div");stamp.className="bubble-info";
-    stamp.textContent=new Date(e.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+(mine?(e.delivery_status==="sent"?" · 已发送":" · 已提交"):"");
+    stamp.textContent=new Date(e.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+(mine?(e.delivery_status==="read"?" · 已读取":" · 已发送"):"");
+    if(mine)stamp.title="已发送：本机 Toxcore 接受消息；已读取：对方 Tox 客户端回执，不保证本人阅读";
     row.append(bubble,stamp);pane.append(row);
   }
   pane.scrollTop=pane.scrollHeight;
@@ -704,14 +705,14 @@ async function sendNow(){
         type:"message",direction:"outgoing",public_key:peer,text,
         session_id:result.session_id,
         message_id:result.message_id,
-        delivery_status:"submitted",
+        delivery_status:result.status||"sent",
       });
       // Resolve receipts that arrived before the HTTP response or IndexedDB
       // write. A non-ACKed receipt remains in the seven-day pending queue.
       await recoverPending();
       await renderHistory();
       error("");
-    }catch(e){error("已提交 Tox 发送，但本地历史保存失败："+e.message)}
+    }catch(e){error("已发送到 Tox 网络，但本地历史保存失败："+e.message)}
   }catch(e){
     // Tox error 3 means nothing was sent. Keep per-peer unsent draft.
     drafts.set(peer,text);
