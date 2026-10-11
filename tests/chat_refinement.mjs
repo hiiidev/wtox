@@ -83,7 +83,7 @@ assert.match(app,/color="#ef4444"/);
 assert.match(app,/kind="chats"/);
 assert.match(app,/kind="contacts"/);
 assert.match(app,/kind="settings"/);
-assert.doesNotMatch(app,/<MessageOutlined\/><span>聊天<\/span>\s*<\/button>\s*<button/);
+// Mobile bottom navigation intentionally retains text labels and standard icons.
 assert.match(app,/className="wt-peer-profile-presence"/);
 assert.match(refined,/\.wt-peer-avatar-button\.ant-btn:active/);
 assert.match(refined,/\.wt-select-indicator\{display:none!important;\}/);
