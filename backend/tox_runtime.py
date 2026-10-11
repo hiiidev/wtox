@@ -131,6 +131,11 @@ class ToxSession:
         self.friend_connection = bind("tox_friend_get_connection_status", C.c_int, P, U32, ERR)
         self.friend_name_size = bind("tox_friend_get_name_size", C.c_size_t, P, U32, ERR)
         self.friend_name = bind("tox_friend_get_name", C.c_bool, P, U32, IP, ERR)
+        self.friend_status_message_size = bind("tox_friend_get_status_message_size",
+                                               C.c_size_t, P, U32, ERR)
+        self.friend_status_message = bind("tox_friend_get_status_message",
+                                          C.c_bool, P, U32, IP, ERR)
+        self.friend_user_status = bind("tox_friend_get_status", C.c_int, P, U32, ERR)
         self.get_name_size = bind("tox_self_get_name_size", C.c_size_t, P)
         self.get_name = bind("tox_self_get_name", None, P, IP)
         self.set_name_native = bind("tox_self_set_name", C.c_bool, P, IP, C.c_size_t, ERR)
@@ -296,7 +301,27 @@ class ToxSession:
                         name = bytes(name_buf).decode("utf-8", "replace")
                 error.value = 0
                 status = int(self.friend_connection(self.tox, number, C.byref(error)))
-                friends.append({"public_key": key, "name": name, "status": status})
+                # Tox keeps the last known status message and user status for
+                # each friend; these differ from TCP/UDP connection state.
+                error.value = 0
+                message_len = int(self.friend_status_message_size(
+                    self.tox, number, C.byref(error)))
+                status_message = ""
+                if error.value == 0 and 0 < message_len <= 1007:
+                    message_buf = (U8 * message_len)()
+                    error.value = 0
+                    if self.friend_status_message(self.tox, number,
+                                                  message_buf, C.byref(error)):
+                        if error.value == 0:
+                            status_message = bytes(message_buf).decode("utf-8", "replace")
+                error.value = 0
+                user_status = int(self.friend_user_status(self.tox, number,
+                                                          C.byref(error)))
+                if error.value != 0 or user_status not in (0,1,2):
+                    user_status = 0
+                friends.append({"public_key": key, "name": name,
+                                "status": status, "status_message": status_message,
+                                "user_status": user_status})
             return friends
 
     def self_profile(self) -> dict:
