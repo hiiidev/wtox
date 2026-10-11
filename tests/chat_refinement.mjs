@@ -30,12 +30,12 @@ assert.match(app,/await h\.persistFile\(transfer\)/);
 assert.match(app,/await h\.cacheImage\(transfer\.id/);
 assert.match(app,/<FileCard name=\{file\.file_name\}/);
 assert.match(app,/<Image className="wtox-attachment-image"/);
-assert.match(refined,/max-width:900px/);
+assert.match(refined,/max-width:none!important/);
 assert.ok(refined.includes("wt-message-outgoing") &&
   refined.includes("justify-content:flex-end"),
   "Outgoing messages should align to the right");
 assert.match(refined,/background:var\(--wt-bg\)/);
-assert.match(refined,/scrollbar-width:none/);
+assert.match(refined,/scrollbar-gutter:stable/);
 console.log("System themes, settings, Sender attachments, timeline images and token-based layout checks OK");
 
 assert.match(app,/aria-label="好友请求"/);
@@ -62,3 +62,14 @@ assert.match(refined,/\.ant-messenger\[data-theme\] \.wt-thread-shell>\.ant-thre
 assert.match(refined,/\.ant-messenger\[data-theme\] \.wechat-conversation\.is-selected/);
 assert.match(refined,/max-width:none!important;\s*margin-inline:0!important/);
 assert.match(refined,/background:var\(--wt-chat\)!important/);
+
+assert.match(app,/aria-label="更多操作"/);
+assert.match(app,/label:"删除好友",danger:true/);
+assert.match(app,/open=\{deleteFriendOpen&&!!selectedFriend\}/);
+assert.match(app,/okButtonProps=\{\{danger:true,loading:removingFriend\}\}/);
+assert.doesNotMatch(app,/if\(!selected\|\|!confirm\(/);
+assert.match(app,/--wt-scroll-thumb/);
+assert.match(app,/--wt-scroll-hover/);
+assert.match(refined,/scrollbar-color:var\(--wt-scroll-thumb\)/);
+assert.match(refined,/scrollbar-color:var\(--wt-scroll-hover\)/);
+assert.match(refined,/\.wt-chat-more-button\.ant-btn/);

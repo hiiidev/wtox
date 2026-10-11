@@ -101,6 +101,8 @@ export default function App(){
   const [section,setSection]=useState("chats");
   const [friendRequests,setFriendRequests]=useState([]);
   const [peerDetailsOpen,setPeerDetailsOpen]=useState(false);
+  const [deleteFriendOpen,setDeleteFriendOpen]=useState(false);
+  const [removingFriend,setRemovingFriend]=useState(false);
   const [seen,setSeen]=useState({});
   const [filter,setFilter]=useState(""),[draft,setDraft]=useState("");
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
@@ -589,7 +591,7 @@ export default function App(){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
     selectedRef.current=key;setSelected(key);
     clearSelection();
-    setPeerDetailsOpen(false);
+    setPeerDetailsOpen(false);setDeleteFriendOpen(false);
     setDraft(drafts.current.get(key)||"");setMobileChat(true);
     // Opening the same conversation again also restores bottom following.
     requestAnimationFrame(scrollToLatest);
@@ -681,11 +683,19 @@ export default function App(){
     }catch(error){alert(error.message)}
   }
   async function removeFriend(){
-    if(!selected||!confirm("删除当前 Tox 好友？本地历史不会被删除。"))return;
+    if(!selected||removingFriend)return;
+    const publicKey=selected;
+    setRemovingFriend(true);
     try{
-      await api("/api/friends/"+encodeURIComponent(selected),{method:"DELETE"});
-      setSelected(null);selectedRef.current=null;setMobileChat(false);await refreshFriends();
-    }catch(error){alert(error.message)}
+      await api("/api/friends/"+encodeURIComponent(publicKey),{method:"DELETE"});
+      setDeleteFriendOpen(false);
+      if(selectedRef.current===publicKey){
+        setSelected(null);selectedRef.current=null;setMobileChat(false);clearSelection();
+      }
+      await refreshFriends();
+      alert("已删除好友，本地聊天记录仍然保留");
+    }catch(error){alert("删除好友失败："+error.message)}
+    finally{setRemovingFriend(false)}
   }
   async function saveOwnProfile(){
     setProfileSaving(true);
@@ -884,7 +894,9 @@ export default function App(){
       "--wt-own":uiColors.own,
       "--wt-incoming":uiColors.incoming,
       "--wt-own-text":uiColors.ownText,
-      "--wt-incoming-text":uiColors.incomingText
+      "--wt-incoming-text":uiColors.incomingText,
+      "--wt-scroll-thumb":effectiveTheme==="dark"?"rgba(255,255,255,.16)":"rgba(55,60,65,.17)",
+      "--wt-scroll-hover":effectiveTheme==="dark"?"rgba(255,255,255,.28)":"rgba(55,60,65,.28)"
     }}>
     <div className="wtox-workspace ant-workspace wechat-layout">
       <nav className="wechat-rail" aria-label="主导航">
@@ -1049,15 +1061,23 @@ export default function App(){
               </small>
             </div>
           </div>
-          <Space>
-            <Tooltip title="删除当前好友">
-              <Popconfirm title="删除此 Tox 好友？" description="本地聊天记录不会被删除"
-                onConfirm={removeFriend} okText="删除" cancelText="取消" disabled={!selected}>
-                <AntButton danger shape="circle" disabled={!selected}
-                  icon={<DeleteOutlined/>} aria-label="删除好友"/>
-              </Popconfirm>
-            </Tooltip>
-          </Space>
+          <Tooltip title={selectedFriend?"更多操作":""}>
+            <Dropdown trigger={["click"]} disabled={!selectedFriend}
+              menu={{
+                items:[
+                  {key:"profile",icon:<UserOutlined/>,label:"查看好友资料"},
+                  {type:"divider"},
+                  {key:"delete",icon:<DeleteOutlined/>,label:"删除好友",danger:true}
+                ],
+                onClick:({key})=>{
+                  if(key==="profile")setPeerDetailsOpen(true);
+                  if(key==="delete")setDeleteFriendOpen(true);
+                }
+              }}>
+              <AntButton type="text" shape="circle" className="wt-chat-more-button"
+                icon={<MoreOutlined/>} aria-label="更多操作" disabled={!selectedFriend}/>
+            </Dropdown>
+          </Tooltip>
         </div>
         <div className="wt-thread-shell">
           {selectedMessageIds.size>0&&<div className="wt-batch-toolbar" role="toolbar" aria-label="批量删除聊天记录">
@@ -1171,6 +1191,20 @@ export default function App(){
         </div>
       </main>
     </div>
+
+    <AntModal open={deleteFriendOpen&&!!selectedFriend} title="删除好友"
+      centered destroyOnHidden onCancel={()=>setDeleteFriendOpen(false)}
+      onOk={removeFriend} okText="删除好友" cancelText="取消"
+      okButtonProps={{danger:true,loading:removingFriend}}
+      cancelButtonProps={{disabled:removingFriend}} closable={!removingFriend}
+      maskClosable={!removingFriend}>
+      <Typography.Paragraph>
+        确定要删除「{selectedFriend?.name||"当前好友"}」吗？
+      </Typography.Paragraph>
+      <Typography.Text type="secondary">
+        将从好友列表移除，当前浏览器保存的聊天记录不会被清除。
+      </Typography.Text>
+    </AntModal>
 
     {selectedFriend&&<>
       {isMobile

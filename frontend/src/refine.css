@@ -395,3 +395,49 @@ html[data-wtox-theme="dark"],html[data-wtox-theme="dark"] body{
     background:var(--wt-chat)!important;
   }
 }
+
+/* Low-contrast theme-aware chat scrollbar: always reserve the same width to
+   prevent messages shifting when scroll activity starts or stops. */
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread,
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread.wt-thread-scrolling{
+  scrollbar-width:thin!important;
+  scrollbar-gutter:stable;
+  scrollbar-color:transparent transparent!important;
+}
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread.wt-thread-scrolling{
+  scrollbar-color:var(--wt-scroll-thumb) transparent!important;
+}
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread:hover{
+  scrollbar-color:var(--wt-scroll-hover) transparent!important;
+}
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread::-webkit-scrollbar{
+  width:6px;height:6px;
+}
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread::-webkit-scrollbar-track{
+  background:transparent;
+}
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread::-webkit-scrollbar-thumb{
+  background:transparent;border-radius:99px;
+}
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread.wt-thread-scrolling::-webkit-scrollbar-thumb{
+  background:var(--wt-scroll-thumb);
+}
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread:hover::-webkit-scrollbar-thumb{
+  background:var(--wt-scroll-hover);
+}
+.ant-messenger[data-theme] .wt-chat-more-button.ant-btn{
+  width:35px;height:35px;min-width:35px;
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:8px!important;border:0!important;
+  color:var(--wt-muted)!important;background:transparent!important;
+}
+.ant-messenger[data-theme] .wt-chat-more-button.ant-btn:hover,
+.ant-messenger[data-theme] .wt-chat-more-button.ant-btn:focus-visible{
+  color:var(--wt-text)!important;background:var(--wt-hover)!important;
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread{
+    scrollbar-width:none!important;scrollbar-gutter:auto;
+  }
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread::-webkit-scrollbar{width:0;}
+}
