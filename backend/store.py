@@ -87,7 +87,12 @@ def init():
         if "tox_secret_hash" not in columns:
             c.execute("ALTER TABLE accounts ADD COLUMN tox_secret_hash BLOB")
         if "offline_queue" not in columns:
-            c.execute("ALTER TABLE accounts ADD COLUMN offline_queue INTEGER NOT NULL DEFAULT 1")
+            c.execute("ALTER TABLE accounts ADD COLUMN offline_queue INTEGER NOT NULL DEFAULT 0")
+        if "queue_mode_version" not in columns:
+            # One-time migration: old installs implicitly enabled VPS queue.
+            # Browser-local queue is now the default, VPS queue opt-in.
+            c.execute("ALTER TABLE accounts ADD COLUMN queue_mode_version INTEGER NOT NULL DEFAULT 2")
+            c.execute("UPDATE accounts SET offline_queue=0")
         c.execute("""CREATE TABLE IF NOT EXISTS outbox (
             id TEXT PRIMARY KEY,
             account_id TEXT NOT NULL REFERENCES accounts(id),
