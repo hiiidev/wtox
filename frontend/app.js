@@ -333,6 +333,12 @@ function connectWebsocket(){
         error("收到新消息或好友请求：请先解锁本地加密历史。",false);
       }
     }
+    if(event.type==="file"){
+      refreshFiles().catch(()=>{});
+      if(event.state==="offered"){
+        error("收到新的 Tox 附件请求："+event.name+"。打开📎附件窗口决定是否接收。",false);
+      }
+    }
     if(["friend_connection","connection"].includes(event.type)){
       refreshNetwork().catch(()=>{});
       refreshFriends().catch(()=>{});
@@ -401,6 +407,74 @@ $("#closeIdentity").onclick=()=>closeDialog("#identityDialog");
 $("#historyButton").onclick=()=>showDialog("#historyDialog");
 $("#historyFromContacts").onclick=()=>showDialog("#historyDialog");
 $("#closeHistory").onclick=()=>closeDialog("#historyDialog");
+const FILE_LIMIT = 5*1024*1024;
+const transferStates = {
+  offered:"等待你接受",waiting:"等待对方接受",receiving:"正在接收",
+  sending:"正在发送",completed:"已完成",failed:"传输失败",
+  cancelled:"已取消"
+};
+async function refreshFiles(){
+  const result=await json("/api/files");
+  const box=$("#transferList");box.replaceChildren();
+  const files=result.files||[];
+  if(!files.length){
+    const div=document.createElement("p");
+    div.className="muted";div.textContent="当前没有附件传输";
+    box.append(div);return;
+  }
+  for(const f of files){
+    const card=document.createElement("div");card.className="transfer-card";
+    const label=document.createElement("strong");label.textContent=f.name;
+    const status=document.createElement("small");
+    const bytes=Math.round(f.size/1024);
+    status.textContent=(f.direction==="incoming"?"收件":"发件")+
+      " · "+(transferStates[f.state]||f.state)+" · "+bytes+" KiB"+
+      (f.progress ? " · "+Math.floor(f.progress/f.size*100)+"%" : "");
+    card.append(label,status);
+    if(f.direction==="incoming" && f.state==="offered"){
+      const accept=document.createElement("button");accept.className="button primary";accept.textContent="接受";
+      const reject=document.createElement("button");reject.className="button subtle";reject.textContent="拒绝";
+      accept.onclick=async()=>{try{await post("/api/files/"+encodeURIComponent(f.id)+"/accept",{});await refreshFiles()}catch(e){error(e.message)}};
+      reject.onclick=async()=>{try{await post("/api/files/"+encodeURIComponent(f.id)+"/reject",{});await refreshFiles()}catch(e){error(e.message)}};
+      const actions=document.createElement("div");actions.className="button-row";actions.append(accept,reject);card.append(actions);
+    }
+    if(f.direction==="incoming" && f.state==="completed"){
+      const btn=document.createElement("button");btn.className="button primary";btn.textContent="下载文件";
+      btn.onclick=async()=>{try{
+        const blob=await(await api("/api/files/"+encodeURIComponent(f.id)+"/download")).blob();
+        downloadBlob(blob,f.name);
+        error("文件已保存到浏览器下载目录。请检查文件安全性。",false);
+      }catch(e){error(e.message)}};
+      card.append(btn);
+    }
+    box.append(card);
+  }
+}
+$("#openFiles").onclick=()=>{
+  showDialog("#fileDialog");
+  refreshFiles().catch(e=>error(e.message));
+};
+$("#closeFiles").onclick=()=>closeDialog("#fileDialog");
+$("#refreshFiles").onclick=()=>refreshFiles().catch(e=>error(e.message));
+$("#sendAttachment").onclick=async()=>{
+  const file=$("#attachmentFile").files[0];
+  if(!selectedPeer){error("先选择一个好友再发送附件");return}
+  if(!online(selectedFriend())){error("好友不在线，无法开始附件传输");return}
+  if(!file){error("请选择要发送的文件");return}
+  if(!file.size || file.size>FILE_LIMIT){error("附件大小必须为 1 字节至 5 MiB");return}
+  if(!confirm("发送 "+file.name+" 给当前 Tox 好友？"))return;
+  const btn=$("#sendAttachment");btn.disabled=true;
+  try{
+    const url="/api/files/send?peer="+encodeURIComponent(selectedPeer)+"&name="+encodeURIComponent(file.name);
+    await api(url,{method:"POST",raw:true,
+      headers:{"Content-Type":"application/octet-stream"},body:file});
+    $("#attachmentFile").value="";
+    await refreshFiles();
+    error("已发出附件请求，等待好友接受。",false);
+  }catch(e){error(e.message)}
+  finally{btn.disabled=false}
+};
+
 async function readDecryptedHistory(){
   if(!historyDb||!historyKey)throw new Error("当前身份的本地历史未就绪");
   const rows=await reqResult(historyDb.transaction("events").objectStore("events").getAll());
