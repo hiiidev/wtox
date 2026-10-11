@@ -117,6 +117,25 @@ export default function App(){
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),noticeTimer=useRef(null),lastMessage=useRef(0);
+  const longPressTimer=useRef(null);
+  const cancelLongPress=()=>{if(longPressTimer.current)clearTimeout(longPressTimer.current);longPressTimer.current=null};
+  async function requestDelete(item){
+    cancelLongPress();
+    if(!item?.id || !history.current?.ready())return;
+    const detail=item.delivery_status==="queued"
+      ? "注意：已进入 VPS 队列的消息不会因为删除本地记录而自动撤回。"
+      : "只删除这个浏览器中的聊天记录，不会撤回好友已经收到的消息。";
+    if(!window.confirm("删除这条聊天记录？\n"+detail))return;
+    try{
+      await history.current.deleteEvent(item.id);
+      await refreshHistory(history.current);
+      alert("已删除当前浏览器中的该条消息");
+    }catch(e){alert("删除失败："+e.message)}
+  }
+  function startLongPress(item){
+    cancelLongPress();
+    longPressTimer.current=setTimeout(()=>requestDelete(item),650);
+  }
   const closeModal=useCallback(()=>setModal(""),[]);
   const alert=useCallback(message=>{
     setNotice(message);clearTimeout(noticeTimer.current);
@@ -668,7 +687,13 @@ export default function App(){
     </div>
 
     {modal==="settings"&&<Modal title="设置与备份" close={closeModal}>
-      <h3>消息与离线队列</h3>
+      <h3>界面风格</h3>
+      <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
+        options={[{label:"☀️ 雾白",value:"mist"},
+          {label:"🌙 午夜",value:"midnight"},
+          {label:"🌊 海蓝",value:"ocean"}]}/>
+      <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
+      <div className="wtox-separator">消息与离线队列</div>
       <label className="wtox-toggle">
         <input type="checkbox" checked={offlineQueue}
           onChange={e=>changeOfflineQueue(e.target.checked)}/>
