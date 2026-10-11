@@ -31,12 +31,12 @@ class OutboxTests(unittest.TestCase):
     def enqueue(self, eid="c"*32, text="offline-plaintext-secret"):
         return store.enqueue_outbox(self.uid,self.peer,text,eid)
 
-    def test_default_on_and_per_identity_disable(self):
-        self.assertTrue(store.offline_queue_enabled(self.uid))
-        store.set_offline_queue(self.uid,False)
+    def test_browser_queue_default_vps_opt_in(self):
         self.assertFalse(store.offline_queue_enabled(self.uid))
         store.set_offline_queue(self.uid,True)
         self.assertTrue(store.offline_queue_enabled(self.uid))
+        store.set_offline_queue(self.uid,False)
+        self.assertFalse(store.offline_queue_enabled(self.uid))
 
     def test_outbox_is_encrypted_idempotent_and_owned_by_account(self):
         record=self.enqueue()
