@@ -10,7 +10,7 @@ from .tox_runtime import FriendOfflineError
 
 from . import store
 from .tox_runtime import ToxSession, ToxActionError
-from .webdav_archive import WebDavArchive
+from .attachment_disk import DiskAttachmentStore
 
 
 class SessionManager:
@@ -20,15 +20,16 @@ class SessionManager:
         self.lock = threading.RLock()
         self.loop: asyncio.AbstractEventLoop | None = None
         self.outbox_task: asyncio.Task | None = None
-        self.archive_task: asyncio.Task | None = None
-        self.archive = None
+        self.disk_cleanup_task: asyncio.Task | None = None
+        self.disk: DiskAttachmentStore | None = None
 
     def start(self, loop: asyncio.AbstractEventLoop):
         self.loop = loop
-        self.archive = WebDavArchive()
+        self.disk = DiskAttachmentStore()
+        # Expire old completed files and abandoned uploads even after a restart.
+        self.disk.expire()
         self.outbox_task = loop.create_task(self._outbox_loop())
-        if self.archive.enabled:
-            self.archive_task=loop.create_task(self._archive_expiry_loop())
+        self.disk_cleanup_task = loop.create_task(self._disk_expiry_loop())
         # Restore identities from encrypted savedata. Do not generate fresh IDs.
         for uid in store.active_profiles():
             try:
@@ -51,6 +52,10 @@ class SessionManager:
                 on_event=lambda event: self.on_event(uid, event),
                 on_save=lambda data: store.write_profile(uid, data),
             )
+            if self.disk is None:
+                self.disk = DiskAttachmentStore()
+            session.files.disk = self.disk
+            session.files.uid = uid
             self.sessions[uid] = session
             session.start()
             return session
@@ -96,24 +101,15 @@ class SessionManager:
                 print("Outbox worker failed:",type(exc).__name__,flush=True)
             await asyncio.sleep(3)
 
-    async def _archive_one(self, uid: str, event: dict):
-        """Transfer bytes after native receipt, off the Tox callback thread."""
-        if not self.archive or not self.archive.enabled:
-            return
-        try:
-            name,data=await asyncio.to_thread(self.get(uid).files.download,event["id"])
-            await asyncio.to_thread(self.archive.put,uid,event["id"],name,data)
-        except Exception as exc:
-            print("WebDAV encrypted archive failed:",uid[:8],type(exc).__name__,flush=True)
-
-    async def _archive_expiry_loop(self):
+    async def _disk_expiry_loop(self):
         while True:
             try:
-                await asyncio.to_thread(self.archive.expire)
+                if self.disk is not None:
+                    await asyncio.to_thread(self.disk.expire)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                print("WebDAV seven-day cleanup failed:",type(exc).__name__,flush=True)
+                print("Local attachment expiry failed:",type(exc).__name__,flush=True)
             await asyncio.sleep(60*60)
 
     def on_event(self, uid: str, event: dict):
@@ -127,12 +123,6 @@ class SessionManager:
         loop = self.loop
         if loop and loop.is_running():
             loop.call_soon_threadsafe(lambda: asyncio.create_task(self.broadcast(uid, payload)))
-            if (payload.get("type")=="file" and
-                    payload.get("direction")=="incoming" and
-                    payload.get("state")=="completed" and
-                    self.archive and self.archive.enabled):
-                loop.call_soon_threadsafe(
-                    lambda: asyncio.create_task(self._archive_one(uid, payload)))
 
     async def broadcast(self, uid: str, event: dict):
         for ws in list(self.sockets.get(uid, ())):
@@ -148,10 +138,10 @@ class SessionManager:
         self.sockets.get(uid, set()).discard(ws)
 
     async def shutdown(self):
-        if self.archive_task:
-            self.archive_task.cancel()
-            await asyncio.gather(self.archive_task,return_exceptions=True)
-            self.archive_task=None
+        if self.disk_cleanup_task:
+            self.disk_cleanup_task.cancel()
+            await asyncio.gather(self.disk_cleanup_task,return_exceptions=True)
+            self.disk_cleanup_task=None
         if self.outbox_task:
             self.outbox_task.cancel()
             await asyncio.gather(self.outbox_task,return_exceptions=True)

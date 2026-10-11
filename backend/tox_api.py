@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import access, store
 from .profile_api import COOKIE_NAME as TOX_SESSION_COOKIE
 from .session_manager import manager
 from .tox_runtime import ToxActionError, FriendOfflineError
-from .file_transfer import MAX_FILE
+from .file_transfer import MAX_FILE, safe_filename
 
 router = APIRouter()
 
@@ -197,24 +198,36 @@ def list_files(uid: str = Depends(require_user)):
 
 @router.post("/api/files/send")
 async def send_file(request: Request, peer: str, name: str, uid: str = Depends(require_user)):
+    """Spool HTTPS uploads as encrypted blocks; Tox reads blocks on demand."""
     check_origin(request)
-    length=request.headers.get("content-length")
+    length = request.headers.get("content-length")
     if length:
         try:
-            declared=int(length)
+            declared = int(length)
         except ValueError as exc:
             raise HTTPException(400, "Content-Length 错误") from exc
-        if declared>MAX_FILE:raise HTTPException(413, "附件不能超过 5 MiB")
-    parts=[]
-    total=0
-    async for chunk in request.stream():
-        total+=len(chunk)
-        if total>MAX_FILE:raise HTTPException(413, "附件不能超过 5 MiB")
-        parts.append(chunk)
+        if declared > MAX_FILE:
+            raise HTTPException(413, "附件不能超过 5 MiB")
+    if manager.disk is None:
+        raise HTTPException(503, "附件磁盘存储未就绪")
     try:
-        return session(uid).files.send(peer.strip().upper(), name, b"".join(parts))
+        filename = safe_filename(name)
+        document = manager.disk.begin(uid, filename, direction="outgoing")
     except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        async for chunk in request.stream():
+            document.write(chunk)
+        document.finish()
+    except (ValueError, OSError) as exc:
+        document.abort()
+        raise HTTPException(413 if "超过" in str(exc) else 400, str(exc)) from exc
+    try:
+        return session(uid).files.send(peer.strip().upper(), filename, document)
+    except (ValueError, OSError) as exc:
+        document.abort()
         raise HTTPException(409, str(exc)) from exc
+
 
 @router.post("/api/files/{transfer_id}/accept")
 def accept_file(transfer_id: str, request: Request, uid: str = Depends(require_user)):
@@ -234,25 +247,22 @@ def reject_file(transfer_id: str, request: Request, uid: str = Depends(require_u
 
 @router.get("/api/files/{transfer_id}/download")
 def download_file(transfer_id: str, uid: str = Depends(require_user)):
+    """Serve only the authenticated user's completed, unexpired disk blocks."""
     from urllib.parse import quote
+    if manager.disk is None:
+        raise HTTPException(503, "附件磁盘存储未就绪")
     try:
-        name,data=session(uid).files.download(transfer_id)
+        name, size, chunks = manager.disk.download(uid, transfer_id)
     except ValueError as exc:
-        archive=manager.archive
-        if not archive or not archive.enabled:
-            raise HTTPException(404,str(exc)) from exc
-        try:
-            recovered=archive.get(uid,transfer_id)
-        except (OSError,ValueError) as error:
-            raise HTTPException(503,"WebDAV 附件暂时不可读取") from error
-        if not recovered:
-            raise HTTPException(404,"附件不存在或已过期") from exc
-        name,data=recovered
-    safe=quote(name,safe="")
-    return Response(data,media_type="application/octet-stream",headers={
+        raise HTTPException(404, str(exc)) from exc
+    safe = quote(name, safe="")
+    return StreamingResponse(chunks, media_type="application/octet-stream", headers={
         "Content-Disposition": "attachment; filename=\"attachment.bin\"; filename*=UTF-8''"+safe,
-        "Cache-Control":"no-store","X-Content-Type-Options":"nosniff"
+        "Content-Length": str(size),
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"
     })
+
 
 @router.get("/api/pending")
 def pending(uid: str = Depends(require_user)):
