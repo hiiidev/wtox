@@ -107,6 +107,25 @@ def me(request: Request):
         raise HTTPException(401, "请先使用 .tox 配置登录")
     return store.tox_identity_info(uid)
 
+@app.get("/api/legacy/export")
+def export_legacy_profile(request: Request):
+    """One-way recovery for an already valid OLD login cookie.
+
+    Cannot sign in to the new site with a username/password; this endpoint
+    only downloads an existing profile before the legacy cookie expires.
+    """
+    legacy_uid = store.session_user(request.cookies.get("wtox_session"))
+    if not legacy_uid:
+        raise HTTPException(401, "旧会话已过期，请使用之前备份的 .tox 文件")
+    saved = store.read_profile(legacy_uid)
+    if saved is None:
+        raise HTTPException(404, "旧账号未创建 Tox 身份")
+    return Response(
+        saved, media_type="application/octet-stream",
+        headers={"Content-Disposition":'attachment; filename="wtox-legacy-backup.tox"',
+                 "Cache-Control":"no-store", "X-Content-Type-Options":"nosniff"}
+    )
+
 @app.get("/")
 def index():
     return FileResponse(str(FRONTEND_DIR / "index.html"),headers={"Cache-Control":"no-store"})
