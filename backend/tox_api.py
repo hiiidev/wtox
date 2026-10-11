@@ -54,8 +54,22 @@ class Acknowledge(BaseModel):
 
 @router.get("/api/network")
 def network(uid: str = Depends(require_user)):
+    """VPS Tox connectivity, independent from the browser WebSocket.
+
+    Connection 0 means the VPS Tox network is offline; even if the HTML page
+    loads, native Tox peers cannot deliver their messages to this identity.
+    """
     s = session(uid)
-    return {"status": s.last_connection}  # 0 offline, 1 TCP, 2 UDP
+    friends = s.friends()
+    counts = store.outbox_counts(uid)
+    thread = getattr(s,"thread",None)
+    return {
+        "status":s.last_connection,  # 0 offline, 1 TCP, 2 UDP
+        "tox_running": bool(thread and thread.is_alive()),
+        "online_friends":sum(friend.get("status") in (1,2) for friend in friends),
+        "total_friends":len(friends),
+        **counts
+    }
 
 @router.get("/api/friends")
 def friends(uid: str = Depends(require_user)):
