@@ -158,3 +158,8 @@ body{background:radial-gradient(circle at 10% -20%,#1d3252,transparent 55%),#0c1
 .wtox-attachment-actions{display:flex;gap:6px}
 .wtox-attachment-bubble .wtox-btn{align-self:flex-start;font-size:12px;padding:7px 11px}
 @media(max-width:700px){.wtox-attachment-row{padding:5px 9px}.wtox-attachment-bubble{max-width:90%}}
+
+.wtox-error-page{height:100dvh;padding:28px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;color:#dceafb;background:#101927}
+.wtox-error-page h1{margin:0;font-size:23px}
+.wtox-error-page p{max-width:480px;color:#95aec9;line-height:1.6}
+.wtox-error-page button{background:#377eea;color:white;border:0;padding:12px 24px;border-radius:11px}
