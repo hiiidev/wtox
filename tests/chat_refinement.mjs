@@ -169,4 +169,4 @@ assert.equal((app.match(/count=\{totalUnread\} overflowCount=\{99\}/g)||[]).leng
 assert.equal((app.match(/className="wt-nav-chat-badge"/g)||[]).length,3);
 assert.match(refined,/\.wt-nav-chat-badge \.ant-badge-count/);
 assert.match(app,/seenHydration\.current=\{owner:user\.public_key,initial,ready:false\}/);
-assert.match(app,/selected&&mobileChat&&section==="chats"&&messages\.length/);
+assert.match(app,/selected&&mobileChat&&messages\.length/);

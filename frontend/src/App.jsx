@@ -555,12 +555,12 @@ export default function App(){
     try{localStorage.setItem("wtox-seen-"+user.public_key,JSON.stringify(seen))}catch{}
   },[user?.public_key,seen]);
   useEffect(()=>{
-    if(selected&&mobileChat&&section==="chats"&&messages.length){
+    if(selected&&mobileChat&&messages.length){
       const last=Math.max(0,...messages.filter(m=>m.public_key===selected&&
         m.direction==="incoming").map(m=>m.at||0));
       if(last>(seen[selected]||0))setSeen(previous=>({...previous,[selected]:last}));
     }
-  },[selected,mobileChat,section,messages,seen]);
+  },[selected,mobileChat,messages,seen]);
   useEffect(()=>{
     if(!user?.public_key)return;
     let dead=false;
