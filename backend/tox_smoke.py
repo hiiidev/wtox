@@ -9,6 +9,7 @@ import os
 import time
 
 from .tox_identity import ToxCore
+from .tox_backup import encrypt_savedata, decrypt_savedata, is_encrypted
 from .tox_runtime import ToxSession
 
 
@@ -19,6 +20,15 @@ def main():
         core = ToxCore()
         created = core.identity(nickname="wtox smoke test")
         assert len(created.address) == 76
+        encrypted = encrypt_savedata(created.savedata, "中文 aTox 🗝️")
+        assert is_encrypted(encrypted) and encrypted.startswith(b"toxEsave")
+        assert decrypt_savedata(encrypted, "中文 aTox 🗝️") == created.savedata
+        try:
+            decrypt_savedata(encrypted, "wrong-password")
+        except Exception:
+            pass
+        else:
+            raise AssertionError("Incorrect backup password was accepted")
         restored = core.identity(created.savedata)
         assert restored.address == created.address
         assert restored.secret_proof == created.secret_proof, "Tox private-key proof changed across restore"
