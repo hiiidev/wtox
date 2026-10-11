@@ -32,8 +32,10 @@ nano .env
 
 本次升级保留原生 Caddy 和宿主机 `127.0.0.1:6066` 端口。新增 React/Vite 前端构建阶段，需要 Docker 能访问 npm 包仓库；**不需要在宿主机额外运行 Node.js 进程**。
 
-- 默认允许发送给离线的 Tox 好友：消息先 AES-GCM 加密暂存在 VPS SQLite，好友上线后后台任务尝试发送。
-- 网页设置里可以关闭；刷新好友在线状态每 12 秒，未领取消息和队列状态每 8 秒检查，手机从后台返回时立即同步。
+- 默认是**浏览器加密队列**：好友离线时消息仅加密存本浏览器，页面运行且对方上线后由浏览器调用 VPS Toxcore 发送。手机后台可能暂停运行。
+- 在右上角 ⚙「设置与备份」手动开启 VPS 代发后，离线消息才会加密暂存 VPS SQLite，好友上线后后台任务每 3 秒尝试发送，即使浏览器关闭也会继续。
+- 好友状态每 12 秒刷新；未领取消息和发送状态每 8 秒检查；手机从后台回到网页会立即同步。
+- 「设置与备份」集中管理网站个人 Tox 身份导出、加密历史迁移与导入导出、离线队列开关和注销。
 - 发送中断的结果不确定时不会自动重试，避免消息被重复发送。
 - 已有 `.env`、`WTOX_MASTER_KEY` 和 `wtox_data` 数据卷不能覆盖或删除。
 
@@ -45,6 +47,7 @@ git pull
 docker compose -f compose.host-caddy.yml build web
 docker compose -f compose.host-caddy.yml up -d --no-build
 curl -fsS http://127.0.0.1:6066/health
+curl -fsS http://127.0.0.1:6066/health/ui
 ```
 
 Docker 构建阶段会编译 React 静态文件并执行原生 Toxcore 自检。如果失败，不应跳过构建检查；请保留错误日志中的非敏感文本。
