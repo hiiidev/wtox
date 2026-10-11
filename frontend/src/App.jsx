@@ -635,10 +635,13 @@ export default function App(){
     }}>
     <div className="wtox-workspace ant-workspace wechat-layout">
       <nav className="wechat-rail" aria-label="主导航">
-        <button type="button" className="wechat-rail-avatar" aria-label="我的资料与设置"
-          title="我的资料与设置" onClick={()=>setModal("settings")}>
-          <img src="/logo.svg" alt="wTox"/>
-        </button>
+        <AntButton type="text" className="wechat-rail-avatar" aria-label="我的 Tox 资料"
+          title="我的 Tox 资料" onClick={()=>setModal("profile")}>
+          <Avatar size={44} shape="square" className="wechat-self-avatar"
+            icon={!ownProfile.name?<UserOutlined/>:undefined}>
+            {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+          </Avatar>
+        </AntButton>
         <div className="wechat-rail-primary">
           <button type="button" className={"wechat-rail-button "+(section==="chats"?"is-active":"")}
             aria-label="聊天" aria-current={section==="chats"?"page":undefined}
@@ -660,7 +663,15 @@ export default function App(){
       </nav>
       <aside className="ant-contact-sidebar">
         <div className="wechat-list-head">
-          <div className="wechat-mobile-heading"><img src="/logo.svg" alt="" width="30" height="30"/><strong>wTox</strong></div>
+          <div className="wechat-mobile-heading">
+            <AntButton type="text" className="wechat-mobile-avatar" aria-label="我的 Tox 资料"
+              onClick={()=>setModal("profile")}>
+              <Avatar size={32} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
+                {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+              </Avatar>
+            </AntButton>
+            <strong>wTox</strong>
+          </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
           <Tooltip title="添加好友">
             <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
@@ -796,13 +807,25 @@ export default function App(){
       </main>
     </div>
 
-    {modal==="settings"&&<AntModal open title="设置与备份" onCancel={closeModal} footer={null} centered destroyOnHidden width={640}>
-      <h3>界面风格</h3>
-      <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
-        options={[{label:"浅色",value:"light"},{label:"黑夜",value:"dark"}]}/>
-      <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
-      <div className="wtox-separator">Tox 个人资料</div>
-      <Form layout="vertical" className="profile-editor">
+    {modal==="profile"&&<AntModal open title="我的 Tox 资料"
+      onCancel={closeModal} footer={null} centered destroyOnHidden width={520}>
+      <div className="wtox-profile-header">
+        <Avatar size={64} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
+          {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+        </Avatar>
+        <div>
+          <Typography.Title level={4} style={{margin:0}}>{ownProfile.name||"Tox 用户"}</Typography.Title>
+          <Typography.Text type="secondary">
+            {["在线","离开","忙碌"][ownProfile.user_status]||"在线"}
+          </Typography.Text>
+        </div>
+      </div>
+      <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
+      <Typography.Paragraph className="wtox-profile-id"
+        copyable={{text:user.tox_id,tooltips:["复制 Tox ID","已复制"]}}>
+        {user.tox_id}
+      </Typography.Paragraph>
+      <Form layout="vertical" className="profile-editor" onFinish={saveOwnProfile}>
         <Form.Item label="昵称">
           <Input value={ownProfile.name} maxLength={128} showCount
             placeholder="昵称（其他 Tox 客户端可见）"
@@ -818,17 +841,22 @@ export default function App(){
             onChange={value=>setOwnProfile(p=>({...p,user_status:value}))}
             options={[{label:"在线",value:0},{label:"离开",value:1},{label:"忙碌",value:2}]}/>
         </Form.Item>
+        <AntButton type="primary" htmlType="submit" loading={profileSaving} block>
+          保存 Tox 个人资料
+        </AntButton>
       </Form>
-      <Button kind="primary" disabled={profileSaving} onClick={saveOwnProfile}>
-        保存 Tox 个人资料
-      </Button>
+    </AntModal>}
+
+    {modal==="settings"&&<AntModal open title="设置与备份" onCancel={closeModal} footer={null} centered destroyOnHidden width={640}>
+      <h3>界面风格</h3>
+      <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
+        options={[{label:"浅色",value:"light"},{label:"黑夜",value:"dark"}]}/>
+      <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
       <div className="wtox-separator">消息传输</div>
       <p className="wtox-info">所有文字消息默认进入 VPS 加密队列；即使关闭网页，
         VPS 也会在好友上线时发送。队列最多保留 7 天。</p>
-      <div className="wtox-separator">Tox 身份与私钥备份</div>
-      <p>当前 Tox ID 可以分享，但 .tox 备份含私钥，不要分享。</p>
-      <div className="wtox-tox-id">{user.tox_id}</div>
-      <Button onClick={()=>navigator.clipboard.writeText(user.tox_id).then(()=>alert("Tox ID 已复制")).catch(e=>alert(e.message))}>复制 Tox ID</Button>
+      <div className="wtox-separator">身份备份</div>
+      <p>.tox 文件包含身份私钥，请妥善保管，切勿分享给他人。</p>
       <Button kind="primary" onClick={async()=>{
         try{downloadBlob(await(await api("/api/profile/export")).blob(),"wtox-profile.tox")}
         catch(e){alert(e.message)}
