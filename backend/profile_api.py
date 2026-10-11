@@ -86,7 +86,9 @@ def create_identity(body: BackupPassword, request: Request):
     rate_check(request)
     if not body.password:
         raise HTTPException(422, "请设置备份密码")
-    identity = core().identity()
+    # Only newly created identities receive the default; never overwrite
+    # an imported Tox profile or an existing user's custom status message.
+    identity = core().identity(status_message="Chatting on wTox")
     try:
         encrypted_backup = encrypt_savedata(identity.savedata, body.password)
         uid = store.create_tox_identity(identity)

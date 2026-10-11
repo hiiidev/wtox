@@ -18,7 +18,8 @@ def main():
     os.environ["WTOX_BOOTSTRAP"] = ""  # deterministic test: no external network required
     try:
         core = ToxCore()
-        created = core.identity(nickname="wtox smoke test")
+        created = core.identity(nickname="wtox smoke test",
+                                status_message="Chatting on wTox")
         assert len(created.address) == 76
         encrypted = encrypt_savedata(created.savedata, "中文 aTox 🗝️")
         assert is_encrypted(encrypted) and encrypted.startswith(b"toxEsave")
@@ -46,6 +47,8 @@ def main():
                 time.sleep(0.05)
             assert session.thread is not None and session.thread.is_alive(), "native loop exited"
             assert session.friends() == [], "new identity unexpectedly has friends"
+            assert session.self_profile()["status_message"] == "Chatting on wTox", (
+                "New native identity did not persist its default status message")
             assert session.last_connection in (0, 1, 2), "invalid network status"
             friend_key = session.add_friend(friend_identity.address, "hello from wtox")
             assert friend_key == friend_identity.address[:64]

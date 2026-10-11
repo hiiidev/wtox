@@ -52,7 +52,9 @@ class ToxLoginTests(unittest.TestCase):
 
     def native(self, identity=None, login_error=None):
         fake = SimpleNamespace()
-        def identity_fn(savedata=None, nickname=None):
+        def identity_fn(savedata=None, nickname=None, status_message=None):
+            if savedata is None:
+                self.assertEqual(status_message,"Chatting on wTox")
             if login_error:
                 raise login_error
             if savedata is None:
