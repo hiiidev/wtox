@@ -1,7 +1,7 @@
 import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
   Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal,
-  Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid, Card, Image, Upload } from "antd";
+  Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid, Card, Image, Upload, message } from "antd";
 import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
@@ -100,6 +100,8 @@ export default function App(){
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
   const [section,setSection]=useState("chats");
   const [friendRequests,setFriendRequests]=useState([]);
+  const [friendMessageApi,friendMessageContext]=message.useMessage({top:24,maxCount:2});
+  const dismissedFriendIds=useRef(null);
   const [peerDetailsOpen,setPeerDetailsOpen]=useState(false);
   const [deleteFriendOpen,setDeleteFriendOpen]=useState(false);
   const [removingFriend,setRemovingFriend]=useState(false);
@@ -144,7 +146,7 @@ export default function App(){
     selected:"#0da769",own:"#35d18c",incoming:"#303032",
     ownText:"#09291d",incomingText:"#f3f3f3"
   }:{
-    bg:"#f5f5f5",rail:"#c5c6c6",sidebar:"#eeeef0",chat:"#f5f5f5",
+    bg:"#f5f5f5",rail:"#e6e8ea",sidebar:"#eeeef0",chat:"#f5f5f5",
     search:"#ffffff",hover:"#e3e3e5",border:"#e3e3e5",
     text:"#222326",muted:"#96969c",primary:"#16ac71",
     selected:"#16ac71",own:"#9df29f",incoming:"#eeeeef",
@@ -163,6 +165,9 @@ export default function App(){
   },[visualStyle,effectiveTheme]);
   const [modal,setModal]=useState(""),[notice,setNotice]=useState("");
   const [loginFile,setLoginFile]=useState(null),[busy,setBusy]=useState(false);
+  const [createPassword,setCreatePassword]=useState("");
+  const [loginPassword,setLoginPassword]=useState("");
+  const [backupPassword,setBackupPassword]=useState("");
   const [friendId,setFriendId]=useState("");
   const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
   const [historyFile,setHistoryFile]=useState(null);
@@ -237,6 +242,26 @@ export default function App(){
     const data=await getJson("/api/friend-requests");
     setFriendRequests(data.requests||[]);
   },[]);
+  useEffect(()=>{
+    if(!user?.public_key||!friendRequests.length){
+      friendMessageApi.destroy("friend-request-notice");
+      dismissedFriendIds.current=null;
+      return;
+    }
+    const signature=user.public_key+":"+friendRequests.map(item=>item.id).sort().join(",");
+    if(dismissedFriendIds.current===signature)return;
+    friendMessageApi.open({
+      key:"friend-request-notice",type:"info",duration:0,
+      className:"wt-friend-request-message",
+      content:<span className="wt-request-message-content">
+        <span>收到 {friendRequests.length} 条好友请求</span>
+        <AntButton type="link" size="small" onClick={()=>setModal("requests")}>查看</AntButton>
+        <AntButton type="text" size="small" aria-label="关闭好友请求提示"
+          onClick={()=>{dismissedFriendIds.current=signature;
+            friendMessageApi.destroy("friend-request-notice")}}>关闭</AntButton>
+      </span>
+    });
+  },[user?.public_key,friendRequests,friendMessageApi]);
   const refreshNetwork=useCallback(async()=>{
     setNetwork((await getJson("/api/network")).status??-1);
   },[]);
@@ -321,7 +346,6 @@ export default function App(){
     if(["message","friend_request"].includes(e.type)){
       if(e.type==="friend_request"){
         refreshFriendRequests().catch(()=>{});
-        alert("收到新的 Tox 好友请求");
       }
       if(h?.ready()){
         try{
@@ -491,7 +515,9 @@ export default function App(){
                 <Typography.Title level={5} style={{margin:0}}>
                   {selectedFriend.name||"Tox 好友"}
                 </Typography.Title>
-                <Badge status={peerStatusColor} text={peerStatus}/>
+                <div className="wt-peer-profile-presence">
+                  <Badge status={peerStatusColor} text={peerStatus}/>
+                </div>
               </div>
               <Divider/>
               <Typography.Text type="secondary">状态消息</Typography.Text>
@@ -603,22 +629,32 @@ export default function App(){
     }
   },[selected,friends]);
   async function createIdentity(){
+    if(!createPassword){alert("请先设置 .tox 备份密码");return}
     setBusy(true);
     try{
-      const response=await api("/api/tox/create",{method:"POST"});
+      const response=await api("/api/tox/create",{method:"POST",
+        body:JSON.stringify({password:createPassword})});
       downloadBlob(await response.blob(),
         "wtox-"+(response.headers.get("X-Tox-ID")||"new").slice(0,16)+".tox");
-      alert("身份创建成功！请保存已下载的 .tox 私钥备份。");
+      setCreatePassword("");
+      alert("身份创建成功！请保存加密的 .tox 备份和对应密码。");
       await loadIdentity();
     }catch(error){alert(error.message)}finally{setBusy(false)}
   }
   async function loginIdentity(){
     if(!loginFile){alert("请选择 .tox 配置文件");return}
-    if(loginFile.size>8*1024*1024){alert("Tox 配置超过 8 MiB");return}
+    if(loginFile.size>8*1024*1024+80){alert("Tox 配置超过大小限制");return}
     setBusy(true);
     try{
+      const magic=new TextDecoder().decode(await loginFile.slice(0,8).arrayBuffer());
+      const encrypted=magic==="toxEsave";
+      if(encrypted&&!loginPassword)throw Error("这个 .tox 已加密，请输入备份密码");
+      const secret=encrypted?new TextEncoder().encode(loginPassword):new Uint8Array();
+      const upload=secret.length?new Blob([secret,loginFile]):loginFile;
       await api("/api/tox/login",{method:"POST",raw:true,
-        headers:{"Content-Type":"application/octet-stream"},body:loginFile});
+        headers:{"Content-Type":"application/octet-stream",
+          "X-Tox-Password-Bytes":String(secret.length)},body:upload});
+      setLoginPassword("");
       await loadIdentity();
     }catch(error){alert(error.message)}finally{setBusy(false)}
   }
@@ -821,9 +857,17 @@ export default function App(){
       <Typography.Paragraph type="secondary">
         .tox 文件包含身份私钥，请妥善保管，切勿分享。
       </Typography.Paragraph>
+      <Input.Password autoComplete="new-password" value={backupPassword}
+        placeholder="设置本次 .tox 备份密码" aria-label="导出备份密码"
+        onChange={e=>setBackupPassword(e.target.value)}/>
       <AntButton block onClick={async()=>{
-        try{downloadBlob(await(await api("/api/profile/export")).blob(),"wTox-profile.tox")}
-        catch(e){alert(e.message)}
+        if(!backupPassword){alert("请先输入用于加密备份的密码");return}
+        try{
+          const response=await api("/api/profile/export/encrypted",{
+            method:"POST",body:JSON.stringify({password:backupPassword})});
+          downloadBlob(await response.blob(),"wTox-profile.tox");
+          setBackupPassword("");
+        }catch(e){alert(e.message)}
       }}>下载 .tox 配置</AntButton>
     </Card>
     <Card size="small" title="聊天记录" className="wt-settings-card">
@@ -857,18 +901,28 @@ export default function App(){
     <div className="wtox-auth-card"><img className="wtox-logo" src="/logo.svg" alt="wtox"/>
       <h1>wTox</h1>
       <p>使用原始 .tox 配置文件登录，无需创建额外的网站账号。</p>
-      <Button kind="primary" onClick={createIdentity} disabled={busy}>＋ 创建 Tox 身份并下载备份</Button>
+      <label>新身份备份密码（与 aTox 兼容）
+        <input type="password" autoComplete="new-password" value={createPassword}
+          onChange={e=>setCreatePassword(e.target.value)}
+          placeholder="设置 .tox 加密密码（不限位数）"/>
+      </label>
+      <Button kind="primary" onClick={createIdentity} disabled={busy||!createPassword}>＋ 创建 Tox 身份并下载加密备份</Button>
       <div className="wtox-separator">已有身份</div>
       <label>选择 .tox 私钥文件
         <input type="file" accept=".tox,application/octet-stream"
-          onChange={e=>setLoginFile(e.target.files?.[0]||null)}/></label>
+          onChange={e=>{setLoginFile(e.target.files?.[0]||null);setLoginPassword("")}}/></label>
+      <label>备份密码（仅加密的 .tox 文件需要）
+        <input type="password" autoComplete="current-password" value={loginPassword}
+          onChange={e=>setLoginPassword(e.target.value)}
+          placeholder="输入原客户端设置的密码"/>
+      </label>
       <Button kind="primary" disabled={!loginFile||busy} onClick={loginIdentity}>使用 .tox 配置登录</Button>
       <details><summary>旧版账号迁移</summary><p>如果旧 Cookie 尚未过期，可以下载原来的 .tox 身份备份。</p>
         <Button onClick={async()=>{
           try{downloadBlob(await(await api("/api/legacy/export")).blob(),"wtox-old-backup.tox")}
           catch(error){alert(error.message)}
         }}>下载旧身份备份</Button></details>
-      <small>请妥善保存 .tox 私钥备份。Tox 身份本身不要求密码。</small>
+      <small>新建的 .tox 备份采用标准 ToxEncryptSave 加密。备份密码丢失后无法恢复。</small>
     </div>
     {notice&&<div className="wtox-toast" role="status">{notice}</div>}
   </div>;
@@ -876,6 +930,7 @@ export default function App(){
   return <ConfigProvider theme={{
     algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
   }}>
+  {friendMessageContext}
   <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat ":"")+(section==="me"?"show-me":"")}
     data-theme={effectiveTheme}
     style={{
@@ -950,7 +1005,7 @@ export default function App(){
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
           <div className="wt-list-actions">
             <Tooltip title="好友请求">
-              <Badge count={friendRequests.length} size="small">
+              <Badge count={friendRequests.length} size="small" color="#ef4444">
                 <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
                   onClick={()=>setModal("requests")}/>
               </Badge>
@@ -1115,9 +1170,6 @@ export default function App(){
                 onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
                 onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
                 onClickCapture={event=>messageSelectionClick(event,item.id)}>
-                {selectedMessageIds.size>0&&<span className="wt-select-indicator" aria-hidden="true">
-                  {selectedMessageIds.has(item.id)?"✓":""}
-                </span>}
                 <AttachmentBubble file={item}
                   accept={id=>controlFile(id,"accept")}
                   reject={id=>controlFile(id,"reject")}
@@ -1132,9 +1184,6 @@ export default function App(){
                 onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
                 onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
                 onClickCapture={event=>messageSelectionClick(event,item.id)}>
-                {selectedMessageIds.size>0&&<span className="wt-select-indicator" aria-hidden="true">
-                  {selectedMessageIds.has(item.id)?"✓":""}
-                </span>}
                 <Bubble content={String(item.text||"")}
                   placement={item.direction==="outgoing"?"end":"start"}
                   shape="round" variant="filled"
