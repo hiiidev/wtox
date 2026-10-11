@@ -1,3 +1,5 @@
+# wtox backend only. HTTPS termination is handled by your existing VPS reverse proxy.
+# Binds the API to loopback to avoid exposing session cookies or keys over plain HTTP.
 services:
   web:
     build: .
@@ -5,8 +7,8 @@ services:
     env_file: .env
     volumes:
       - ./data:/data
-    expose:
-      - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 256
@@ -18,21 +20,3 @@ services:
       interval: 30s
       timeout: 8s
       retries: 3
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    environment:
-      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in .env}
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      web:
-        condition: service_healthy
-volumes:
-  caddy_data:
-  caddy_config:
