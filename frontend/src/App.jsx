@@ -412,6 +412,42 @@ export default function App(){
     ["在线","离开","忙碌"][selectedFriend.user_status]||"在线";
   const peerStatusColor=selectedFriend?.status===0||!selectedFriend?"default":
     ["success","warning","error"][selectedFriend.user_status]||"success";
+  const peerProfileContent=selectedFriend?(
+<div className="wt-peer-profile">
+              <Space size="middle" align="center">
+                <Badge dot color={selectedFriend.status===0?"#8c8c8c":
+                  ["#52c41a","#faad14","#ff4d4f"][selectedFriend.user_status]||"#52c41a"}
+                  offset={[-2,37]}>
+                  <Avatar size={48} shape="square">
+                    {(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase()}
+                  </Avatar>
+                </Badge>
+                <div>
+                  <Typography.Title level={5} style={{margin:0}}>
+                    {selectedFriend.name||"Tox 好友"}
+                  </Typography.Title>
+                  <Badge status={peerStatusColor} text={peerStatus}/>
+                </div>
+              </Space>
+              <Divider/>
+              <Typography.Text type="secondary">状态消息</Typography.Text>
+              <Typography.Paragraph className="wt-peer-status-message">
+                {selectedFriend.status_message||"对方暂未设置状态消息"}
+              </Typography.Paragraph>
+              <Typography.Text type="secondary">
+                {selectedFriend.tox_id?"完整 Tox ID（76 位）":"好友公钥（64 位）"}
+              </Typography.Text>
+              <Typography.Paragraph className="wt-peer-id" copyable={{
+                text:selectedFriend.tox_id||selectedFriend.public_key,
+                tooltips:["复制","已复制"]
+              }}>
+                {selectedFriend.tox_id||selectedFriend.public_key}
+              </Typography.Paragraph>
+              {!selectedFriend.tox_id&&<Typography.Text type="secondary">
+                只有公钥时无法还原完整 Tox ID。
+              </Typography.Text>}
+            </div>
+  ):null;
   const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
     .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
   const latestByPeer=useMemo(()=>{
@@ -915,78 +951,12 @@ export default function App(){
         ? <Drawer open={peerDetailsOpen} title="好友资料" placement="bottom"
             height="auto" styles={{body:{maxHeight:"68dvh",overflowY:"auto"}}}
             onClose={()=>setPeerDetailsOpen(false)} destroyOnHidden>
-            <div className="wt-peer-profile">
-              <Space size="middle" align="center">
-                <Badge dot color={selectedFriend.status===0?"#8c8c8c":
-                  ["#52c41a","#faad14","#ff4d4f"][selectedFriend.user_status]||"#52c41a"}
-                  offset={[-2,37]}>
-                  <Avatar size={48} shape="square">
-                    {(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase()}
-                  </Avatar>
-                </Badge>
-                <div>
-                  <Typography.Title level={5} style={{margin:0}}>
-                    {selectedFriend.name||"Tox 好友"}
-                  </Typography.Title>
-                  <Badge status={peerStatusColor} text={peerStatus}/>
-                </div>
-              </Space>
-              <Divider/>
-              <Typography.Text type="secondary">状态消息</Typography.Text>
-              <Typography.Paragraph className="wt-peer-status-message">
-                {selectedFriend.status_message||"对方暂未设置状态消息"}
-              </Typography.Paragraph>
-              <Typography.Text type="secondary">
-                {selectedFriend.tox_id?"完整 Tox ID（76 位）":"好友公钥（64 位）"}
-              </Typography.Text>
-              <Typography.Paragraph className="wt-peer-id" copyable={{
-                text:selectedFriend.tox_id||selectedFriend.public_key,
-                tooltips:["复制","已复制"]
-              }}>
-                {selectedFriend.tox_id||selectedFriend.public_key}
-              </Typography.Paragraph>
-              {!selectedFriend.tox_id&&<Typography.Text type="secondary">
-                只有公钥时无法还原完整 Tox ID。
-              </Typography.Text>}
-            </div>
+            {peerProfileContent}
           </Drawer>
         : <AntModal open={peerDetailsOpen} title="好友资料"
             onCancel={()=>setPeerDetailsOpen(false)} footer={null}
             centered destroyOnHidden width={500}>
-            <div className="wt-peer-profile">
-              <Space size="middle" align="center">
-                <Badge dot color={selectedFriend.status===0?"#8c8c8c":
-                  ["#52c41a","#faad14","#ff4d4f"][selectedFriend.user_status]||"#52c41a"}
-                  offset={[-2,37]}>
-                  <Avatar size={48} shape="square">
-                    {(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase()}
-                  </Avatar>
-                </Badge>
-                <div>
-                  <Typography.Title level={5} style={{margin:0}}>
-                    {selectedFriend.name||"Tox 好友"}
-                  </Typography.Title>
-                  <Badge status={peerStatusColor} text={peerStatus}/>
-                </div>
-              </Space>
-              <Divider/>
-              <Typography.Text type="secondary">状态消息</Typography.Text>
-              <Typography.Paragraph className="wt-peer-status-message">
-                {selectedFriend.status_message||"对方暂未设置状态消息"}
-              </Typography.Paragraph>
-              <Typography.Text type="secondary">
-                {selectedFriend.tox_id?"完整 Tox ID（76 位）":"好友公钥（64 位）"}
-              </Typography.Text>
-              <Typography.Paragraph className="wt-peer-id" copyable={{
-                text:selectedFriend.tox_id||selectedFriend.public_key,
-                tooltips:["复制","已复制"]
-              }}>
-                {selectedFriend.tox_id||selectedFriend.public_key}
-              </Typography.Paragraph>
-              {!selectedFriend.tox_id&&<Typography.Text type="secondary">
-                只有公钥时无法还原完整 Tox ID。
-              </Typography.Text>}
-            </div>
+            {peerProfileContent}
           </AntModal>}
     </>}
 
