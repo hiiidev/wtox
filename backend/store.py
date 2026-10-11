@@ -115,6 +115,16 @@ def init():
             expires INTEGER NOT NULL
         )""")
         c.execute("CREATE INDEX IF NOT EXISTS ix_archived_attachment_expiry ON archived_attachments(expires)")
+        c.execute("""CREATE TABLE IF NOT EXISTS disk_attachments (
+            id TEXT PRIMARY KEY,
+            account_id TEXT NOT NULL REFERENCES accounts(id),
+            filename BLOB NOT NULL,
+            size INTEGER NOT NULL,
+            created INTEGER NOT NULL,
+            expires INTEGER NOT NULL,
+            direction TEXT NOT NULL
+        )""")
+        c.execute("CREATE INDEX IF NOT EXISTS ix_disk_attachment_expiry ON disk_attachments(expires)")
         c.execute("""CREATE TABLE IF NOT EXISTS friend_addresses (
             account_id TEXT NOT NULL REFERENCES accounts(id),
             public_key TEXT NOT NULL,
