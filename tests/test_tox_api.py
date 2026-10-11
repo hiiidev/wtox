@@ -53,7 +53,6 @@ class ChatApiTests(unittest.TestCase):
         self.env = patch.dict(os.environ, {
             "WTOX_DATA_DIR": self.temp.name,
             "WTOX_MASTER_KEY": "ab" * 32,
-            "WTOX_ACCESS_PASSWORD": "this-is-a-long-web-gate-passphrase",
             "WTOX_INSECURE_HTTP": "1",
         })
         self.env.start()
@@ -64,10 +63,6 @@ class ChatApiTests(unittest.TestCase):
         )
         self.uid = store.create_tox_identity(identity)
         self.client = TestClient(app)
-        gate = self.client.post("/api/gate/login", json={
-            "password": "this-is-a-long-web-gate-passphrase"
-        })
-        self.assertEqual(gate.status_code, 200, gate.text)
         self.client.cookies.set("wtox_tox_session", store.create_tox_session(self.uid))
         self.core_mock = patch("backend.tox_api.manager.get", return_value=FakeSession())
         self.core_mock.start()
@@ -137,15 +132,15 @@ class ChatApiTests(unittest.TestCase):
         },headers={"Origin":"https://evil.invalid"})
         self.assertEqual(cross.status_code,403)
 
-    def test_gate_and_origins(self):
+    def test_tox_authentication_and_origins(self):
         resp = self.client.post("/api/messages", json={
             "public_key": PEER, "text": "hey"
         }, headers={"Origin": "https://not-our-site.example"})
         self.assertEqual(resp.status_code, 403, resp.text)
         self.client.cookies.delete("wtox_tox_session")
         self.assertEqual(self.client.get("/api/network").status_code, 401)
-        self.client.cookies.delete("wtox_gate")
         self.assertEqual(self.client.get("/api/friends").status_code, 401)
+        self.assertEqual(self.client.post("/api/gate/login",json={"password":"x"}).status_code,404)
 
     def test_pending_ack_and_websocket_origin(self):
         eid = store.append_pending(self.uid, {

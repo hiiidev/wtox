@@ -26,13 +26,13 @@ test -f .env || cp .env.example .env
 chmod 600 .env
 ```
 
-`.env` 里的 **SITE_DOMAIN** 填域名，**WTOX_ACCESS_PASSWORD** 设置独立的随机强密码（最少 6 个字符，但建议使用更长的随机密码）。**WTOX_MASTER_KEY** 为 32 字节随机值的 hex 表示：
+`.env` 里的 **SITE_DOMAIN** 填域名，**WTOX_MASTER_KEY** 为 32 字节随机值的 hex 表示：
 
 ```sh
 python3 -c 'import secrets; print(secrets.token_hex(32))'
 ```
 
-注意：两者都不能提交 GitHub、发在聊天里或记录在公开日志中。请单独保存主密钥的离线备份，遗失后无法恢复加密保存的 Tox 私钥。
+注意：主密钥不能提交 GitHub、发在聊天里或记录在公开日志中。请单独保存主密钥的离线备份，遗失后无法恢复加密保存的 Tox 私钥。
 
 ## 3. 构建验证
 
@@ -51,7 +51,7 @@ docker compose ps
 docker compose logs --tail=100 web caddy
 ```
 
-将 SITE_DOMAIN 指向 VPS，打开 `https://你的域名/`。应该先看到**网站统一访问密码**页面，随后可以直接创建新的 Tox 身份（立即下载 `.tox` 备份），或上传已有原始 `.tox` 文件登录/首次导入。无需网站用户名和个人账号密码。
+将 SITE_DOMAIN 指向 VPS，打开 `https://你的域名/`。将直接看到 Tox 身份选择页面，无需网站入口密码；可以创建新的 Tox 身份（立即下载 `.tox` 备份），或上传已有原始 `.tox` 文件登录/首次导入。无需网站用户名和个人账号密码。
 
 如果服务器无法取得自动 HTTPS 证书，请检查域名 A/AAAA 记录、80/443 入站和 Caddy 日志。
 

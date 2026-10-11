@@ -24,7 +24,7 @@ class ReactStaticAssetsTests(unittest.TestCase):
         self.assertTrue(any(url.endswith(".css") for url in urls), html)
         for url in urls:
             with self.subTest(asset=url):
-                # Hashed assets are public and bypass the shared-password gate.
+                # Hashed assets are public; identity-specific APIs are not.
                 response = self.client.get(url, follow_redirects=False)
                 self.assertEqual(response.status_code, 200, f"{url}: {response.text[:140]}")
                 self.assertNotEqual(response.headers.get("content-type"), "application/json")
@@ -38,7 +38,7 @@ class ReactStaticAssetsTests(unittest.TestCase):
         self.assertGreaterEqual(body["js"], 1)
         self.assertGreaterEqual(body["css"], 1)
 
-    def test_missing_asset_is_a_404_not_a_site_gate_redirect(self):
+    def test_missing_asset_is_a_404(self):
         response = self.client.get("/assets/__wtox_missing__.css", follow_redirects=False)
         self.assertEqual(response.status_code, 404)
         self.assertNotIn(response.status_code, (302, 303, 307))

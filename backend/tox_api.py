@@ -285,11 +285,7 @@ def acknowledge(body: Acknowledge, request: Request, uid: str = Depends(require_
 
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    # HTTP access middleware doesn't guard WebSocket upgrades, so check both
-    # entrance gate and personal session cookies independently.
-    if not access.gate_valid(ws.cookies.get(access.COOKIE_NAME)):
-        await ws.close(code=1008)
-        return
+    # WebSocket must validate the personal Tox session explicitly.
     uid = store.tox_session_user(ws.cookies.get(TOX_SESSION_COOKIE))
     if not uid:
         await ws.close(code=1008)

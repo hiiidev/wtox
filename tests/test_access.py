@@ -1,36 +1,30 @@
+"""Site entrance is public; private data requires a Tox identity session."""
 import os
 import unittest
 from unittest.mock import patch
-
+from fastapi.testclient import TestClient
 from backend import access
+from backend.main import app
+
 
 class AccessTest(unittest.TestCase):
-    def test_six_character_minimum(self):
-        with patch.dict(os.environ, {"WTOX_MASTER_KEY": "ab" * 32,
-                                     "WTOX_ACCESS_PASSWORD": "123456"}, clear=False):
-            access.validate_settings()
-            self.assertTrue(access.access_password_ok("123456"))
-            self.assertFalse(access.access_password_ok("12345"))
-            self.assertTrue(access.gate_valid(access.issue_gate_cookie()))
+    def test_cookie_security_keeps_https_by_default(self):
+        with patch.dict(os.environ,{},clear=True):
+            self.assertTrue(access.secure_cookies())
+        with patch.dict(os.environ,{"WTOX_INSECURE_HTTP":"1"}):
+            self.assertFalse(access.secure_cookies())
 
-        with patch.dict(os.environ, {"WTOX_ACCESS_PASSWORD": "12345"}, clear=False):
-            with self.assertRaises(RuntimeError):
-                access.validate_settings()
+    def test_public_home_and_protected_private_api(self):
+        client=TestClient(app)
+        try:
+            self.assertEqual(client.get("/").status_code,200)
+            self.assertEqual(client.get("/api/me").status_code,401)
+            self.assertEqual(client.get("/api/friends").status_code,401)
+            self.assertEqual(client.post("/api/gate/login",json={"password":"x"}).status_code,404)
+            self.assertEqual(client.get("/gate").status_code,404)
+        finally:
+            client.close()
 
-        with patch.dict(os.environ, {"WTOX_ACCESS_PASSWORD": "REPLACE_WITH_STRONG_RANDOM_PASSWORD"}, clear=False):
-            with self.assertRaises(RuntimeError):
-                access.validate_settings()
 
-    def test_roundtrip_and_invalidation(self):
-        with patch.dict(os.environ,{"WTOX_MASTER_KEY":"ab"*32,
-                                     "WTOX_ACCESS_PASSWORD":"a sufficiently long secret"},clear=False):
-            access.validate_settings()
-            self.assertTrue(access.access_password_ok("a sufficiently long secret"))
-            self.assertFalse(access.access_password_ok("wrong"))
-            tok=access.issue_gate_cookie()
-            self.assertTrue(access.gate_valid(tok))
-            self.assertFalse(access.gate_valid(tok[:-2]+"!!"))
-            with patch.dict(os.environ,{"WTOX_ACCESS_PASSWORD":"a different strong secret"},clear=False):
-                self.assertFalse(access.gate_valid(tok))
-
-if __name__=="__main__": unittest.main()
+if __name__=="__main__":
+    unittest.main()

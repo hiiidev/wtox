@@ -24,7 +24,6 @@ class ToxLoginTests(unittest.TestCase):
         self.env = patch.dict(os.environ, {
             "WTOX_DATA_DIR": self.tmp.name,
             "WTOX_MASTER_KEY": "ab" * 32,
-            "WTOX_ACCESS_PASSWORD": "123456",
             "WTOX_INSECURE_HTTP": "1",
         })
         self.env.start()
@@ -36,8 +35,6 @@ class ToxLoginTests(unittest.TestCase):
         with profile_api._LOCK:
             profile_api._ATTEMPTS.clear()
         self.client = TestClient(app)
-        response = self.client.post("/api/gate/login", json={"password":"123456"})
-        self.assertEqual(response.status_code, 200, response.text)
         self.backup_mock = patch("backend.profile_api.encrypt_savedata",
                                  side_effect=lambda data,password: b"toxEsave-mock-encrypted")
         self.backup_mock.start()

@@ -20,7 +20,6 @@ class DiskAttachmentAPITests(unittest.TestCase):
         self.env=patch.dict(os.environ,{
             "WTOX_DATA_DIR":self.tmp.name,
             "WTOX_MASTER_KEY":"ef"*32,
-            "WTOX_ACCESS_PASSWORD":"123456",
             "WTOX_INSECURE_HTTP":"1"
         })
         self.env.start()
@@ -33,8 +32,6 @@ class DiskAttachmentAPITests(unittest.TestCase):
         self.previous=manager.disk
         manager.disk=self.disk
         self.client=TestClient(app)
-        self.assertEqual(self.client.post("/api/gate/login",
-            json={"password":"123456"}).status_code,200)
         self.client.cookies.set(profile_api.COOKIE_NAME,
                                 store.create_tox_session(self.uid))
 

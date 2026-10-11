@@ -1,15 +1,11 @@
-"""Website entrance gate and Tox-profile-only authentication."""
+"""Tox-profile-only authentication and the public web application."""
 import asyncio
-import time
 from pathlib import Path
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from threading import Lock
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import access, store
@@ -17,20 +13,8 @@ from .profile_api import router as profile_router, COOKIE_NAME as TOX_SESSION_CO
 from .tox_api import router as tox_router
 from .session_manager import manager
 
-_ATTEMPTS = defaultdict(deque)
-_ATTEMPT_LOCK = Lock()
-
-def rate_check(key: str):
-    now=time.monotonic()
-    with _ATTEMPT_LOCK:
-        q=_ATTEMPTS[key]
-        while q and now-q[0]>900: q.popleft()
-        if len(q)>=12: raise HTTPException(429,"尝试次数过多，请稍后重试")
-        q.append(now)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    access.validate_settings()
     store.init()
     if store.needs_legacy_migration():
         from .tox_identity import ToxCore
@@ -48,24 +32,17 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 if (FRONTEND_DIR / "dist" / "index.html").is_file():
     FRONTEND_DIR = FRONTEND_DIR / "dist"
 
-class GateMiddleware(BaseHTTPMiddleware):
+class NoStoreMiddleware(BaseHTTPMiddleware):
+    """Keep identity pages and sensitive APIs out of shared HTTP caches."""
     async def dispatch(self, request: Request, call_next):
-        path=request.url.path
-        if path in ("/health","/health/ui","/gate","/api/gate/login","/favicon.ico","/logo.svg") or path.startswith("/assets/"):
-            return await call_next(request)
-        if not access.gate_valid(request.cookies.get(access.COOKIE_NAME)):
-            if path.startswith("/api/"):
-                return JSONResponse({"detail":"需要输入网站访问密码"},status_code=401)
-            return RedirectResponse("/gate",status_code=303)
-        response=await call_next(request)
-        response.headers["Cache-Control"]="no-store"
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
-app.add_middleware(GateMiddleware)
-app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets"), check_dir=False), name="assets")
 
-class PasswordRequest(BaseModel):
-    password: str = Field(min_length=1,max_length=512)
+app.add_middleware(NoStoreMiddleware)
+app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets"), check_dir=False), name="assets")
 
 @app.get("/health")
 def health():
@@ -89,32 +66,6 @@ def frontend_health():
             {"ok":False,"detail":"React 静态资源不完整，请重新构建 Docker 镜像"},
             status_code=503)
     return {"ok":True,"js":len(scripts),"css":len(styles),"logo":True,"asset_route":"/assets"}
-
-@app.get("/gate",response_class=HTMLResponse)
-def gate_page():
-    return """<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>wTox</title><style>body{background:#101827;color:#e6ebf5;font:16px system-ui;display:grid;place-items:center;min-height:100dvh;margin:0}
-form{max-width:360px;width:86%;background:#1b2639;padding:2em;border-radius:16px}
-input,button{box-sizing:border-box;width:100%;padding:12px;border-radius:8px;margin-top:12px;font-size:1em}
-button{background:#467be8;color:white;border:0;cursor:pointer}</style>
-<form id="gate"><h2>wTox</h2><p>请输入网站访问密码</p><input type="password" autocomplete="current-password" required id="password" placeholder="访问密码">
-<button type="submit">进入</button><p id="error" role="alert"></p></form>
-<script>document.querySelector('#gate').onsubmit=async e=>{
-e.preventDefault();const r=await fetch('/api/gate/login',{method:'POST',headers:{'Content-Type':'application/json'},
-body:JSON.stringify({password:document.querySelector('#password').value})});
-if(r.ok)location.replace('/');else document.querySelector('#error').textContent='访问密码错误或尝试次数过多';
-}</script></html>"""
-
-@app.post("/api/gate/login")
-def site_login(body: PasswordRequest, request: Request, response: Response):
-    ip=request.client.host if request.client else "unknown"
-    rate_check("gate:"+ip)
-    if not access.access_password_ok(body.password):
-        raise HTTPException(401,"访问密码错误")
-    response.set_cookie(access.COOKIE_NAME,access.issue_gate_cookie(),
-                        httponly=True,secure=access.secure_cookies(),
-                        samesite="strict",max_age=access.SESSION_AGE,path="/")
-    return {"ok":True}
 
 @app.post("/api/logout")
 def logout(request: Request, response: Response):

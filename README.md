@@ -8,10 +8,10 @@
 
 网站有两层访问控制：
 
-1. **网站统一访问密码**（`WTOX_ACCESS_PASSWORD`，最少 6 个字符），用于阻止未获授权的人访问网站。
-2. **Tox 配置文件是个人登录凭证**：**不再提供网站用户名、个人账号密码或注册表单。**
+1. **无需网站统一入口密码**：打开首页直接显示 Tox 身份选择。
+2. **Tox 配置文件是个人登录凭证**：好友、聊天记录、附件等个人 API 仍受身份会话保护。
 
-通过网站密码后：
+打开网站后：
 
 - **创建新 Tox 身份**：输入非空备份密码（不设固定最少位数）后，服务器生成独立 Tox ID；浏览器立即下载采用标准 ToxEncryptSave 加密的 `.tox` 文件，并建立登录会话。备份密码不会保存在服务器，丢失密码将无法解密该份备份。
 - **使用 `.tox` 登录**：可上传原始 Tox Savedata，也可上传兼容 ToxEncryptSave 的加密 `.tox`，后者需提供对应的备份密码。密码仅用于这次导入的文件解密，不成为网站登录密码；历史未加密备份仍可导入。如果该私钥已登记则进入原身份，否则首次导入。
@@ -125,7 +125,6 @@ chat.example.com {
 
 ### API 概览
 
-- `POST /api/gate/login` — 网站统一访问密码
 - `POST /api/tox/create` — JSON 包含 `password`，下载原生 ToxEncryptSave 加密的 `.tox`，写入安全登录 Cookie
 - `POST /api/tox/login` — 上传原始 `.tox` 登录或首次导入；加密备份采用前置 UTF-8 密码字节、以 `X-Tox-Password-Bytes` 标注字节数的二进制请求体
 - `GET /api/me`、`GET /api/profile/status` — 当前 Tox 身份
@@ -138,3 +137,8 @@ chat.example.com {
 - `GET /api/pending`、`POST /api/ack`、`WS /ws` — 短期消息暂存与实时收发
 
 **旧的 `POST /api/register` 和 `POST /api/login` 已移除。** HTTPS 仅保护浏览器到 VPS 的连接，VPS 上运行的 Toxcore 仍需被你信任。
+
+**安全提示：** 网站入口现在公开，其他人可以访问创建身份与导入页面。
+个人好友和消息等私有 API 仍需要有效 Tox 会话，但公开身份创建会增加 VPS 资源滥用风险。
+建议在反向代理添加限流或 IP 白名单。保留 `WTOX_MASTER_KEY` 和持久数据卷；
+删除网站入口密码不影响加密 .tox 备份自己的密码。

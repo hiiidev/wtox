@@ -22,7 +22,7 @@ chmod 600 .env
 nano .env
 ```
 
-首次部署时设置强随机网站入口密码 `WTOX_ACCESS_PASSWORD`（最少 6 个字符，但建议使用更长的随机密码）和独立随机的 `WTOX_MASTER_KEY`（32 字节，64 位 hex）。可用 `python3 -c 'import secrets; print(secrets.token_hex(32))'` 生成 master key。不要提交或泄露 `.env`。主密钥务必离线备份。
+首次部署时设置独立随机的 `WTOX_MASTER_KEY`（32 字节，64 位 hex）。可用 `python3 -c 'import secrets; print(secrets.token_hex(32))'` 生成 master key。不要提交或泄露 `.env`。主密钥务必离线备份。
 
 `SITE_DOMAIN` 对宿主机 Caddy 模式不是必需字段，但填入实际域名便于切换部署方案。
 
@@ -102,10 +102,10 @@ sudo systemctl status caddy --no-pager
 验证 HTTPS：
 
 ```bash
-curl -I https://tox.example.com/gate
+curl -I https://tox.example.com/
 ```
 
-然后通过浏览器进入 `https://tox.example.com/`，正常情况会先提示输入网站统一访问密码。
+然后通过浏览器进入 `https://tox.example.com/`，正常情况会直接显示 .tox 身份创建／导入界面，无需网站入口密码。
 
 ## 4. 常用排查
 
@@ -122,7 +122,7 @@ sudo journalctl -u caddy -n 100 --no-pager
 
 ## 安全与数据
 
-wtox 的 `/health` 不需要网站密码，所以只暴露没有凭据的健康状态；登录入口以及业务 API 由后端验证统一访问密码和个人登录态。不要通过公网 `http://VPS-IP:6066` 暴露应用。VPS 中的 Toxcore 仍能访问身份私钥和收发明文，不是零知识服务器。
+wtox 首页无需网站入口密码；个人资料、好友、消息和附件 API 均需要 Tox 身份会话。不要通过公网 `http://VPS-IP:6066` 暴露应用。VPS 中的 Toxcore 仍能访问身份私钥和收发明文，不是零知识服务器。
 
 用户 2–3 人时只需这一个 VPS。纯浏览器 WASM 暂不开展。
 

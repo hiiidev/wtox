@@ -18,7 +18,7 @@ This is for the private **wtox** repository: https://github.com/hiiidev/wtox
 cd wtox
 test -f .env || cp .env.example .env
 python3 -c 'import secrets; print(secrets.token_hex(32))'
-# edit .env; set real SITE_DOMAIN, WTOX_MASTER_KEY, WTOX_ACCESS_PASSWORD
+# edit .env; set real SITE_DOMAIN and WTOX_MASTER_KEY
 chmod 600 .env
 bash scripts/deploy.sh
 docker compose -f compose.host-caddy.yml logs --tail=80 web
@@ -30,7 +30,7 @@ Host-native Caddy handles HTTPS/WebSocket and proxies to host-local port 6066. N
 
 ## Smoke tests
 
-1. Visit `https://YOUR_DOMAIN/gate` and enter the shared site password.
+1. Visit `https://YOUR_DOMAIN/` directly. No site-entry password is required.
 2. Create Tox identity A and save the downloaded raw `.tox` backup.
 3. Log out, upload A's `.tox` file, and confirm it reopens exactly the same identity without a username/password.
 4. Import a different raw aTox/qTox export as identity B and verify it restores the same Tox public key.
