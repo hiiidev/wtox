@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "antd/dist/reset.css";
 import "./style.css";
 import "./ant-style.css";
+import "./wechat-style.css";
 import App from "./App.jsx";
 
 class ErrorBoundary extends React.Component {
