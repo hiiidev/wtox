@@ -5,10 +5,15 @@ let socket = null;
 let historyDb = null;
 let historyKey = null;
 let selectedPeer = null;
+let contacts = [];
+let toastTimer;
 const te = new TextEncoder();
 const td = new TextDecoder();
 
-function error(message = "") { $("#error").textContent = message; }
+function error(message = "", warning = true) {
+  const e=$("#error");e.textContent=message;e.hidden=!message;e.classList.toggle("warning",warning);
+  clearTimeout(toastTimer);if(message)toastTimer=setTimeout(()=>e.hidden=true,6500);
+}
 async function api(url, opts = {}) {
   const response = await fetch(url, {
     ...opts,
@@ -123,54 +128,101 @@ async function recoverPending() {
     catch(e){error("部分消息尚未保存："+e.message);break;}
   }
 }
-async function renderHistory() {
-  if (!historyDb || !historyKey) return;
+
+function blankChat(title, subtitle, icon="✦"){
+  const pane=$("#messages");pane.replaceChildren();
+  const block=document.createElement("div");block.className="conversation-empty";
+  const sym=document.createElement("span");sym.className="empty-symbol";sym.textContent=icon;
+  const strong=document.createElement("strong");strong.textContent=title;
+  const desc=document.createElement("span");desc.textContent=subtitle;
+  block.append(sym,strong,desc);pane.append(block);
+}
+async function renderHistory(){
+  if(!selectedPeer){blankChat("你的私人通讯空间","从左侧选择好友，开始一段对话");return}
+  if(!historyDb||!historyKey){blankChat("聊天记录已加密","请先解锁本地历史以查看及发送消息","▣");return}
   const rows=await reqResult(historyDb.transaction("events").objectStore("events").getAll());
-  const records=[];
-  for(const row of rows) {
-    try { records.push(await unseal(row,historyKey)); }
-    catch { error("本地历史存在无法解密的内容"); }
+  const entries=[];
+  for(const row of rows){
+    try{const e=await unseal(row,historyKey);if(e.public_key===selectedPeer)entries.push(e)}
+    catch{error("部分历史无法解密")}
   }
-  records.sort((a,b)=>a.at-b.at);
-  const log=$("#messages");
-  log.replaceChildren();
-  for(const record of records.slice(-100)){
-    if (selectedPeer && record.public_key!==selectedPeer) continue;
-    const item=document.createElement("div");
-    item.className="event";
-    const time=document.createElement("time");
-    time.textContent=new Date(record.at).toLocaleString();
-    const from=document.createElement("strong");
-    from.textContent=record.type==="friend_request" ? "好友请求" : (record.direction==="outgoing" ? "我" : "对方");
-    const body=document.createTextNode(": "+record.text);
-    item.append(time,from,body);
-    log.append(item);
+  entries.sort((a,b)=>a.at-b.at);
+  if(!entries.length){blankChat("还没有聊天记录","好友接受请求并在线后可以发送消息","✉");return}
+  const pane=$("#messages");pane.replaceChildren();let prevDay="";
+  for(const e of entries.slice(-200)){
+    const day=new Date(e.at).toLocaleDateString("zh-CN");
+    if(prevDay!==day){const div=document.createElement("div");div.className="day-divider";div.textContent=day;pane.append(div);prevDay=day}
+    if(e.type==="friend_request"){const div=document.createElement("div");div.className="bubble-request";div.textContent="好友请求 · "+e.text;pane.append(div);continue}
+    const mine=e.direction==="outgoing";
+    const row=document.createElement("div");row.className="bubble-row"+(mine?" mine":"");
+    const bubble=document.createElement("div");bubble.className="bubble";bubble.textContent=e.text||"";
+    const stamp=document.createElement("div");stamp.className="bubble-info";
+    stamp.textContent=new Date(e.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+(mine?" · 已提交发送接口":"");
+    row.append(bubble,stamp);pane.append(row);
   }
-  log.scrollTop=log.scrollHeight;
+  pane.scrollTop=pane.scrollHeight;
+}
+function online(f){return f&&(f.status===1||f.status===2)}
+function statusText(s){return s===2?"UDP 在线":s===1?"TCP 在线":"离线"}
+function selectedFriend(){return contacts.find(f=>f.public_key===selectedPeer)}
+function updateComposer(){
+  const f=selectedFriend(),ready=!!f&&online(f)&&!!historyKey;
+  $("#send").disabled=!ready;
+  $("#deleteFriend").disabled=!f;
+  $("#selectedStatus").textContent=!f?"选择一个好友开始聊天":statusText(f.status)+(online(f)?" · 可以发送":" · 等待对方上线");
+  $("#peerAvatar").textContent=f?(f.name||f.public_key).slice(0,1).toUpperCase():"✦";
+  const hint=$("#sendHint");hint.classList.toggle("warn",!!f&&!online(f));
+  hint.textContent=!f?"选择联系人后可以发送消息。"
+    :!online(f)?"好友离线或尚未接受请求；Tox 目前只能向在线好友即时发送。草稿会保留。"
+    :!historyKey?"好友在线，请先解锁本地加密历史。":"好友在线 · Enter 发送，Shift + Enter 换行。";
 }
 function selectPeer(key){
-  selectedPeer=key;
-  $("#peer").value=key;
-  $("#selected").textContent="正在与 "+key.slice(0,16)+"… 通信";
-  renderHistory().catch(e=>error(e.message));
+  selectedPeer=key;$("#peer").value=key;
+  const f=selectedFriend();$("#selected").textContent=f?(f.name||"Tox 好友 "+key.slice(0,10)+"…"):"Tox 好友";
+  $("#account").classList.add("chat-open");
+  renderContacts();updateComposer();renderHistory().catch(e=>error(e.message));
+}
+function renderContacts(){
+  const list=$("#friends");list.replaceChildren();
+  $("#friendCount").textContent=String(contacts.length);
+  const q=$("#contactSearch").value.trim().toLowerCase();
+  const sorted=[...contacts].sort((a,b)=>Number(online(b))-Number(online(a))||
+    (a.name||a.public_key).localeCompare(b.name||b.public_key));
+  const visible=sorted.filter(f=>(f.name+" "+f.public_key).toLowerCase().includes(q));
+  if(!visible.length){
+    const e=document.createElement("div");e.className="no-contacts";
+    const title=document.createElement("strong");title.textContent=contacts.length?"没有匹配的好友":"还没有联系人";
+    const sub=document.createElement("span");sub.textContent=contacts.length?"尝试其他搜索词":"点击下方添加好友";
+    e.append(title,sub);list.append(e);
+  }
+  for(const f of visible){
+    const btn=document.createElement("button");btn.className="contact"+(selectedPeer===f.public_key?" active":"");
+    const avatar=document.createElement("span");avatar.className="avatar";avatar.textContent=(f.name||f.public_key).slice(0,1).toUpperCase();
+    const body=document.createElement("span");body.className="contact-body";
+    const name=document.createElement("span");name.className="contact-main";
+    name.textContent=f.name||"Tox 好友 "+f.public_key.slice(0,9)+"…";
+    const status=document.createElement("span");status.className="contact-sub"+(online(f)?" online":"");
+    const dot=document.createElement("i");dot.className="presence"+(online(f)?" online":"");
+    const label=document.createElement("span");label.textContent=statusText(f.status);
+    status.append(dot,label);body.append(name,status);
+    const arrow=document.createElement("span");arrow.className="contact-arrow";arrow.textContent="›";
+    btn.title=f.public_key;btn.append(avatar,body,arrow);btn.onclick=()=>selectPeer(f.public_key);
+    list.append(btn);
+  }
 }
 async function refreshFriends(){
-  const {friends}=await json("/api/friends");
-  const holder=$("#friends");holder.replaceChildren();
-  if(!friends.length){holder.textContent="还没有好友";return}
-  for(const friend of friends){
-    const button=document.createElement("button");
-    button.className="friend";
-    button.textContent=(friend.name || friend.public_key.slice(0,12)+"…") +
-      " · "+(["离线","TCP 在线","UDP 在线"][friend.status] || "未知");
-    button.title=friend.public_key;
-    button.onclick=()=>selectPeer(friend.public_key);
-    holder.append(button);
+  const data=await json("/api/friends");contacts=data.friends||[];
+  if(selectedPeer&&!selectedFriend()){
+    selectedPeer=null;$("#peer").value="";$("#selected").textContent="选择一个好友开始聊天";
+    $("#account").classList.remove("chat-open");await renderHistory();
   }
+  renderContacts();updateComposer();
 }
 async function refreshNetwork(){
   const data=await json("/api/network");
-  $("#network").textContent=["离线 / 连接中","通过 TCP Relay 在线","通过 UDP 在线"][data.status]||"未知状态";
+  $("#network").textContent=data.status===0?"Tox 连接中":statusText(data.status);
+  $("#networkDot").classList.toggle("online",data.status===1||data.status===2);
+  $("#networkDot").classList.toggle("pending",data.status===0||data.status===-1);
 }
 function connectWebsocket(){
   if(socket) {socket.onclose=null;socket.close();}
