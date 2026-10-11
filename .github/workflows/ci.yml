@@ -52,8 +52,9 @@ jobs:
           done
       - run: cp .env.example .env && docker compose config -q
   native-smoke:
-    # Deliberately opt-in until Dockerfile build has been checked on a clean runner.
-    if: github.event_name == 'workflow_dispatch'
+    # Run on demand, and once for commits explicitly marked [native-check].
+    # This exercises real c-toxcore and ToxEncryptSave in Docker.
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[native-check]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
