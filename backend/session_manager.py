@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from .tox_runtime import FriendOfflineError
 
 from . import store
 from .tox_runtime import ToxSession, ToxActionError
@@ -17,9 +18,11 @@ class SessionManager:
         self.sockets: dict[str, set] = {}
         self.lock = threading.RLock()
         self.loop: asyncio.AbstractEventLoop | None = None
+        self.outbox_task: asyncio.Task | None = None
 
     def start(self, loop: asyncio.AbstractEventLoop):
         self.loop = loop
+        self.outbox_task = loop.create_task(self._outbox_loop())
         # Restore identities from encrypted savedata. Do not generate fresh IDs.
         for uid in store.active_profiles():
             try:
@@ -45,6 +48,47 @@ class SessionManager:
             self.sessions[uid] = session
             session.start()
             return session
+
+    def dispatch_outbox(self, uid: str):
+        """One round of encrypted offline queue draining on a worker thread.
+
+        The DB claim is durable BEFORE any native send. A crash after claim
+        leaves 'uncertain' (never an automatic duplicate on restart).
+        """
+        s=self.get(uid)
+        for eid,peer,text in store.outbox_queued(uid):
+            try:
+                # Avoid consuming a job while the friend is offline. A race
+                # immediately after this check re-queues on FriendOfflineError.
+                current=next((x for x in s.friends() if x["public_key"]==peer),None)
+                if not current or current["status"]==0:continue
+                if not store.outbox_claim(uid,eid):continue
+                try:
+                    message_id=s.send_message(peer,text)
+                except FriendOfflineError:
+                    store.outbox_finish(uid,eid,"queued")
+                    continue
+                except (ValueError,ToxActionError) as exc:
+                    store.outbox_finish(uid,eid,"failed",error=str(exc)[:160])
+                else:
+                    store.outbox_finish(uid,eid,"sent",session_id=s.session_id,
+                                        message_id=message_id)
+            except Exception as exc:
+                print("Offline outbox dispatch error:",uid[:8],type(exc).__name__,flush=True)
+
+    async def _outbox_loop(self):
+        while True:
+            try:
+                # Outbox checks are independent from the browser and survive
+                # browser disconnection. Native Tox sessions continue online.
+                uids=await asyncio.to_thread(store.active_profiles)
+                for uid in uids:
+                    await asyncio.to_thread(self.dispatch_outbox,uid)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                print("Outbox worker failed:",type(exc).__name__,flush=True)
+            await asyncio.sleep(3)
 
     def on_event(self, uid: str, event: dict):
         payload = event.copy()
@@ -72,6 +116,10 @@ class SessionManager:
         self.sockets.get(uid, set()).discard(ws)
 
     async def shutdown(self):
+        if self.outbox_task:
+            self.outbox_task.cancel()
+            await asyncio.gather(self.outbox_task,return_exceptions=True)
+            self.outbox_task=None
         # Threads must persist final savedata before the event loop stops.
         with self.lock:
             sessions = list(self.sessions.values())
