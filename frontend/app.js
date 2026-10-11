@@ -192,6 +192,10 @@ async function persistEvent(event) {
     direction:event.direction || "incoming",
     public_key:event.public_key || "",
     text:event.text || "",
+    // Only native outgoing messages have receipt identifiers.
+    message_id: event.direction==="outgoing" ? event.message_id : undefined,
+    session_id: event.direction==="outgoing" ? event.session_id : undefined,
+    delivery_status: event.direction==="outgoing" ? (event.delivery_status||"submitted") : undefined,
   };
   const enc=await seal(record,historyKey);
   const tx=historyDb.transaction("events","readwrite");
@@ -201,12 +205,50 @@ async function persistEvent(event) {
   if (event.id) await post("/api/ack",{ids:[event.id]});
   return true;
 }
+async function applyMessageReceipt(event) {
+  if(!historyDb||!historyKey)return false;
+  // Restrict matching to a single native Toxcore instance. Message IDs can
+  // be reused when a Tox profile is restored after a process restart.
+  if(event.type!=="message_receipt" || event.status!=="sent" ||
+     typeof event.public_key!=="string" ||
+     typeof event.session_id!=="string" ||
+     !Number.isInteger(event.message_id))return false;
+  const rows=await reqResult(historyDb.transaction("events").objectStore("events").getAll());
+  for(const row of rows){
+    const record=await unseal(row,historyKey);
+    if(record.type==="message" && record.direction==="outgoing" &&
+       record.public_key===event.public_key &&
+       record.session_id===event.session_id &&
+       record.message_id===event.message_id){
+      if(record.delivery_status!=="sent"){
+        record.delivery_status="sent";
+        const encrypted=await seal(record,historyKey);
+        const tx=historyDb.transaction("events","readwrite");
+        tx.objectStore("events").put({id:row.id,...encrypted});
+        await txnDone(tx);
+      }
+      // Server can discard the receipt only after local persistence succeeds.
+      if(event.id)await post("/api/ack",{ids:[event.id]});
+      await renderHistory();
+      return true;
+    }
+  }
+  // In-flight race: a receipt can precede the HTTP send response and local
+  // history insert. Keep the server-side receipt pending for later retry.
+  return false;
+}
 async function recoverPending() {
   if (!historyKey) return;
   const {pending}=await json("/api/pending");
   for(const record of pending) {
-    try { await persistEvent({...record.event,id:record.id,created:record.created}); }
-    catch(e){error("部分消息尚未保存："+e.message);break;}
+    try{
+      const event={...record.event,id:record.id,created:record.created};
+      if(event.type==="message_receipt"){
+        await applyMessageReceipt(event);
+      }else{
+        await persistEvent(event);
+      }
+    }catch(e){error("部分消息或回执尚未保存："+e.message);break;}
   }
 }
 
@@ -238,7 +280,7 @@ async function renderHistory(){
     const row=document.createElement("div");row.className="bubble-row"+(mine?" mine":"");
     const bubble=document.createElement("div");bubble.className="bubble";bubble.textContent=e.text||"";
     const stamp=document.createElement("div");stamp.className="bubble-info";
-    stamp.textContent=new Date(e.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+(mine?" · 已提交发送接口":"");
+    stamp.textContent=new Date(e.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+(mine?(e.delivery_status==="sent"?" · 已发送":" · 已提交"):"");
     row.append(bubble,stamp);pane.append(row);
   }
   pane.scrollTop=pane.scrollHeight;
@@ -332,6 +374,10 @@ function connectWebsocket(){
       }else{
         error("收到新消息或好友请求：请先解锁本地加密历史。",false);
       }
+    }
+    if(event.type==="message_receipt"){
+      try{await applyMessageReceipt(event)}
+      catch(e){error("消息状态保存失败："+e.message)}
     }
     if(event.type==="file"){
       refreshFiles().catch(()=>{});
@@ -648,13 +694,21 @@ async function sendNow(){
   if(!text.trim()){error("请输入消息内容");return}
   sending=true;$("#send").disabled=true;
   try{
-    await post("/api/messages",{public_key:peer,text});
+    const result=await post("/api/messages",{public_key:peer,text});
     // Native Toxcore accepted the send. Never leave the old draft in the
     // editor if IndexedDB fails, as re-sending could duplicate the message.
     drafts.delete(peer);
     if(selectedPeer===peer)$("#message").value="";
     try{
-      await persistEvent({type:"message",direction:"outgoing",public_key:peer,text});
+      await persistEvent({
+        type:"message",direction:"outgoing",public_key:peer,text,
+        session_id:result.session_id,
+        message_id:result.message_id,
+        delivery_status:"submitted",
+      });
+      // Resolve receipts that arrived before the HTTP response or IndexedDB
+      // write. A non-ACKed receipt remains in the seven-day pending queue.
+      await recoverPending();
       await renderHistory();
       error("");
     }catch(e){error("已提交 Tox 发送，但本地历史保存失败："+e.message)}
