@@ -434,8 +434,9 @@ export default function App(){
                 <Badge dot color={selectedFriend.status===0?"#8c8c8c":
                   ["#52c41a","#faad14","#ff4d4f"][selectedFriend.user_status]||"#52c41a"}
                   offset={[-2,37]}>
-                  <Avatar size={48} shape="square">
-                    {(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase()}
+                  <Avatar size={48} shape="square" gap={4}
+                    style={{backgroundColor:avatarColor(selectedFriend.public_key)}}>
+                    {avatarLabel(selectedFriend.name,selectedFriend.public_key)}
                   </Avatar>
                 </Badge>
                 <div>
@@ -740,9 +741,10 @@ export default function App(){
           title="我的 Tox 资料" onClick={()=>setModal("profile")}>
           <Tooltip title={ownStatusLabel}>
             <Badge dot color={ownBadgeColor} offset={[-2,35]}>
-              <Avatar size={44} shape="square" className="wechat-self-avatar"
+              <Avatar size={44} shape="square" gap={3} className="wechat-self-avatar"
+                style={{backgroundColor:avatarColor(user.public_key)}}
                 icon={!ownProfile.name?<UserOutlined/>:undefined}>
-                {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+                {ownProfile.name?avatarLabel(ownProfile.name):undefined}
               </Avatar>
             </Badge>
           </Tooltip>
@@ -773,8 +775,9 @@ export default function App(){
               onClick={()=>setModal("profile")}>
               <Tooltip title={ownStatusLabel}>
                 <Badge dot color={ownBadgeColor} offset={[-2,25]}>
-                  <Avatar size={32} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
-                    {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+                  <Avatar size={32} shape="square" gap={3} style={{backgroundColor:avatarColor(user.public_key)}}
+                    icon={!ownProfile.name?<UserOutlined/>:undefined}>
+                    {ownProfile.name?avatarLabel(ownProfile.name):undefined}
                   </Avatar>
                 </Badge>
               </Tooltip>
@@ -809,8 +812,9 @@ export default function App(){
             return <button type="button" key={friend.public_key}
               className={"wechat-conversation "+(selected===friend.public_key?"is-selected":"")}
               onClick={()=>selectFriend(friend.public_key)}>
-              <Avatar size={45} shape="square" className="wechat-contact-avatar">
-                {(friend.name||friend.public_key).slice(0,1).toUpperCase()}
+              <Avatar size={45} shape="square" gap={4} className="wechat-contact-avatar"
+                style={{backgroundColor:avatarColor(friend.public_key)}}>
+                {avatarLabel(friend.name,friend.public_key)}
               </Avatar>
               <span className="wechat-conversation-text">
                 <span className="wechat-conversation-name">{friend.name||"Tox 好友 "+shortKey(friend.public_key)}</span>
@@ -846,8 +850,9 @@ export default function App(){
         <AntButton type="text" className="wt-mobile-profile-card"
           onClick={()=>setModal("profile")} aria-label="查看并修改我的 Tox 资料">
           <Badge dot color={ownBadgeColor} offset={[-2,44]}>
-            <Avatar size={56} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
-              {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+            <Avatar size={56} shape="square" gap={4} style={{backgroundColor:avatarColor(user.public_key)}}
+              icon={!ownProfile.name?<UserOutlined/>:undefined}>
+              {ownProfile.name?avatarLabel(ownProfile.name):undefined}
             </Avatar>
           </Badge>
           <span className="wt-mobile-profile-name">
@@ -880,14 +885,20 @@ export default function App(){
               <AntButton type="text" className="wt-peer-avatar-button"
                 aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
                 onClick={()=>setPeerDetailsOpen(true)}>
-                <Avatar size={40} className="ant-chat-avatar">
-                  {selectedFriend?(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase():"✦"}
+                <Avatar size={40} gap={4} className="ant-chat-avatar"
+                  style={{backgroundColor:avatarColor(selectedFriend?.public_key||user.public_key)}}>
+                  {selectedFriend?avatarLabel(selectedFriend.name,selectedFriend.public_key):"✦"}
                 </Avatar>
               </AntButton>
             </Tooltip>
             <div className="ant-peer-title">
-              <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
-              <small>{selectedFriend?statusLabel(selectedFriend.status):"端到端 Tox 网络"}</small>
+              <div className="wt-peer-name-row">
+                <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
+                {selectedFriend&&<Badge status={peerStatusColor} text={peerStatus}/>}
+              </div>
+              <small title={selectedFriend?.status_message||""}>
+                {selectedFriend?.status_message?.trim()|| (selectedFriend?"暂无状态消息":"wTox")}
+              </small>
             </div>
           </div>
           <Space>
@@ -935,8 +946,9 @@ export default function App(){
                   onClick={event=>{event.stopPropagation();setPeerDetailsOpen(true)}}
                   onTouchStart={event=>event.stopPropagation()}
                   onContextMenu={event=>event.stopPropagation()}>
-                  <Avatar size={34} shape="square">
-                    {(selectedFriend?.name||item.public_key).slice(0,1).toUpperCase()}
+                  <Avatar size={34} shape="square" gap={3}
+                    style={{backgroundColor:avatarColor(item.public_key)}}>
+                    {avatarLabel(selectedFriend?.name,item.public_key)}
                   </Avatar>
                 </AntButton>}
                 <Bubble content={String(item.text||"")}
@@ -980,8 +992,9 @@ export default function App(){
       onCancel={closeModal} footer={null} centered destroyOnHidden width={520}>
       <div className="wtox-profile-header">
         <Badge dot color={ownBadgeColor} offset={[-3,53]}>
-          <Avatar size={64} shape="square" icon={!ownProfile.name?<UserOutlined/>:undefined}>
-            {ownProfile.name?.trim()?.charAt(0)?.toUpperCase()||undefined}
+          <Avatar size={64} shape="square" gap={5} style={{backgroundColor:avatarColor(user.public_key)}}
+            icon={!ownProfile.name?<UserOutlined/>:undefined}>
+            {ownProfile.name?avatarLabel(ownProfile.name):undefined}
           </Avatar>
         </Badge>
         <div>
