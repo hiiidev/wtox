@@ -215,13 +215,20 @@ async def send_file(request: Request, peer: str, name: str, uid: str = Depends(r
         document = manager.disk.begin(uid, filename, direction="outgoing")
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(503, "附件磁盘不可写") from exc
     try:
         async for chunk in request.stream():
             document.write(chunk)
         document.finish()
     except (ValueError, OSError) as exc:
         document.abort()
-        raise HTTPException(413 if "超过" in str(exc) else 400, str(exc)) from exc
+        raise HTTPException(413 if "超过" in str(exc) else
+                            503 if isinstance(exc,OSError) else 400, str(exc)) from exc
+    except BaseException:
+        # ClientDisconnect / task cancellation must not leave a partial spool.
+        document.abort()
+        raise
     try:
         return session(uid).files.send(peer.strip().upper(), filename, document)
     except (ValueError, OSError) as exc:

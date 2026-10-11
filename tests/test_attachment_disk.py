@@ -90,6 +90,14 @@ class DiskAttachmentTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             writer.read(2,2)
 
+    def test_account_disk_quota(self):
+        writer=self.disk.begin(self.uid,"small.bin",expected=4)
+        writer.write(b"1234")
+        writer.finish()
+        with patch("backend.attachment_disk.MAX_ACCOUNT_BYTES",6):
+            with self.assertRaisesRegex(ValueError,"容量上限"):
+                self.disk.begin(self.uid,"next.bin",expected=3)
+
     def test_abandoned_upload_cleaned_after_seven_days(self):
         writer=self.disk.begin(self.uid,"abandoned.bin")
         writer.write(b"hello")

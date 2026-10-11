@@ -18,6 +18,8 @@ from . import store
 BLOCK = 64 * 1024
 MAX_FILE = 5 * 1024 * 1024
 TTL = 7 * 86400
+MAX_ACCOUNT_BYTES = 200 * 1024 * 1024
+MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 _HEX32 = re.compile(r"^[a-f0-9]{32}$")
 
 
@@ -137,6 +139,20 @@ class DiskAttachmentStore:
             raise ValueError("未知附件方向")
         _identifier(uid)
         ident = _identifier(ident or uuid.uuid4().hex)
+        # Restrict retained encrypted data per identity and across the VPS.
+        # Reserve a worst-case file for unknown-length HTTP uploads.
+        reserve = expected if expected is not None else MAX_FILE
+        with store.db() as db:
+            used_user = db.execute(
+                "SELECT COALESCE(SUM(size),0) FROM disk_attachments"
+                " WHERE account_id=? AND expires>?", (uid,int(time.time()))
+            ).fetchone()[0]
+            used_total = db.execute(
+                "SELECT COALESCE(SUM(size),0) FROM disk_attachments WHERE expires>?",
+                (int(time.time()),)
+            ).fetchone()[0]
+        if used_user + reserve > MAX_ACCOUNT_BYTES or used_total + reserve > MAX_TOTAL_BYTES:
+            raise ValueError("附件磁盘暂存空间已达容量上限，请等待 7 天清理")
         parent = self.root / uid
         parent.mkdir(mode=0o700, exist_ok=True)
         return DiskAttachment(self, uid, ident, name, expected, direction)
