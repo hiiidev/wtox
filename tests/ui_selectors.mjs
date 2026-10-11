@@ -25,4 +25,15 @@ assert.ok(js.includes("generateKey("), "device key creation is required");
 assert.ok(js.includes("AUTO_KEY_ID"), "device key must persist per browser");
 assert.ok(js.includes("historyDb.transaction([\"meta\",\"events\"],\"readwrite\")"), "legacy history must migrate atomically");
 console.log("wtox local history automatic setup checks OK");
+assert.ok(js.includes('async function applyMessageReceipt('),
+  "Missing native message receipt handling");
+assert.ok(js.includes('record.session_id===event.session_id'),
+  "Must match receipts by Tox session, not only message number");
+assert.ok(js.includes('record.message_id===event.message_id'),
+  "Must match receipt message ID");
+assert.ok(js.includes('e.delivery_status==="sent"?" · 已发送":" · 已提交"'),
+  "Missing submitted-to-sent UI labels");
+assert.ok(js.includes('await recoverPending();'),
+  "Out-of-order receipts must be retried");
+console.log("wtox receipt status UI checks OK");
 console.log("wtox desktop/mobile messenger UI structure OK");
