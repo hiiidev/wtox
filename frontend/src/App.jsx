@@ -468,6 +468,10 @@ export default function App(){
   const recoverPending=useCallback(async(h=history.current)=>{
     if(!h?.ready())return;
     const data=await getJson("/api/pending");
+    // Match durable send IDs before applying delayed Tox receipt callbacks.
+    // This matters when the VPS sends and receives a receipt while the
+    // browser is closed: the local queued message has no native ID yet.
+    await refreshOutbox(h);
     for(const row of data.pending||[]){
       const e={...row.event,id:row.id,created:row.created};
       try{
@@ -484,7 +488,6 @@ export default function App(){
         }
       }catch(error){alert("消息暂存处理失败："+error.message);break}
     }
-    await refreshOutbox(h);
     await refreshHistory(h);
   },[alert,refreshHistory,refreshOutbox,refreshFriendRequests,notifyIncoming]);
 
