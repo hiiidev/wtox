@@ -421,6 +421,21 @@ def outbox_finish(uid: str, eid: str, status: str, session_id=None, message_id=N
             (status,status,int(time.time()),session_id,message_id,error,eid,uid)
         )
 
+def outbox_counts(uid: str) -> dict[str,int]:
+    """Authenticated status summary: no message text or peer IDs returned."""
+    with db() as c:
+        rows = c.execute(
+            "SELECT status,COUNT(*) FROM outbox "
+            "WHERE account_id=? AND created>=? "
+            "AND status IN ('queued','dispatching','uncertain') GROUP BY status",
+            (uid, int(time.time())-OUTBOX_TTL)
+        ).fetchall()
+    result = {"queued":0,"dispatching":0,"uncertain":0}
+    for status,count in rows:
+        result[status] = count
+    return result
+
+
 def outbox_status(uid: str):
     with db() as c:
         rows=c.execute(
