@@ -3,7 +3,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates build-essential cmake pkg-config libsodium-dev && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --recurse-submodules https://github.com/TokTok/c-toxcore.git /src/toxcore \
- && cmake -S /src/toxcore -B /tmp/toxbuild -DCMAKE_BUILD_TYPE=Release -DBOOTSTRAP_DAEMON=OFF -DUNITTEST=OFF -DAUTOTEST=OFF -DENABLE_SHARED=ON -DENABLE_STATIC=OFF \
+ && cmake -S /src/toxcore -B /tmp/toxbuild -DCMAKE_BUILD_TYPE=Release -DBOOTSTRAP_DAEMON=OFF -DUNITTEST=OFF -DAUTOTEST=OFF -DENABLE_SHARED=ON -DENABLE_STATIC=OFF -DBUILD_TOXAV=OFF -DDHT_BOOTSTRAP=OFF \
  && cmake --build /tmp/toxbuild -j2 \
  && cmake --install /tmp/toxbuild
 
@@ -20,6 +20,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ /app/backend/
 COPY frontend/ /app/frontend/
+# Fail the build if the native library cannot create and reopen a real Tox ID.
+RUN python -m backend.tox_identity
 RUN useradd --uid 10001 --create-home wtox && mkdir /data && chown -R wtox:wtox /data
 USER wtox
 ENV PYTHONUNBUFFERED=1
