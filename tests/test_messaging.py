@@ -42,7 +42,7 @@ class NativeMessagingTests(unittest.TestCase):
             s.send_message("AB" * 32, "hello")
         self.assertIn("未发送", str(err.exception))
 
-    def test_native_receipt_emits_sent_with_matching_session(self):
+    def test_native_receipt_emits_read_with_matching_session(self):
         s = self.make_session(connection_status=1)
         events = []
         s._emit = events.append
@@ -54,18 +54,19 @@ class NativeMessagingTests(unittest.TestCase):
             "public_key": "AB" * 32,
             "session_id": "cafe" * 8,
             "message_id": 99,
-            "status": "sent",
+            "status": "read",
         }])
 
-    def test_receipt_does_not_pretend_user_read_message(self):
+    def test_receipt_marks_protocol_read_but_not_human_read(self):
         s = self.make_session(connection_status=1)
         events = []
         s._emit = events.append
         s._friend_key = lambda friend: "AB" * 32
         s.session_id = "cafe" * 8
         s._on_read_receipt(None, 7, 101, None)
-        self.assertNotIn("read", events[0])
-        self.assertEqual(events[0]["status"], "sent")
+        self.assertEqual(events[0]["type"], "message_receipt")
+        self.assertEqual(events[0]["status"], "read")
+        self.assertNotIn("human_read", events[0])
 
     def test_text_limits_reject_before_native(self):
         s = self.make_session(connection_status=1)
