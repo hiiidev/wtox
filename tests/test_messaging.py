@@ -68,6 +68,20 @@ class NativeMessagingTests(unittest.TestCase):
         self.assertEqual(events[0]["status"], "delivered")
         self.assertNotIn("human_read", events[0])
 
+    def test_friend_presence_and_profile_callbacks_reach_browser_events(self):
+        s=self.make_session(connection_status=1)
+        events=[]
+        s._emit=events.append
+        s._friend_key=lambda number:"AB"*32
+        s.files=Mock()
+        s._on_friend_status(None,7,2,None)
+        s._on_friend_user_status(None,7,1,None)
+        s._on_friend_profile_changed(None,7,None,0,None)
+        self.assertEqual([e["type"] for e in events],
+                         ["friend_connection","friend_profile","friend_profile"])
+        self.assertEqual(events[1]["user_status"],1)
+        self.assertEqual(events[2]["public_key"],"AB"*32)
+
     def test_text_limits_reject_before_native(self):
         s = self.make_session(connection_status=1)
         with self.assertRaises(ValueError):

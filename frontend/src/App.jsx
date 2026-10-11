@@ -513,6 +513,9 @@ export default function App(){
       }
       refreshTransfers().catch(()=>{});
       if(e.state==="offered")alert("收到附件："+e.name+"。打开 📎 查看并接受。");
+    }else if(e.type==="friend_profile"){
+      // Native name, status-message and away/busy callbacks are immediate.
+      refreshFriends().catch(()=>{});
     }else if(["connection","friend_connection"].includes(e.type)){
       refreshNetwork().catch(()=>{});refreshFriends().catch(()=>{});
     }

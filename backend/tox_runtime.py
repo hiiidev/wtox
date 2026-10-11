@@ -28,6 +28,8 @@ FriendMessageCB = C.CFUNCTYPE(None, P, U32, C.c_int, IP, C.c_size_t, P)
 FriendStatusCB = C.CFUNCTYPE(None, P, U32, C.c_int, P)
 SelfStatusCB = C.CFUNCTYPE(None, P, C.c_int, P)
 FriendReceiptCB = C.CFUNCTYPE(None, P, U32, U32, P)
+FriendUserStatusCB = C.CFUNCTYPE(None, P, U32, C.c_int, P)
+FriendTextUpdateCB = C.CFUNCTYPE(None, P, U32, IP, C.c_size_t, P)
 
 
 class ToxActionError(Exception):
@@ -99,11 +101,17 @@ class ToxSession:
         self._request_cb = FriendRequestCB(self._on_request)
         self._message_cb = FriendMessageCB(self._on_message)
         self._friend_status_cb = FriendStatusCB(self._on_friend_status)
+        self._friend_user_status_cb = FriendUserStatusCB(self._on_friend_user_status)
+        self._friend_name_cb = FriendTextUpdateCB(self._on_friend_profile_changed)
+        self._friend_message_cb = FriendTextUpdateCB(self._on_friend_profile_changed)
         self._self_status_cb = SelfStatusCB(self._on_self_status)
         self._receipt_cb = FriendReceiptCB(self._on_read_receipt)
         self.callback_request(self.tox, self._request_cb)
         self.callback_message(self.tox, self._message_cb)
         self.callback_friend_status(self.tox, self._friend_status_cb)
+        self.callback_friend_user_status(self.tox, self._friend_user_status_cb)
+        self.callback_friend_name(self.tox, self._friend_name_cb)
+        self.callback_friend_status_message(self.tox, self._friend_message_cb)
         self.callback_self_status(self.tox, self._self_status_cb)
         self.callback_read_receipt(self.tox, self._receipt_cb)
         self.files = FileTransfers(self)
@@ -119,6 +127,9 @@ class ToxSession:
         self.callback_request = bind("tox_callback_friend_request", None, P, FriendRequestCB)
         self.callback_message = bind("tox_callback_friend_message", None, P, FriendMessageCB)
         self.callback_friend_status = bind("tox_callback_friend_connection_status", None, P, FriendStatusCB)
+        self.callback_friend_user_status = bind("tox_callback_friend_status", None, P, FriendUserStatusCB)
+        self.callback_friend_name = bind("tox_callback_friend_name", None, P, FriendTextUpdateCB)
+        self.callback_friend_status_message = bind("tox_callback_friend_status_message", None, P, FriendTextUpdateCB)
         self.callback_self_status = bind("tox_callback_self_connection_status", None, P, SelfStatusCB)
         self.callback_read_receipt = bind("tox_callback_friend_read_receipt", None, P, FriendReceiptCB)
         self.friend_add = bind("tox_friend_add", U32, P, IP, IP, C.c_size_t, ERR)
@@ -197,6 +208,20 @@ class ToxSession:
                         "status": int(status)})
         except Exception:
             pass
+
+    def _on_friend_user_status(self, _tox, friend, status, _user):
+        try:
+            self._emit({"type": "friend_profile", "public_key": self._friend_key(friend),
+                        "user_status": int(status)})
+        except Exception as exc:
+            print("Tox friend status callback failed:",type(exc).__name__,flush=True)
+
+    def _on_friend_profile_changed(self, _tox, friend, _data, _length, _user):
+        # Retrieve authoritative current name/status message using friends().
+        try:
+            self._emit({"type": "friend_profile", "public_key": self._friend_key(friend)})
+        except Exception as exc:
+            print("Tox friend profile callback failed:",type(exc).__name__,flush=True)
 
     def _on_self_status(self, _tox, status, _user):
         self.last_connection = int(status)

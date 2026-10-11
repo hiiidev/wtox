@@ -155,3 +155,9 @@ assert.match(refined,/\.wechat-search \.ant-input-prefix/);
 assert.doesNotMatch(app,/margin-top:-4px/);
 
 assert.doesNotMatch(refined,/\.ant-sender-prefix/);
+
+assert.match(app,/e\.type==="friend_profile"/);
+assert.match(refined,/@supports \(-webkit-touch-callout: none\)/);
+assert.match(refined,/font-size:16px!important/);
+assert.match(refined,/\.ant-select-selection-search-input/);
+assert.match(refined,/\.ant-sender textarea/);

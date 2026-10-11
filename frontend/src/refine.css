@@ -797,3 +797,24 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
   display:inline-flex!important;align-items:center!important;
   justify-content:center!important;line-height:0!important;
 }
+
+/* iOS Safari zooms the visual viewport when a focused field has font < 16px.
+   Apply to every real form control, including Ant Design and Ant Design X.
+   Use pointer/hover detection so desktop text density remains unchanged. */
+@supports (-webkit-touch-callout: none){
+  @media (hover:none) and (pointer:coarse){
+    html body input:not([type="checkbox"]):not([type="radio"]),
+    html body textarea,
+    html body select,
+    html body [contenteditable="true"],
+    html body .ant-input,
+    html body .ant-input-number-input,
+    html body .ant-select-selection-search-input,
+    html body .ant-picker-input > input,
+    html body .ant-mentions textarea,
+    html body .ant-sender textarea,
+    html body .ant-otp-input{
+      font-size:16px!important;
+    }
+  }
+}
