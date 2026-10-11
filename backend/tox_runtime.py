@@ -10,6 +10,7 @@ import ctypes as C
 import os
 import threading
 import time
+import uuid
 from typing import Callable
 
 from .tox_identity import ToxCore, ToxIdentityError
@@ -25,6 +26,7 @@ FriendRequestCB = C.CFUNCTYPE(None, P, IP, IP, C.c_size_t, P)
 FriendMessageCB = C.CFUNCTYPE(None, P, U32, C.c_int, IP, C.c_size_t, P)
 FriendStatusCB = C.CFUNCTYPE(None, P, U32, C.c_int, P)
 SelfStatusCB = C.CFUNCTYPE(None, P, C.c_int, P)
+FriendReceiptCB = C.CFUNCTYPE(None, P, U32, U32, P)
 
 
 class ToxActionError(Exception):
@@ -67,6 +69,9 @@ class ToxSession:
         self.stop_event = threading.Event()
         self.thread = None
         self.tox = None
+        # Message counters can restart with native session; receipt matching
+        # must include this instance-specific ID.
+        self.session_id = uuid.uuid4().hex
         self.last_connection = -1
         self._last_save = time.monotonic()
         self._last_bootstrap = 0.0
@@ -94,10 +99,12 @@ class ToxSession:
         self._message_cb = FriendMessageCB(self._on_message)
         self._friend_status_cb = FriendStatusCB(self._on_friend_status)
         self._self_status_cb = SelfStatusCB(self._on_self_status)
+        self._receipt_cb = FriendReceiptCB(self._on_read_receipt)
         self.callback_request(self.tox, self._request_cb)
         self.callback_message(self.tox, self._message_cb)
         self.callback_friend_status(self.tox, self._friend_status_cb)
         self.callback_self_status(self.tox, self._self_status_cb)
+        self.callback_read_receipt(self.tox, self._receipt_cb)
         self.files = FileTransfers(self)
         self.files.attach()
 
@@ -112,6 +119,7 @@ class ToxSession:
         self.callback_message = bind("tox_callback_friend_message", None, P, FriendMessageCB)
         self.callback_friend_status = bind("tox_callback_friend_connection_status", None, P, FriendStatusCB)
         self.callback_self_status = bind("tox_callback_self_connection_status", None, P, SelfStatusCB)
+        self.callback_read_receipt = bind("tox_callback_friend_read_receipt", None, P, FriendReceiptCB)
         self.friend_add = bind("tox_friend_add", U32, P, IP, IP, C.c_size_t, ERR)
         self.friend_accept = bind("tox_friend_add_norequest", U32, P, IP, ERR)
         self.friend_by_key = bind("tox_friend_by_public_key", U32, P, IP, ERR)
@@ -152,6 +160,19 @@ class ToxSession:
                         "kind": int(kind)})
         except Exception as exc:
             print("Tox message callback failed:", type(exc).__name__, flush=True)
+
+    def _on_read_receipt(self, _tox, friend, message_id, _user):
+        """Remote Tox client acknowledged this message; not a human read."""
+        try:
+            self._emit({
+                "type": "message_receipt",
+                "public_key": self._friend_key(friend),
+                "session_id": self.session_id,
+                "message_id": int(message_id),
+                "status": "sent",
+            })
+        except Exception as exc:
+            print("Tox receipt callback failed:", type(exc).__name__, flush=True)
 
     def _on_friend_status(self, _tox, friend, status, _user):
         try:
