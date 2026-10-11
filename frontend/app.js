@@ -224,90 +224,113 @@ async function refreshNetwork(){
   $("#networkDot").classList.toggle("online",data.status===1||data.status===2);
   $("#networkDot").classList.toggle("pending",data.status===0||data.status===-1);
 }
+
 function connectWebsocket(){
-  if(socket) {socket.onclose=null;socket.close();}
-  if(!profileKey) return;
+  if(socket){socket.onclose=null;socket.close();}
+  if(!profileKey)return;
+  const owner=profileKey;
   const protocol=location.protocol==="https:"?"wss:":"ws:";
   socket=new WebSocket(protocol+"//"+location.host+"/ws");
-  socket.onopen=()=>{refreshNetwork().catch(()=>{});refreshFriends().catch(()=>{});};
-  socket.onmessage=async ev=>{
-    let data;
-    try{data=JSON.parse(ev.data)}catch{return}
-    if(["message","friend_request"].includes(data.type)){
-      if(data.type==="friend_request") {
-        $("#friendKey").value=data.public_key||"";
+  socket.onopen=()=>{
+    refreshNetwork().catch(()=>{});refreshFriends().catch(()=>{});
+  };
+  socket.onmessage=async message=>{
+    let event;
+    try{event=JSON.parse(message.data)}catch{return}
+    if(event.type==="message"||event.type==="friend_request"){
+      if(event.type==="friend_request"){
+        $("#friendKey").value=event.public_key||"";
+        error("收到好友请求！点击「添加好友」中的接受按钮处理。",false);
       }
       if(historyKey){
-        try{await persistEvent(data);await renderHistory()}catch(e){error(e.message)}
-      } else {
-        error("收到新消息或好友请求：请先解锁本地历史以保存并领取。");
+        try{await persistEvent(event);await renderHistory()}
+        catch(e){error("保存聊天记录失败："+e.message)}
+      }else{
+        error("收到新消息或好友请求：请先解锁本地加密历史。",false);
       }
-    }else if(data.type==="friend_connection" || data.type==="connection"){
-      refreshNetwork().catch(()=>{});refreshFriends().catch(()=>{});
+    }
+    if(["friend_connection","connection"].includes(event.type)){
+      refreshNetwork().catch(()=>{});
+      refreshFriends().catch(()=>{});
     }
   };
   socket.onclose=()=>{
-    if(profileKey){setTimeout(()=>{if(profileKey)connectWebsocket()},4500);}
+    if(profileKey===owner)setTimeout(()=>{if(profileKey===owner)connectWebsocket()},4500);
   };
 }
 async function refreshIdentity(){
-  const profile=await json("/api/profile/status");
-  $("#ready").hidden=false;
-  $("#toxid").textContent=profile.tox_id||"";
-  await refreshNetwork().catch(e=>error(e.message));
-  await refreshFriends().catch(e=>error(e.message));
+  const info=await json("/api/profile/status");
+  $("#toxid").textContent=info.tox_id||"";
+  await Promise.all([
+    refreshNetwork().catch(e=>error(e.message)),
+    refreshFriends().catch(e=>error(e.message))
+  ]);
   connectWebsocket();
 }
 async function updateState(){
-  try{
-    const info=await json("/api/me");
-    if(!info.public_key) throw new Error("身份未激活");
-    if(profileKey!==info.public_key){
-      historyKey=null;
-      selectedPeer=null;
-      $("#peer").value="";
-      $("#selected").textContent="请选择好友";
-      if(historyDb) historyDb.close();
-      historyDb=await openHistory(info.public_key);
-      $("#historyLock").hidden=false;
-      $("#historyActive").hidden=true;
-      $("#messages").replaceChildren();
-    }
-    profileKey=info.public_key;
-    $("#login").hidden=true;$("#account").hidden=false;
-    $("#welcome").textContent="已登录 Tox 身份： "+profileKey.slice(0,16)+"…";
-    await refreshIdentity();
-  }catch(e){
-    if(socket){socket.onclose=null;socket.close();socket=null;}
-    profileKey=null;historyKey=null;selectedPeer=null;
+  let info;
+  try{info=await json("/api/me")}
+  catch{
+    if(socket){socket.onclose=null;socket.close();socket=null}
+    profileKey=null;historyKey=null;selectedPeer=null;contacts=[];
+    $("#account").classList.remove("chat-open");
     if(historyDb)historyDb.close();historyDb=null;
     $("#login").hidden=false;$("#account").hidden=true;
+    return;
   }
+  if(!info.public_key){error("没有有效的 Tox 身份信息");return}
+  if(profileKey!==info.public_key){
+    historyKey=null;selectedPeer=null;contacts=[];
+    $("#peer").value="";
+    $("#account").classList.remove("chat-open");
+    $("#selected").textContent="选择一个好友开始聊天";
+    if(historyDb)historyDb.close();
+    try{historyDb=await openHistory(info.public_key)}
+    catch(e){historyDb=null;error("无法打开浏览器本地历史："+e.message)}
+    $("#historyLock").hidden=false;$("#historyActive").hidden=true;
+    $("#messages").replaceChildren();
+  }
+  profileKey=info.public_key;
+  $("#login").hidden=true;$("#account").hidden=false;
+  $("#welcome").textContent="当前身份："+profileKey.slice(0,18)+"…";
+  await refreshIdentity();
 }
+function downloadBlob(blob,name){
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");link.href=url;link.download=name;
+  document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+function showDialog(selector){const element=$(selector);if(!element.open)element.showModal()}
+function closeDialog(selector){const element=$(selector);if(element.open)element.close()}
+$("#openAdd").onclick=()=>showDialog("#addDialog");
+$("#closeAdd").onclick=()=>closeDialog("#addDialog");
+$("#openIdentity").onclick=()=>showDialog("#identityDialog");
+$("#closeIdentity").onclick=()=>closeDialog("#identityDialog");
+$("#historyButton").onclick=()=>showDialog("#historyDialog");
+$("#closeHistory").onclick=()=>closeDialog("#historyDialog");
+$("#backToContacts").onclick=()=>$("#account").classList.remove("chat-open");
+$("#contactSearch").oninput=renderContacts;
 $("#logout").onclick=async()=>{
-  try{await post("/api/logout",{});error("");await updateState();}
+  try{await post("/api/logout",{});error("");await updateState()}
   catch(e){error(e.message)}
 };
 $("#create").onclick=async()=>{
-  if(!confirm("创建新的 Tox 身份并下载私人 .tox 备份？丢失备份将无法在新设备使用这个身份登录。"))return;
-  error("");
+  if(!confirm("确定创建新 Tox 身份并下载 .tox 私钥备份？请安全保存该文件。"))return;
   try{
     const response=await api("/api/tox/create",{method:"POST"});
     const blob=await response.blob();
-    const filename="wtox-"+(response.headers.get("X-Tox-ID")||"new").slice(0,16)+".tox";
-    const url=URL.createObjectURL(blob);
-    const link=document.createElement("a");link.href=url;link.download=filename;link.click();
-    setTimeout(()=>URL.revokeObjectURL(url),2500);
+    downloadBlob(blob,"wtox-"+(response.headers.get("X-Tox-ID")||"new").slice(0,16)+".tox");
     await updateState();
     if(response.headers.get("X-Tox-Session-Started")!=="true")
-      error("配置已创建并下载，但 Tox 网络会话尚未启动，请检查服务器日志");
+      error("身份创建成功，但网络会话未启动。可检查容器日志。");
+    else error("已创建 Tox 身份。请妥善保存刚下载的 .tox 备份！",false);
   }catch(e){error(e.message)}
 };
 $("#import").onclick=async()=>{
   const file=$("#profileFile").files[0];
-  if(!file){error("请先选择 .tox 配置文件");return}
+  if(!file){error("请选择 .tox 配置文件");return}
   if(file.size>8*1024*1024){error("配置文件超过 8 MiB");return}
-  error("");
   try{
     const response=await api("/api/tox/login",{
       method:"POST",raw:true,
@@ -316,66 +339,97 @@ $("#import").onclick=async()=>{
     const result=await response.json();
     $("#profileFile").value="";
     await updateState();
-    if(!result.session_started) error("身份登录成功，但 Toxcore 网络会话未启动，请检查服务器日志");
+    if(!result.session_started)error("身份已登录，但 Tox 网络会话未启动。");
   }catch(e){error(e.message)}
 };
 $("#legacyExport").onclick=async()=>{
-  error("");
   try{
-    const response=await api("/api/legacy/export");
-    const blob=await response.blob();
-    const url=URL.createObjectURL(blob);
-    const link=document.createElement("a");
-    link.href=url;link.download="wtox-legacy-backup.tox";link.click();
-    setTimeout(()=>URL.revokeObjectURL(url),2500);
-    error("旧 Tox 备份已请求下载。保存好文件后，用上方“使用 .tox 登录”进入新版。");
+    const blob=await(await api("/api/legacy/export")).blob();
+    downloadBlob(blob,"wtox-legacy-backup.tox");
+    error("已下载旧身份备份，请保存后使用上方 .tox 登录。",false);
   }catch(e){error(e.message)}
 };
-$("#copyid").onclick=()=>navigator.clipboard.writeText($("#toxid").textContent).catch(e=>error(e.message));
-$("#export").onclick=async()=>{
-  try{
-    const blob=await (await api("/api/profile/export")).blob();
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;a.download="wtox-private-profile.tox";a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),2000);
-  }catch(e){error(e.message)}
-};
-$("#unlock").onclick=async()=>{try{error("");await unlockLocal()}catch(e){error(e.message)}};
-$("#refresh").onclick=async()=>{try{await refreshNetwork();await refreshFriends()}catch(e){error(e.message)}};
-$("#addFriend").onclick=async()=>{
-  try{const data=await post("/api/friends",{
-    address:$("#friendAddress").value.trim(),
-    message:$("#requestText").value
-  });selectPeer(data.public_key);await refreshFriends();error("")}
+$("#copyid").onclick=async()=>{
+  try{await navigator.clipboard.writeText($("#toxid").textContent);error("Tox ID 已复制",false)}
   catch(e){error(e.message)}
 };
-$("#deleteFriend").onclick=async()=>{
-  const peer=($("#peer").value||"").trim().toUpperCase();
-  if(!peer){error("请先选择好友");return}
-  if(!confirm("确定删除该 Tox 好友？这不会删除你本机的历史记录。"))return;
+$("#export").onclick=async()=>{
   try{
-    await api("/api/friends/"+encodeURIComponent(peer),{method:"DELETE"});
-    selectedPeer=null;$("#peer").value="";$("#selected").textContent="请选择好友";
-    await refreshFriends();await renderHistory();error("");
+    const blob=await(await api("/api/profile/export")).blob();
+    downloadBlob(blob,"wtox-private-profile.tox");
+    error("Tox 私钥备份已下载，请妥善保存。",false);
+  }catch(e){error(e.message)}
+};
+$("#unlock").onclick=async()=>{
+  try{
+    await unlockLocal();updateComposer();closeDialog("#historyDialog");
+    error("本地历史已解锁",false);
+  }catch(e){error(e.message)}
+};
+$("#refresh").onclick=async()=>{
+  try{await refreshNetwork();await refreshFriends();error("联系人列表已刷新",false)}
+  catch(e){error(e.message)}
+};
+$("#addFriend").onclick=async()=>{
+  try{
+    const data=await post("/api/friends",{
+      address:$("#friendAddress").value.trim(),
+      message:$("#requestText").value
+    });
+    await refreshFriends();selectPeer(data.public_key);
+    closeDialog("#addDialog");
+    error("好友请求已保存。需要对方接受并上线后才能发送消息。",false);
   }catch(e){error(e.message)}
 };
 $("#acceptFriend").onclick=async()=>{
-  try{const data=await post("/api/friends/accept",{
-    public_key:$("#friendKey").value.trim()
-  });selectPeer(data.public_key);await refreshFriends();error("")}
-  catch(e){error(e.message)}
+  try{
+    const data=await post("/api/friends/accept",{public_key:$("#friendKey").value.trim()});
+    await refreshFriends();selectPeer(data.public_key);
+    closeDialog("#addDialog");
+    error("好友已添加，等待建立 Tox 连接。",false);
+  }catch(e){error(e.message)}
 };
-$("#send").onclick=async()=>{
-  if(!historyKey){error("请先解锁本地加密历史");return}
-  const peer=$("#peer").value.trim().toUpperCase();
-  const text=$("#message").value;
+$("#deleteFriend").onclick=async()=>{
+  const key=selectedPeer;
+  if(!key)return;
+  if(!confirm("确定删除这个 Tox 好友？已保存的本地聊天历史不会被删除。"))return;
+  try{
+    await api("/api/friends/"+encodeURIComponent(key),{method:"DELETE"});
+    selectedPeer=null;$("#peer").value="";
+    $("#account").classList.remove("chat-open");
+    $("#selected").textContent="选择一个好友开始聊天";
+    await refreshFriends();await renderHistory();
+    error("好友已从 Tox Savedata 删除",false);
+  }catch(e){error(e.message)}
+};
+async function sendNow(){
+  const peer=selectedPeer,text=$("#message").value;
+  if(!peer){error("请先选择一个好友");return}
+  if(!historyKey){showDialog("#historyDialog");error("请先解锁本地加密历史");return}
+  if(!online(selectedFriend())){
+    error("好友离线或尚未接受请求。Tox 无法发送，草稿已保留。");return
+  }
+  if(!text.trim()){error("请输入消息内容");return}
+  $("#send").disabled=true;
   try{
     await post("/api/messages",{public_key:peer,text});
     await persistEvent({type:"message",direction:"outgoing",public_key:peer,text});
     $("#message").value="";
-    selectPeer(peer);
-    await renderHistory();error("");
-  }catch(e){error(e.message)}
+    await renderHistory();
+    error("");
+  }catch(e){
+    // An offline race means this message was NOT sent; keep it in the editor.
+    error(e.message);
+    await refreshFriends().catch(()=>{});
+  }finally{updateComposer()}
+}
+$("#send").onclick=sendNow;
+$("#message").onkeydown=event=>{
+  if(event.key==="Enter"&&!event.shiftKey&&!event.isComposing){
+    event.preventDefault();sendNow().catch(e=>error(e.message));
+  }
 };
+window.addEventListener("focus",()=>{
+  if(profileKey){refreshFriends().catch(()=>{});refreshNetwork().catch(()=>{})}
+});
 updateState();
