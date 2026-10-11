@@ -87,3 +87,17 @@ console.log("wTox Ant Design chat, mandatory VPS queue and native profile struct
 
 assert.ok(app.includes("wTox")&&html.includes("<title>wTox</title>"),"wTox branding must be uniform");
 assert.ok(!app.includes("exportQtox")&&!app.includes("toQtoxTsv"),"qTox history export must be removed");
+assert.ok(app.includes('aria-label="查看好友 Tox 资料"'),
+  "Both chat header and incoming bubble need a clickable peer avatar");
+assert.ok(app.includes('wt-message-peer-avatar')&&app.includes('wt-peer-avatar-button'),
+  "Incoming message and header avatars should use Ant Design buttons");
+assert.ok(app.includes('placement="bottom"')&&app.includes('<Drawer open={peerDetailsOpen}'),
+  "Touch layout should use native Ant Design bottom Drawer for friend details");
+assert.ok(app.includes('copyable={{')&&app.includes('selectedFriend.tox_id||selectedFriend.public_key'),
+  "Copyable full Tox ID should fall back to explicitly labeled public key");
+assert.ok(app.includes('selectedFriend.status_message')&&app.includes('selectedFriend.user_status'),
+  "Native Tox friend status text and user presence must be displayed");
+assert.ok(python.includes('store.friend_tox_ids(uid)') &&
+  python.includes('store.remember_friend_tox_id(uid, key, body.address)'),
+  "Only original known 76-digit Tox addresses should be kept for future copy");
+
