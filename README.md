@@ -23,6 +23,18 @@ See [VPS installation and test plan](docs/DEPLOY.md) before attempting to run it
 
 Start with **1 vCPU, 2GB RAM, 20GB SSD**, Ubuntu 24.04 (estimate, not benchmarked). Allow outbound UDP/TCP for Tox, inbound TCP 80/443 for Caddy. You only need **one** VPS for three people.
 
+## Which Caddy setup?
+
+**If Caddy is already installed on the VPS host**, use [the native Caddy guide](docs/HOST_CADDY.md) and launch **only the web container**:
+
+```bash
+docker compose -f compose.host-caddy.yml up -d --build
+```
+
+Your host Caddy proxies the chosen subdomain to `127.0.0.1:8000`. This avoids a second Caddy binding 80/443.
+
+**If the VPS has no Caddy**, use the bundled Docker Caddy deployment (`compose.yml`) below.
+
 ## Deploy on your own VPS (unverified interoperability)
 
 For step-by-step instructions and a real-client test checklist see [VPS_DEPLOY.md](docs/VPS_DEPLOY.md).
@@ -38,10 +50,10 @@ For step-by-step instructions and a real-client test checklist see [VPS_DEPLOY.m
    ```
 
 4. Keep `.env` private (`chmod 600 .env`) and back up the master key securely off-VPS.
-5. `docker compose up -d --build`. The build runs `python -m backend.tox_smoke` to check identity creation/restore, callbacks, native event loop and basic friend-list access. If this fails, **do not bypass the check**. Build success does not prove network interoperability.
+5. **Only if Caddy is not already installed on the VPS:** `docker compose up -d --build`. If the host has its own Caddy, use `docker compose -f compose.host-caddy.yml up -d --build` instead. The build runs `python -m backend.tox_smoke` to check identity creation/restore, callbacks, native event loop and basic friend-list access. If this fails, **do not bypass the check**. Build success does not prove network interoperability.
 6. Open `https://chat.example.com`: enter the shared website access password, register or sign into a personal account, then create or import a **raw unencrypted** Tox savedata file and download an encrypted-at-rest but **raw on export** private backup. Encrypted aTox-specific file formats and historic messages cannot be imported yet.
 
-Caddy is a full part of `compose.yml`; it automatically obtains TLS certificates and proxies WebSocket upgrades to the internal app. The app port 8000 is *not published* to the public internet.
+Caddy is bundled in the default `compose.yml` for machines without an existing web proxy. On machines with a host-installed Caddy, use `compose.host-caddy.yml` to avoid any second Caddy process. The app port 8000 is *not published* to the public internet.
 
 For local development only, run `docker compose -f compose.dev.yml up --build` and use `http://localhost:8000`. Plain HTTP must **never** be exposed publicly.
 
