@@ -57,7 +57,7 @@ html[data-wtox-theme="wechat"] body{background:#1d1d1f!important}
  text-align:left;padding:11px 16px;cursor:pointer;transition:background 120ms;}
 .wechat-conversation:hover{background:#39393b;}
 .wechat-conversation.is-selected{background:#444447;}
-.wechat-contact-avatar{flex-shrink:0;background:#566c6e!important;color:white!important;
+.wechat-contact-avatar{flex-shrink:0;color:white!important;
  border-radius:7px!important;font-weight:650!important;}
 .wechat-conversation-text{display:flex;min-width:0;flex:1;flex-direction:column;gap:6px;}
 .wechat-conversation-name{font-size:14px;font-weight:600;color:#f1f1f1;
@@ -81,7 +81,7 @@ html[data-wtox-theme="wechat"] body{background:#1d1d1f!important}
  padding:0 24px;border-bottom:1px solid #303033;}
 .ant-messenger .ant-chat-toolbar .ant-btn{border:0;background:transparent;color:#aaa;}
 .ant-messenger .ant-chat-toolbar .ant-btn:hover{background:#303032;color:#f5f5f5;}
-.ant-messenger .ant-chat-avatar{background:#57756c!important;border-radius:6px!important;}
+.ant-messenger .ant-chat-avatar{border-radius:6px!important;color:white!important;}
 .ant-messenger .ant-peer-title strong{color:#f2f2f2;font-size:16px;}
 .ant-messenger .ant-peer-title small{color:#a2a2a6;}
 .ant-messenger .ant-thread{background:#1d1d1f;padding:26px clamp(16px,4vw,55px);
@@ -161,4 +161,44 @@ html[data-wtox-theme="wechat"] body{background:#1d1d1f!important}
   .ant-messenger .wtox-attachment-bubble{color:#222!important;background:#fff!important;}
   .ant-messenger .wtox-attachment-row.out .wtox-attachment-bubble{color:#222!important;background:#95ec69!important;}
   .ant-messenger .wtox-attachment-bubble small{color:#666!important;}
+}
+
+/* The Ant Design Avatar color comes from the saved per-friend palette.
+   Keep typography, layout and presence indicators in AntD tokens. */
+.ant-messenger .wechat-contact-avatar,
+.ant-messenger .ant-chat-avatar{color:#fff!important}
+.ant-messenger .ant-peer-title{min-width:0;max-width:100%}
+.ant-messenger .wt-peer-name-row{min-width:0;display:flex;align-items:center;gap:10px}
+.ant-messenger .wt-peer-name-row>strong{min-width:0;flex:0 1 auto;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ant-messenger .wt-peer-name-row .ant-badge{flex-shrink:0;white-space:nowrap}
+.ant-messenger .wt-peer-name-row .ant-badge-status-text{font-size:12px;color:var(--wt-muted)}
+.ant-messenger .ant-peer-title>small{display:block;max-width:100%;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;color:var(--wt-muted)!important}
+
+/* A single overflow element owns the scroll position, including after image
+   previews resize. Content never repositions while browsing older messages. */
+.ant-messenger .wt-thread-shell{position:relative;display:flex;flex:1;
+  min-height:0;min-width:0;overflow:hidden}
+.ant-messenger .wt-thread-shell>.ant-thread{flex:1;min-width:0;min-height:0;
+  overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+.ant-messenger .wt-thread-shell>.ant-thread.wt-thread-scrolling{
+  scrollbar-width:thin;scrollbar-color:var(--wt-muted) transparent}
+.ant-messenger .wt-thread-shell>.ant-thread::-webkit-scrollbar{width:0;height:0}
+.ant-messenger .wt-thread-shell>.ant-thread.wt-thread-scrolling::-webkit-scrollbar{
+  width:6px;height:6px}
+.ant-messenger .wt-thread-shell>.ant-thread::-webkit-scrollbar-thumb{
+  background:var(--wt-muted);border-radius:12px}
+.ant-messenger .wt-thread-content{display:flex;flex-direction:column;gap:14px;
+  min-height:100%;width:100%;min-width:0}
+.ant-messenger .wt-new-message-indicator.ant-btn{position:absolute;z-index:5;
+  left:50%;transform:translateX(-50%);bottom:16px;
+  background:var(--wt-primary)!important;border-color:var(--wt-primary)!important;
+  box-shadow:0 4px 15px rgba(0,0,0,.17);white-space:nowrap}
+@media(max-width:767px){
+  .ant-messenger .wt-peer-name-row{gap:6px}
+  .ant-messenger .wt-peer-name-row .ant-badge-status-text{font-size:11px}
+  .ant-messenger .ant-peer-title{flex:1;min-width:0}
+  .ant-messenger .wt-thread-content{gap:12px}
+  .ant-messenger .wt-new-message-indicator.ant-btn{bottom:12px}
 }
