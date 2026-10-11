@@ -43,8 +43,10 @@ class SendMessage(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
     client_id: str | None = Field(default=None, min_length=32, max_length=32)
 
-class MessageSettings(BaseModel):
-    offline_queue: bool
+class OwnProfile(BaseModel):
+    name: str = Field(max_length=128)
+    status_message: str = Field(max_length=1007)
+    user_status: int = Field(ge=0,le=2)
 
 class Acknowledge(BaseModel):
     ids: list[str] = Field(max_length=100)
@@ -100,17 +102,15 @@ def send_message(body: SendMessage, request: Request, uid: str = Depends(require
     try:
         tox_session = session(uid)
         public_key = body.public_key.upper()
-        if store.offline_queue_enabled(uid):
-            import uuid
-            # Validate friend exists; do not enqueue to an unknown peer.
-            if not any(f["public_key"]==public_key for f in tox_session.friends()):
-                raise ValueError("好友不在列表中")
-            client_id=body.client_id or uuid.uuid4().hex
-            entry=store.enqueue_outbox(uid,public_key,body.text,client_id)
-            return {"ok":True,**entry}
-        message_id=tox_session.send_message(public_key,body.text)
-        return {"ok":True,"message_id":message_id,"session_id":tox_session.session_id,
-                "status":"sent","public_key":public_key}
+        import uuid
+        # Every message enters the same durable encrypted VPS queue. This
+        # works whether the recipient is online or not and survives browser
+        # suspension. Never send directly from this endpoint.
+        if not any(f["public_key"]==public_key for f in tox_session.friends()):
+            raise ValueError("好友不在列表中")
+        client_id=body.client_id or uuid.uuid4().hex
+        entry=store.enqueue_outbox(uid,public_key,body.text,client_id)
+        return {"ok":True,**entry}
     except ValueError as exc:
         raise HTTPException(400,str(exc)) from exc
     except ToxActionError as exc:
@@ -118,14 +118,23 @@ def send_message(body: SendMessage, request: Request, uid: str = Depends(require
 
 @router.get("/api/settings")
 def message_settings(uid: str = Depends(require_user)):
-    return {"offline_queue": store.offline_queue_enabled(uid),
-            "friend_refresh_seconds":12, "pending_poll_seconds":8}
+    return {"offline_queue":True,"friend_refresh_seconds":12,"pending_poll_seconds":8}
 
-@router.put("/api/settings")
-def update_settings(body: MessageSettings, request: Request, uid: str = Depends(require_user)):
+@router.get("/api/profile/self")
+def self_profile(uid: str = Depends(require_user)):
+    return session(uid).self_profile()
+
+@router.put("/api/profile/self")
+def update_self_profile(body: OwnProfile, request: Request,
+                        uid: str = Depends(require_user)):
     check_origin(request)
-    store.set_offline_queue(uid,body.offline_queue)
-    return {"offline_queue": store.offline_queue_enabled(uid)}
+    try:
+        return session(uid).update_self_profile(
+            body.name,body.status_message,body.user_status)
+    except ValueError as exc:
+        raise HTTPException(400,str(exc)) from exc
+    except ToxActionError as exc:
+        raise HTTPException(409,str(exc)) from exc
 
 @router.get("/api/outbox")
 def outbox(uid: str = Depends(require_user)):
