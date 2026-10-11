@@ -537,72 +537,134 @@ export default function App(){
     {notice&&<div className="wtox-toast" role="status">{notice}</div>}
   </div>;
 
-  return <div className={"wtox-shell "+(mobileChat?"show-chat":"")}>
-    <header className="wtox-top">
-      <div className="wtox-brand"><span className="wtox-mark">w</span>
-        <div><strong>wtox</strong><small>React · Tox 网络</small></div></div>
+  return <ConfigProvider theme={{
+    algorithm:visualStyle==="mist"?antdTheme.defaultAlgorithm:antdTheme.darkAlgorithm,
+    token:{colorPrimary:visualStyle==="ocean"?"#06b6d4":visualStyle==="midnight"?"#818cf8":"#477ee8",
+      borderRadius:12,fontFamily:"Inter, system-ui, -apple-system, sans-serif"}
+  }}>
+  <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat":"")}>
+    <header className="wtox-top ant-topbar">
+      <div className="wtox-brand">
+        <img className="wtox-logo" src="/logo.svg" alt="wtox logo"/>
+        <div><strong>wtox</strong><small>安全 Tox 即时通讯</small></div>
+      </div>
       <nav className="wtox-tools">
-        <span className="wtox-network"><StatusDot active={network>0}/>{network>0?statusLabel(network):"Tox 连接中"}</span>
-        <button title="设置" onClick={()=>setModal("settings")}>⚙</button>
-
+        <Tag color={network>0?"success":"warning"} bordered={false}>
+          <StatusDot active={network>0}/>
+          {network>0?statusLabel(network):"网络连接中"}
+        </Tag>
+        <Tooltip title="设置与备份">
+          <AntButton shape="circle" icon={<SettingOutlined/>}
+            aria-label="设置与备份" onClick={()=>setModal("settings")}/>
+        </Tooltip>
       </nav>
     </header>
-    <div className="wtox-workspace">
-      <MainContainer responsive={false}>
-        <Sidebar position="left" scrollable={false} className="wtox-sidebar">
-          <div className="wtox-sidebar-top">
-            <div className="wtox-heading"><h2>消息</h2><span>{friends.length} 位好友</span></div>
-            <input value={filter} placeholder="搜索联系人或公钥" aria-label="搜索好友"
-              onChange={e=>setFilter(e.target.value)}/>
+    <div className="wtox-workspace ant-workspace">
+      <aside className="ant-contact-sidebar">
+        <div className="ant-sidebar-heading">
+          <div><h2>消息</h2><span>{friends.length} 位联系人</span></div>
+          <Tooltip title="添加好友">
+            <AntButton shape="circle" type="primary" icon={<UserAddOutlined/>}
+              aria-label="添加好友" onClick={()=>setModal("add")}/>
+          </Tooltip>
+        </div>
+        <div className="ant-search-row">
+          <Input.Search allowClear value={filter} placeholder="搜索好友、公钥"
+            aria-label="搜索好友" onChange={e=>setFilter(e.target.value)}/>
+        </div>
+        <div className="ant-contacts-list">
+          <Conversations items={visibleFriends.map(friend=>({
+            key:friend.public_key,
+            label:<span className="ant-contact-label">
+              <strong>{friend.name||"Tox 好友 "+shortKey(friend.public_key)}</strong>
+              <small>{statusLabel(friend.status)}</small>
+            </span>,
+            icon:<Avatar className="ant-contact-avatar" size={42}>
+              {(friend.name||friend.public_key).slice(0,1).toUpperCase()}
+            </Avatar>
+          }))} activeKey={selected||""}
+            onActiveChange={key=>selectFriend(key)}/>
+          {!visibleFriends.length&&<div className="ant-list-empty">
+            <MessageOutlined style={{fontSize:30}}/>
+            <p>{friends.length?"没有匹配的好友":"还没有好友"}</p>
+            <AntButton type="link" onClick={()=>setModal("add")}>添加好友</AntButton>
+          </div>}
+        </div>
+        <div className="ant-sidebar-footer">
+          <span>好友状态自动刷新 · 12 秒</span>
+          <span>{offlineQueue?"云端离线队列":"设备本地队列"}</span>
+        </div>
+      </aside>
+      <main className="ant-chat-area">
+        <div className="ant-chat-toolbar">
+          <div className="ant-chat-identity">
+            <AntButton className="ant-mobile-back" aria-label="返回联系人"
+              icon={<ArrowLeftOutlined/>} onClick={()=>setMobileChat(false)}/>
+            <Avatar size={40} className="ant-chat-avatar">
+              {selectedFriend?(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase():"✦"}
+            </Avatar>
+            <div className="ant-peer-title">
+              <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
+              <small>{selectedFriend?statusLabel(selectedFriend.status):"端到端 Tox 网络"}</small>
+            </div>
           </div>
-          <ConversationList className="wtox-conversations">
-            {visibleFriends.map(friend=><Conversation key={friend.public_key}
-              name={friend.name||"Tox 好友 "+shortKey(friend.public_key)}
-              info={statusLabel(friend.status)} active={selected===friend.public_key}
-              onClick={()=>selectFriend(friend.public_key)}/>)}
-          </ConversationList>
-          {!visibleFriends.length&&<p className="wtox-empty-friends">还没有联系人，点击下方添加好友。</p>}
-          <div className="wtox-sidebar-bottom">
-            <Button kind="primary" onClick={()=>setModal("add")}>＋ 添加好友</Button>
-            <span className="wtox-secondary-note">好友状态每 12 秒更新</span>
-          </div>
-        </Sidebar>
-        <ChatContainer className="wtox-chat">
-          <ConversationHeader>
-            <ConversationHeader.Back onClick={()=>setMobileChat(false)}/>
-            <ConversationHeader.Content
-              userName={selectedFriend?.name|| (selected?"Tox 好友 "+shortKey(selected):"选择一个好友")}
-              info={selectedFriend?statusLabel(selectedFriend.status):"安全的 Tox 通讯"}/>
-            <ConversationHeader.Actions>
-              <button className="wtox-header-action" title="附件" onClick={()=>{setModal("files");refreshTransfers().catch(()=>{})}}>📎</button>
-              <button className="wtox-header-action" title="删除好友" disabled={!selected} onClick={removeFriend}>⋯</button>
-            </ConversationHeader.Actions>
-          </ConversationHeader>
-          <MessageList className="wtox-message-list"
-            empty={selected?"暂无聊天记录":"选择左侧联系人开始聊天"}>
-            {thread.map(item=>item.type==="file"
-              ? <AttachmentBubble key={item.id} file={item}
+          <Space>
+            <Tooltip title="发送和接收附件">
+              <AntButton shape="circle" icon={<PaperClipOutlined/>}
+                aria-label="附件" onClick={()=>{setModal("files");refreshTransfers().catch(()=>{})}}/>
+            </Tooltip>
+            <Tooltip title="删除当前好友">
+              <Popconfirm title="删除此 Tox 好友？" description="本地聊天记录不会被删除"
+                onConfirm={removeFriend} okText="删除" cancelText="取消" disabled={!selected}>
+                <AntButton danger shape="circle" disabled={!selected}
+                  icon={<DeleteOutlined/>} aria-label="删除好友"/>
+              </Popconfirm>
+            </Tooltip>
+          </Space>
+        </div>
+        <div className="ant-thread" role="log" aria-label="聊天记录">
+          {!selected&&<div className="ant-empty-chat">
+            <img src="/logo.svg" alt="" width="74" height="74"/>
+            <h3>欢迎使用 wtox</h3><p>选择一位好友，开始私人对话</p>
+          </div>}
+          {selected&&!thread.length&&<div className="ant-empty-chat">
+            <MessageOutlined style={{fontSize:42}}/><h3>还没有聊天记录</h3>
+            <p>发送第一条消息，或等待好友回复</p>
+          </div>}
+          {thread.map(item=>item.type==="file"
+            ? <div key={item.id} className="ant-timeline-file">
+                <AttachmentBubble file={item}
                   accept={id=>controlFile(id,"accept")}
-                  reject={id=>controlFile(id,"reject")} download={downloadFile}/>
-              : <Message key={item.id}
-              model={{message:String(item.text||""),sentTime:
-                new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+
-                (item.direction==="outgoing"?" · "+stateText(item):""),
-                direction:item.direction==="outgoing"?"outgoing":"incoming",
-                position:"single"}} />)}
-          </MessageList>
-          <MessageInput className="wtox-send-input" placeholder="输入消息…" attachButton={false}
-            value={draft} onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
-            onSend={sendText} disabled={!selected||!historyReady||sending}/>
-          <InputToolbox className="wtox-send-tip">
-            {!selected?"先选择好友"
-              :!historyReady?"请完成本地历史迁移"
-              :offlineQueue&&!online(selectedFriend)?"对方离线，将加密存入 VPS 队列，关闭网页后继续等待"
-              :!online(selectedFriend)?"对方离线，暂存本浏览器；需保持网页运行或再打开才能发送"
-              :sending?"正在处理发送请求":"Enter 发送 · Shift + Enter 换行"}
-          </InputToolbox>
-        </ChatContainer>
-      </MainContainer>
+                  reject={id=>controlFile(id,"reject")}
+                  download={downloadFile}/>
+              </div>
+            : <div key={item.id} className="ant-message-wrap"
+                onContextMenu={event=>{event.preventDefault();requestDelete(item)}}
+                onTouchStart={()=>startLongPress(item)}
+                onTouchEnd={cancelLongPress}
+                onTouchMove={cancelLongPress}>
+                <Bubble content={String(item.text||"")}
+                  placement={item.direction==="outgoing"?"end":"start"}
+                  shape="round" variant="filled"
+                  footer={<span className="ant-message-status">
+                    {new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}
+                    {item.direction==="outgoing"?" · "+stateText(item):""}
+                  </span>}
+                  footerPlacement={item.direction==="outgoing"?"outer-end":"outer-start"}/>
+              </div>)}
+        </div>
+        <div className="ant-compose-area">
+          <p className="ant-compose-status">{!selected?"请先选择好友":
+            !historyReady?"本地加密历史尚未就绪":
+            offlineQueue&&!online(selectedFriend)?"对方离线，将在 VPS 加密队列等待":
+            !online(selectedFriend)?"对方离线，暂存本机，打开网页后继续发送":
+            sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
+          <Sender value={draft} placeholder="输入消息…"
+            onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
+            onSubmit={text=>sendText("",text,text)}
+            disabled={!selected||!historyReady||sending} submitType="enter"/>
+        </div>
+      </main>
     </div>
 
     {modal==="settings"&&<Modal title="设置与备份" close={closeModal}>
@@ -678,5 +740,5 @@ export default function App(){
       <small>附件只在 VPS 内存短暂保留，不支持断线续传。</small>
     </Modal>}
     {notice&&<div className="wtox-toast" role="status">{notice}</div>}
-  </div>;
+  </div></ConfigProvider>;
 }
