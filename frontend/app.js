@@ -1,3 +1,4 @@
+import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson,toQtoxTsv,fromQtoxTsv} from "./history_io.js";
 // wtox browser client. Tox .tox savedata is the only personal login credential.
 const $ = (selector) => document.querySelector(selector);
 let profileKey = null;
@@ -400,6 +401,74 @@ $("#closeIdentity").onclick=()=>closeDialog("#identityDialog");
 $("#historyButton").onclick=()=>showDialog("#historyDialog");
 $("#historyFromContacts").onclick=()=>showDialog("#historyDialog");
 $("#closeHistory").onclick=()=>closeDialog("#historyDialog");
+async function readDecryptedHistory(){
+  if(!historyDb||!historyKey)throw new Error("当前身份的本地历史未就绪");
+  const rows=await reqResult(historyDb.transaction("events").objectStore("events").getAll());
+  if(rows.length>20000)throw new Error("记录太多，请先按好友分批备份");
+  const output=[];
+  for(const row of rows){
+    const record=await unseal(row,historyKey);
+    if(record.type==="message")output.push(record);
+  }
+  output.sort((a,b)=>a.at-b.at);
+  return output;
+}
+function exportHistoryFile(body,name,type){
+  if(!confirm("导出的聊天记录是未加密明文，可能包含敏感信息。确定导出并妥善保护文件吗？"))return;
+  downloadBlob(new Blob([body],{type}),name);
+}
+$("#historyExportJson").onclick=async()=>{
+  try{
+    const data=await readDecryptedHistory();
+    const json=toWtoxJson(data,profileKey);
+    exportHistoryFile(json,"wtox-history-"+profileKey.slice(0,12)+".json","application/json");
+  }catch(e){error(e.message)}
+};
+$("#historyExportQtox").onclick=async()=>{
+  try{
+    if(!selectedPeer)throw new Error("请先选择一个好友，再导出 qTox 聊天文本");
+    const friend=selectedFriend();
+    const text=toQtoxTsv(await readDecryptedHistory(),selectedPeer,friend?.name||"Tox Friend");
+    exportHistoryFile(text,"wtox-qtox-"+selectedPeer.slice(0,12)+".txt","text/plain;charset=utf-8");
+  }catch(e){error(e.message)}
+};
+$("#historyImport").onclick=async()=>{
+  try{
+    if(!historyDb||!historyKey)throw new Error("本地加密历史尚未就绪");
+    const file=$("#historyImportFile").files[0];
+    if(!file)throw new Error("请选择聊天记录文件");
+    if(file.size>MAX_HISTORY_IMPORT)throw new Error("历史文件超过 8 MiB");
+    const text=await file.text();
+    let entries;
+    if(file.name.toLowerCase().endsWith(".json")){
+      entries=fromWtoxJson(text,profileKey);
+    }else if(file.name.toLowerCase().endsWith(".txt")){
+      if(!selectedPeer)throw new Error("导入 qTox TXT 前先选择目标好友");
+      entries=fromQtoxTsv(text,selectedPeer,$("#historyOwnName").value.trim());
+    }else{
+      throw new Error("不支持此文件格式：请选择 wtox JSON 或 qTox 导出 TXT");
+    }
+    if(!entries.length)throw new Error("文件里没有可导入的聊天消息");
+    if(!confirm("即将向此浏览器导入 "+entries.length+" 条消息，仅保存在当前 Tox 身份的本地历史。继续吗？"))return;
+    const encrypted=[];
+    // Precompute crypto results before opening a transaction, to ensure it
+    // won't auto-commit while awaiting WebCrypto operations.
+    for(const row of entries){
+      const fingerprint=await crypto.subtle.digest("SHA-256",te.encode(
+        profileKey+"\0"+row.public_key+"\0"+row.direction+"\0"+row.at+"\0"+row.text));
+      const id="import-"+[...new Uint8Array(fingerprint)].slice(0,16)
+        .map(x=>x.toString(16).padStart(2,"0")).join("");
+      encrypted.push({id,...await seal({...row,id},historyKey)});
+    }
+    const tx=historyDb.transaction("events","readwrite");
+    for(const row of encrypted)tx.objectStore("events").put(row);
+    await txnDone(tx);
+    await renderHistory();
+    $("#historyImportFile").value="";
+    error("已导入 "+encrypted.length+" 条消息。重复导入相同文件不会重复添加。",false);
+  }catch(e){error("历史导入失败："+e.message)}
+};
+
 $("#backToContacts").onclick=()=>$("#account").classList.remove("chat-open");
 $("#contactSearch").oninput=renderContacts;
 $("#logout").onclick=async()=>{
