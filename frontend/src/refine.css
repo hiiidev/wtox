@@ -68,7 +68,6 @@ body:has(.ant-messenger){background:var(--wt-bg)!important}
 }
 .ant-messenger .ant-message-status,
 .ant-messenger .ant-bubble-footer{color:var(--wt-muted)!important}
-.ant-messenger .wt-message-peer-avatar{flex-shrink:0}
 .ant-messenger .ant-timeline-file{width:100%;max-width:100%}
 .ant-messenger .wtox-attachment-row{padding:3px 0!important;width:100%;
   max-width:100%;box-sizing:border-box}
@@ -803,4 +802,16 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
   .ant-messenger[data-theme] .wt-compose-attach-button.ant-btn{
     width:42px;height:42px;flex-basis:42px;
   }
+}
+
+/* Center the local SVG prefix independently of the platform's font metrics. */
+.ant-messenger[data-theme] .wechat-search .ant-input-prefix{
+  display:inline-flex!important;align-items:center!important;
+  justify-content:center!important;align-self:center!important;
+  line-height:0!important;
+}
+.ant-messenger[data-theme] .wechat-search .wechat-search-icon{
+  margin:0!important;position:static!important;
+  display:inline-flex!important;align-items:center!important;
+  justify-content:center!important;line-height:0!important;
 }

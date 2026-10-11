@@ -148,3 +148,8 @@ assert.match(app,/onOk=\{deleteSingleMessage\}/);
 assert.match(app,/await h\.deleteEvent\(item\.id\)/);
 assert.match(app,/await h\.deleteCachedImage\(item\.file_id\)/);
 assert.doesNotMatch(app,/onContextMenu=\{event=>\{event\.preventDefault\(\);setSelectedMessageIds/);
+
+assert.match(app,/<span className="wechat-search-icon" aria-hidden="true">/);
+assert.match(app,/<circle cx="10\.8" cy="10\.8" r="6\.7"\/>/);
+assert.match(refined,/\.wechat-search \.ant-input-prefix/);
+assert.doesNotMatch(app,/margin-top:-4px/);

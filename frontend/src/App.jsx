@@ -1,13 +1,13 @@
 import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
-import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
+import { ConfigProvider, theme as antdTheme, Button as AntButton, Input,
   Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal,
-  Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid, Card, Image, Upload, QRCode, message } from "antd";
+  Dropdown, Badge, List, Typography, Form, Select, Drawer, Grid, Card, Image, Upload, QRCode, message } from "antd";
 import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
   ArrowDownOutlined, CopyOutlined, CheckSquareOutlined } from "@ant-design/icons";
-import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
+import {api,getJson,postJson,downloadBlob,shortKey} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
@@ -17,11 +17,6 @@ import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 const online=friend=>friend && (friend.status===1||friend.status===2);
 const transferText={offered:"等待接受",waiting:"等待对方接受",receiving:"接收中",sending:"发送中",
   completed:"已完成",failed:"失败",cancelled:"已取消"};
-function escapeHtml(text){
-  return String(text||"").replace(/[&<>"']/g,ch=>({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-  }[ch])).replace(/\r?\n/g,"<br/>");
-}
 function stateText(record){
   if(record.delivery_status==="delivered"||record.delivery_status==="read")return "已送达";
   if(record.delivery_status==="failed")return "发送失败";
@@ -153,7 +148,6 @@ export default function App(){
   // connection is down, show a neutral offline dot instead of false green.
   const ownStatus=ownProfile.user_status;
   const ownStatusLabel=network>0?["在线","离开","忙碌"][ownStatus]||"在线":"离线";
-  const ownBadgeStatus=network>0?["success","warning","error"][ownStatus]||"success":"default";
   const ownBadgeColor=network>0?["#52c41a","#faad14","#ff4d4f"][ownStatus]||"#52c41a":"#8c8c8c";
 
   const [visualStyle,setVisualStyle]=useState(()=>{
@@ -1192,7 +1186,14 @@ export default function App(){
         </div>
         <div className="wechat-search">
           <Input allowClear value={filter} placeholder="搜索"
-            prefix={<span className="wechat-search-icon">⌕</span>}
+            prefix={<span className="wechat-search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18"
+                fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="10.8" cy="10.8" r="6.7"/>
+                <path d="m16 16 4.3 4.3"/>
+              </svg>
+            </span>}
             aria-label="搜索联系人" onChange={e=>setFilter(e.target.value)}/>
         </div>
         <div className="wechat-list">

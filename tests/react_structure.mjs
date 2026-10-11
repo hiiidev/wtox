@@ -19,9 +19,12 @@ assert.ok(packageJson.dependencies.antd && packageJson.dependencies["@ant-design
 assert.ok(!packageJson.dependencies["@chatscope/chat-ui-kit-react"],
   "Remove obsolete ChatScope to avoid duplicate UI libraries");
 const theme=readFileSync("frontend/src/ant-style.css","utf8");
-for(const id of ["mist","midnight","ocean"]){
-  assert.ok(theme.includes('data-wtox-theme="'+id+'"'),"Missing style "+id);
-}
+assert.ok(!theme.includes('data-wtox-theme="mist"') &&
+          !theme.includes('data-wtox-theme="ocean"'),
+  "Removed obsolete theme variants should not be reintroduced");
+assert.ok(app.includes('visualStyle==="system"') &&
+          app.includes('value:"light"') && app.includes('value:"dark"'),
+  "System/light/dark are the supported themes");
 for(const path of ["frontend/src/main.jsx","frontend/src/api.js","frontend/src/history.js",
                    "frontend/src/App.jsx","frontend/src/style.css","frontend/history_io.js"]){
   assert.ok(existsSync(path),"Missing React module: "+path);
