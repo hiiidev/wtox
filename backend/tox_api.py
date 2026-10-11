@@ -1,13 +1,14 @@
 """Authenticated friend, message and websocket APIs for native Tox sessions."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from . import access, store
 from .profile_api import COOKIE_NAME as TOX_SESSION_COOKIE
 from .session_manager import manager
 from .tox_runtime import ToxActionError
+from .file_transfer import MAX_FILE
 
 router = APIRouter()
 
@@ -99,6 +100,60 @@ def send_message(body: SendMessage, request: Request, uid: str = Depends(require
         raise HTTPException(400, str(exc)) from exc
     except ToxActionError as exc:
         raise HTTPException(409, str(exc)) from exc
+
+@router.get("/api/files")
+def list_files(uid: str = Depends(require_user)):
+    return {"files": session(uid).files.list()}
+
+@router.post("/api/files/send")
+async def send_file(request: Request, peer: str, name: str, uid: str = Depends(require_user)):
+    check_origin(request)
+    length=request.headers.get("content-length")
+    if length:
+        try:
+            declared=int(length)
+        except ValueError as exc:
+            raise HTTPException(400, "Content-Length 错误") from exc
+        if declared>MAX_FILE:raise HTTPException(413, "附件不能超过 5 MiB")
+    parts=[]
+    total=0
+    async for chunk in request.stream():
+        total+=len(chunk)
+        if total>MAX_FILE:raise HTTPException(413, "附件不能超过 5 MiB")
+        parts.append(chunk)
+    try:
+        return session(uid).files.send(peer.strip().upper(), name, b"".join(parts))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+@router.post("/api/files/{transfer_id}/accept")
+def accept_file(transfer_id: str, request: Request, uid: str = Depends(require_user)):
+    check_origin(request)
+    try:
+        return session(uid).files.control(transfer_id,True)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+@router.post("/api/files/{transfer_id}/reject")
+def reject_file(transfer_id: str, request: Request, uid: str = Depends(require_user)):
+    check_origin(request)
+    try:
+        return session(uid).files.control(transfer_id,False)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+@router.get("/api/files/{transfer_id}/download")
+def download_file(transfer_id: str, uid: str = Depends(require_user)):
+    from urllib.parse import quote
+    try:
+        name,data=session(uid).files.download(transfer_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    safe=quote(name,safe="")
+    return Response(data,media_type="application/octet-stream",headers={
+        "Content-Disposition": "attachment; filename=\"attachment.bin\"; filename*=UTF-8''"+safe,
+        "Cache-Control":"no-store","X-Content-Type-Options":"nosniff"
+    })
 
 @router.get("/api/pending")
 def pending(uid: str = Depends(require_user)):
