@@ -12,6 +12,7 @@ import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
+import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
@@ -117,6 +118,7 @@ export default function App(){
   const [deleteFriendOpen,setDeleteFriendOpen]=useState(false);
   const [removingFriend,setRemovingFriend]=useState(false);
   const [seen,setSeen]=useState({});
+  const seenHydration=useRef(null);
   const [filter,setFilter]=useState(""),[draft,setDraft]=useState("");
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
   const [avatarColors,setAvatarColors]=useState({});
@@ -532,20 +534,33 @@ export default function App(){
   // the same non-extractable AES-GCM key; no history migration is necessary.
   useEffect(()=>{
     if(!user?.public_key)return;
-    try{setSeen(JSON.parse(localStorage.getItem("wtox-seen-"+user.public_key)||"{}"))}
-    catch{setSeen({})}
+    let initial={};
+    try{
+      const saved=JSON.parse(localStorage.getItem("wtox-seen-"+user.public_key)||"{}");
+      if(saved && typeof saved==="object" && !Array.isArray(saved)) initial=saved;
+    }catch{}
+    // Avoid overwriting persisted read positions with the previous identity's
+    // state before the newly loaded values have reached React state.
+    seenHydration.current={owner:user.public_key,initial,ready:false};
+    setSeen(initial);
   },[user?.public_key]);
   useEffect(()=>{
     if(!user?.public_key)return;
+    const hydrated=seenHydration.current;
+    if(!hydrated || hydrated.owner!==user.public_key)return;
+    if(!hydrated.ready){
+      if(seen!==hydrated.initial)return;
+      hydrated.ready=true;
+    }
     try{localStorage.setItem("wtox-seen-"+user.public_key,JSON.stringify(seen))}catch{}
   },[user?.public_key,seen]);
   useEffect(()=>{
-    if(selected&&mobileChat&&messages.length){
+    if(selected&&mobileChat&&section==="chats"&&messages.length){
       const last=Math.max(0,...messages.filter(m=>m.public_key===selected&&
         m.direction==="incoming").map(m=>m.at||0));
       if(last>(seen[selected]||0))setSeen(previous=>({...previous,[selected]:last}));
     }
-  },[selected,mobileChat,messages,seen]);
+  },[selected,mobileChat,section,messages,seen]);
   useEffect(()=>{
     if(!user?.public_key)return;
     let dead=false;
@@ -759,9 +774,11 @@ export default function App(){
       const right=latestByPeer.get(b.public_key)?.at||0;
       return right-left || Number(online(b))-Number(online(a));
     }),[friends,filter,latestByPeer,section]);
-  const unreadFor=useCallback(peer=>messages.filter(m=>m.type==="message" &&
-    m.direction==="incoming"&&m.public_key===peer&&(m.at||0)>(seen[peer]||0)).length,
-    [messages,seen]);
+  const unreadByPeer=useMemo(()=>unreadCountsByPeer(messages,seen),[messages,seen]);
+  const unreadFor=useCallback(peer=>unreadByPeer.get(peer)||0,[unreadByPeer]);
+  const totalUnread=useMemo(()=>totalUnreadForFriends(unreadByPeer,friends),
+    [unreadByPeer,friends]);
+  const chatNavLabel=totalUnread>0?`聊天，${totalUnread} 条未读消息`:"聊天";
 
   function selectFriend(key){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
@@ -1140,9 +1157,11 @@ export default function App(){
         </AntButton>
         <div className="wechat-rail-primary">
           <button type="button" className={"wechat-rail-button "+(section==="chats"?"is-active":"")}
-            aria-label="聊天" aria-current={section==="chats"?"page":undefined}
+            aria-label={chatNavLabel} aria-current={section==="chats"?"page":undefined}
             title="聊天" onClick={()=>{setSection("chats");setMobileChat(false)}}>
-            <RailIcon kind="chats"/>
+            <Badge count={totalUnread} overflowCount={99} size="small" className="wt-nav-chat-badge">
+              <RailIcon kind="chats"/>
+            </Badge>
           </button>
           <button type="button" className={"wechat-rail-button "+(section==="contacts"?"is-active":"")}
             aria-label="通讯录" aria-current={section==="contacts"?"page":undefined}
@@ -1215,7 +1234,7 @@ export default function App(){
               when.toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})):"";
             const unread=unreadFor(friend.public_key);
             return <button type="button" key={friend.public_key}
-              className={"wechat-conversation "+(selected===friend.public_key?"is-selected":"")}
+              className={"wechat-conversation "+(section==="chats"&&selected===friend.public_key?"is-selected":"")}
               onClick={()=>selectFriend(friend.public_key)}>
               <Avatar size={45} shape="square" gap={4} className="wechat-contact-avatar"
                 style={{backgroundColor:avatarColor(friend.public_key)}}>
@@ -1240,8 +1259,13 @@ export default function App(){
         </div>
         <nav className="wechat-mobile-tabs" aria-label="手机导航">
           <button type="button" className={section==="chats"?"active":""}
-            aria-current={section==="chats"?"page":undefined}
-            onClick={()=>setSection("chats")}><RailIcon kind="chats"/><span>聊天</span></button>
+            aria-label={chatNavLabel} aria-current={section==="chats"?"page":undefined}
+            onClick={()=>setSection("chats")}>
+            <Badge count={totalUnread} overflowCount={99} size="small" className="wt-nav-chat-badge">
+              <RailIcon kind="chats"/>
+            </Badge>
+            <span>聊天</span>
+          </button>
           <button type="button" className={section==="contacts"?"active":""}
             aria-current={section==="contacts"?"page":undefined}
             onClick={()=>setSection("contacts")}><RailIcon kind="contacts"/><span>通讯录</span></button>
@@ -1258,8 +1282,11 @@ export default function App(){
           {settingsContent}
         </div>
         <nav className="wechat-mobile-tabs" aria-label="手机导航">
-          <button type="button" onClick={()=>setSection("chats")}>
-            <RailIcon kind="chats"/><span>聊天</span>
+          <button type="button" aria-label={chatNavLabel} onClick={()=>setSection("chats")}>
+            <Badge count={totalUnread} overflowCount={99} size="small" className="wt-nav-chat-badge">
+              <RailIcon kind="chats"/>
+            </Badge>
+            <span>聊天</span>
           </button>
           <button type="button" onClick={()=>setSection("contacts")}>
             <RailIcon kind="contacts"/><span>通讯录</span>

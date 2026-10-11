@@ -52,3 +52,20 @@ assert.equal(shouldNotifyMessage(event,{recovered:true,now:2_000_000}),true);
 assert.equal(shouldNotifyMessage(event,{recovered:true,now:2_200_001}),false);
 assert.equal(messageNotificationId(event),"abc");
 assert.equal(messageNotificationId({...event,id:null}),[friendA,1999,"Hello"].join(":"));
+
+const {unreadCountsByPeer,totalUnreadForFriends}=await source("frontend/src/unread_counts.js");
+const peers=[{public_key:friendA},{public_key:friendB}];
+const chatItems=[
+  {type:"message",direction:"incoming",public_key:friendA,at:100},
+  {type:"message",direction:"incoming",public_key:friendA,at:200},
+  {type:"message",direction:"incoming",public_key:friendB,at:230},
+  {type:"message",direction:"outgoing",public_key:friendB,at:240},
+  {type:"file",direction:"incoming",public_key:friendB,at:245},
+  {type:"message",direction:"incoming",public_key:"removed-friend",at:250}
+];
+const counts=unreadCountsByPeer(chatItems,{[friendA]:100});
+assert.equal(counts.get(friendA),1);
+assert.equal(counts.get(friendB),1);
+assert.equal(totalUnreadForFriends(counts,peers),2);
+assert.equal(totalUnreadForFriends(unreadCountsByPeer(chatItems,
+  {[friendA]:200,[friendB]:230}),peers),0);

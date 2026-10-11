@@ -818,3 +818,26 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     }
   }
 }
+
+/* Unified unread message count for desktop rail and both mobile bottom bars. */
+.ant-messenger[data-theme] .wt-nav-chat-badge.ant-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  position:relative;line-height:0;vertical-align:middle;
+}
+.ant-messenger[data-theme] .wt-nav-chat-badge .ant-badge-count{
+  background:#ed5050!important;color:#fff!important;
+  box-shadow:0 0 0 2px var(--wt-rail)!important;
+  font-size:10px!important;font-weight:650;
+  min-width:17px;height:17px;line-height:17px;
+  padding:0 4px;border-radius:11px;
+  top:1px;right:0;
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wt-nav-chat-badge .ant-badge-count{
+    box-shadow:0 0 0 2px var(--wt-panel)!important;
+  }
+}
+/* Contact cards are never persistent selections. Only hover provides feedback. */
+.ant-messenger[data-theme] .wechat-conversation:not(.is-selected):hover{
+  background:var(--wt-hover)!important;
+}
