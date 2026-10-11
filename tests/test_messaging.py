@@ -42,6 +42,31 @@ class NativeMessagingTests(unittest.TestCase):
             s.send_message("AB" * 32, "hello")
         self.assertIn("未发送", str(err.exception))
 
+    def test_native_receipt_emits_sent_with_matching_session(self):
+        s = self.make_session(connection_status=1)
+        events = []
+        s._emit = events.append
+        s._friend_key = lambda friend: "AB" * 32
+        s.session_id = "cafe" * 8
+        s._on_read_receipt(None, 7, 99, None)
+        self.assertEqual(events, [{
+            "type": "message_receipt",
+            "public_key": "AB" * 32,
+            "session_id": "cafe" * 8,
+            "message_id": 99,
+            "status": "sent",
+        }])
+
+    def test_receipt_does_not_pretend_user_read_message(self):
+        s = self.make_session(connection_status=1)
+        events = []
+        s._emit = events.append
+        s._friend_key = lambda friend: "AB" * 32
+        s.session_id = "cafe" * 8
+        s._on_read_receipt(None, 7, 101, None)
+        self.assertNotIn("read", events[0])
+        self.assertEqual(events[0]["status"], "sent")
+
     def test_text_limits_reject_before_native(self):
         s = self.make_session(connection_status=1)
         with self.assertRaises(ValueError):
