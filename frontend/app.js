@@ -282,6 +282,16 @@ $("#addFriend").onclick=async()=>{
   });selectPeer(data.public_key);await refreshFriends();error("")}
   catch(e){error(e.message)}
 };
+$("#deleteFriend").onclick=async()=>{
+  const peer=($("#peer").value||"").trim().toUpperCase();
+  if(!peer){error("请先选择好友");return}
+  if(!confirm("确定删除该 Tox 好友？这不会删除你本机的历史记录。"))return;
+  try{
+    await api("/api/friends/"+encodeURIComponent(peer),{method:"DELETE"});
+    selectedPeer=null;$("#peer").value="";$("#selected").textContent="请选择好友";
+    await refreshFriends();await renderHistory();error("");
+  }catch(e){error(e.message)}
+};
 $("#acceptFriend").onclick=async()=>{
   try{const data=await post("/api/friends/accept",{
     public_key:$("#friendKey").value.trim()
