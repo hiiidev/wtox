@@ -333,3 +333,12 @@ def tox_identity_info(uid: str) -> dict | None:
     if not row:
         return None
     return {"tox_id": row[0], "public_key": row[1]}
+
+
+def needs_legacy_migration() -> bool:
+    with db() as c:
+        row = c.execute(
+            "SELECT 1 FROM accounts WHERE profile IS NOT NULL "
+            "AND (tox_secret_hash IS NULL OR tox_pubkey IS NULL) LIMIT 1"
+        ).fetchone()
+    return row is not None
