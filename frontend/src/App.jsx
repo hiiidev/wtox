@@ -1,11 +1,11 @@
 import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
   Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal,
-  Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid, Card, Image, Upload, message } from "antd";
+  Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid, Card, Image, Upload, QRCode, message } from "antd";
 import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
-  UserOutlined, PlusOutlined, MoreOutlined, SmileOutlined, FolderOutlined, ArrowDownOutlined } from "@ant-design/icons";
+  UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined, ArrowDownOutlined } from "@ant-design/icons";
 import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
@@ -114,7 +114,9 @@ export default function App(){
   const [section,setSection]=useState("chats");
   const [friendRequests,setFriendRequests]=useState([]);
   const [friendMessageApi,friendMessageContext]=message.useMessage({top:24,maxCount:2});
+  const [uiMessageApi,uiMessageContext]=message.useMessage({top:76,maxCount:4});
   const dismissedFriendIds=useRef(null);
+  const notificationPromptShown=useRef(false);
   const [peerDetailsOpen,setPeerDetailsOpen]=useState(false);
   const [deleteFriendOpen,setDeleteFriendOpen]=useState(false);
   const [removingFriend,setRemovingFriend]=useState(false);
@@ -187,7 +189,7 @@ export default function App(){
     document.documentElement.setAttribute("data-wtox-theme",effectiveTheme);
     try{localStorage.setItem("wtox-visual-style",visualStyle)}catch{}
   },[visualStyle,effectiveTheme]);
-  const [modal,setModal]=useState(""),[notice,setNotice]=useState("");
+  const [modal,setModal]=useState("");
   const [loginFile,setLoginFile]=useState(null),[busy,setBusy]=useState(false);
   const [createPassword,setCreatePassword]=useState("");
   const [loginPassword,setLoginPassword]=useState("");
@@ -198,7 +200,7 @@ export default function App(){
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
   const attachmentInput=useRef(null);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
-  const drafts=useRef(new Map()),noticeTimer=useRef(null),lastMessage=useRef(0);
+  const drafts=useRef(new Map()),lastMessage=useRef(0);
   useEffect(()=>{
     if(!user?.public_key)return;
     const keys=[user.public_key,...friends.map(f=>f.public_key)];
@@ -284,6 +286,7 @@ export default function App(){
     }
   },[]);
   async function toggleBrowserNotifications(){
+    uiMessageApi.destroy("notification-permission-invite");
     if(notificationsEnabled){
       notificationsEnabledRef.current=false;
       setNotificationsEnabled(false);
@@ -309,10 +312,30 @@ export default function App(){
     }catch(error){alert("无法启用浏览器通知："+error.message)}
   }
   const closeModal=useCallback(()=>setModal(""),[]);
-  const alert=useCallback(message=>{
-    setNotice(message);clearTimeout(noticeTimer.current);
-    noticeTimer.current=setTimeout(()=>setNotice(""),7000);
-  },[]);
+  const alert=useCallback((text,type)=>{
+    const content=String(text||"");
+    const level=type||(/失败|错误|无效|拒绝|不可|无法|超出|超过|未就绪/.test(content)?"error":
+      /成功|已保存|已接受|已删除|已导入|已完成|已加入/.test(content)?"success":"info");
+    uiMessageApi.open({type:level,content,duration:4});
+  },[uiMessageApi]);
+
+  useEffect(()=>{
+    // Browsers require a user gesture to show the native permission dialog.
+    if(!user?.public_key || notificationPromptShown.current ||
+       notificationPermission!=="default" || !window.isSecureContext ||
+       typeof Notification==="undefined")return;
+    notificationPromptShown.current=true;
+    uiMessageApi.open({
+      key:"notification-permission-invite",type:"info",duration:0,
+      className:"wt-permission-invite",
+      content:<span className="wt-permission-message">
+        <span>开启浏览器新消息通知？</span>
+        <AntButton type="link" size="small" onClick={toggleBrowserNotifications}>开启</AntButton>
+        <AntButton type="text" size="small" onClick={()=>
+          uiMessageApi.destroy("notification-permission-invite")}>稍后</AntButton>
+      </span>
+    });
+  },[user?.public_key,notificationPermission,uiMessageApi]);
 
   const refreshFriends=useCallback(async()=>{
     setFriends((await getJson("/api/friends")).friends||[]);
@@ -462,7 +485,7 @@ export default function App(){
     catch(error){setUser(null);if(error.status!==401)alert(error.message)}
     finally{setLoading(false)}
   },[alert]);
-  useEffect(()=>{loadIdentity();return()=>clearTimeout(noticeTimer.current)},[loadIdentity]);
+  useEffect(()=>{loadIdentity()},[loadIdentity]);
 
   // React reuses the existing wtox-local-<public-key> IndexedDB database and
   // the same non-extractable AES-GCM key; no history migration is necessary.
@@ -593,11 +616,16 @@ export default function App(){
   const peerProfileContent=selectedFriend?(
 <div className="wt-peer-profile">
               <div className="wt-peer-profile-heading">
-                <Typography.Title level={5} style={{margin:0}}>
-                  {selectedFriend.name||"Tox 好友"}
-                </Typography.Title>
-                <div className="wt-peer-profile-presence">
-                  <Badge status={peerStatusColor} text={peerStatus}/>
+                <Typography.Text className="wt-peer-profile-eyebrow" type="secondary">
+                  好友昵称
+                </Typography.Text>
+                <div className="wt-peer-profile-heading-main">
+                  <Typography.Title level={5} className="wt-peer-profile-name">
+                    {selectedFriend.name||"Tox 好友"}
+                  </Typography.Title>
+                  <span className="wt-peer-profile-presence">
+                    <Badge status={peerStatusColor} text={peerStatus}/>
+                  </span>
                 </div>
               </div>
               <Divider/>
@@ -998,6 +1026,7 @@ export default function App(){
 
   if(loading)return <div className="wtox-loading">正在加载 wTox…</div>;
   if(!user)return <div className="wtox-auth-layout">
+    {uiMessageContext}
     <div className="wtox-auth-card"><img className="wtox-logo" src="/logo.svg" alt="wtox"/>
       <h1>wTox</h1>
       <p>使用原始 .tox 配置文件登录，无需创建额外的网站账号。</p>
@@ -1024,13 +1053,14 @@ export default function App(){
         }}>下载旧身份备份</Button></details>
       <small>新建的 .tox 备份采用标准 ToxEncryptSave 加密。备份密码丢失后无法恢复。</small>
     </div>
-    {notice&&<div className="wtox-toast" role="status">{notice}</div>}
+
   </div>;
 
   return <ConfigProvider theme={{
     algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
   }}>
   {friendMessageContext}
+  {uiMessageContext}
   <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat ":"")+(section==="me"?"show-me":"")}
     data-theme={effectiveTheme}
     style={{
@@ -1100,7 +1130,7 @@ export default function App(){
                 </Badge>
               </Tooltip>
             </AntButton>
-            <strong>wTox</strong>
+            <strong>{section==="contacts"?"通讯录":"聊天"}</strong>
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
           <div className="wt-list-actions">
@@ -1163,12 +1193,12 @@ export default function App(){
         <nav className="wechat-mobile-tabs" aria-label="手机导航">
           <button type="button" className={section==="chats"?"active":""}
             aria-current={section==="chats"?"page":undefined}
-            onClick={()=>setSection("chats")}><MessageOutlined/><span>聊天</span></button>
+            onClick={()=>setSection("chats")}><RailIcon kind="chats"/><span>聊天</span></button>
           <button type="button" className={section==="contacts"?"active":""}
             aria-current={section==="contacts"?"page":undefined}
-            onClick={()=>setSection("contacts")}><ContactsOutlined/><span>通讯录</span></button>
+            onClick={()=>setSection("contacts")}><RailIcon kind="contacts"/><span>通讯录</span></button>
           <button type="button" onClick={()=>{setSection("me");setMobileChat(false)}}>
-            <SettingOutlined/><span>设置</span>
+            <RailIcon kind="settings"/><span>设置</span>
           </button>
         </nav>
       </aside>
@@ -1181,13 +1211,13 @@ export default function App(){
         </div>
         <nav className="wechat-mobile-tabs" aria-label="手机导航">
           <button type="button" onClick={()=>setSection("chats")}>
-            <MessageOutlined/><span>聊天</span>
+            <RailIcon kind="chats"/><span>聊天</span>
           </button>
           <button type="button" onClick={()=>setSection("contacts")}>
-            <ContactsOutlined/><span>通讯录</span>
+            <RailIcon kind="contacts"/><span>通讯录</span>
           </button>
           <button type="button" className="active" aria-current="page">
-            <SettingOutlined/><span>设置</span>
+            <RailIcon kind="settings"/><span>设置</span>
           </button>
         </nav>
       </section>
@@ -1230,7 +1260,10 @@ export default function App(){
                 }
               }}>
               <AntButton type="text" shape="circle" className="wt-chat-more-button"
-                icon={<MoreOutlined/>} aria-label="更多操作" disabled={!selectedFriend}/>
+                icon={<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2.25"/><circle cx="12" cy="12" r="2.25"/>
+                  <circle cx="19" cy="12" r="2.25"/>
+                </svg>} aria-label="更多操作" disabled={!selectedFriend}/>
             </Dropdown>
           </Tooltip>
         </div>
@@ -1302,20 +1335,23 @@ export default function App(){
           </AntButton>}
         </div>
         <div className="ant-compose-area">
-          <p className="ant-compose-status">{!selected?"请先选择好友":
-            !historyReady?"本地加密历史尚未就绪":
-            !online(selectedFriend)?"对方离线":
-            sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
+          <div className="wt-compose-tools">
+            <Tooltip title="添加附件">
+              <AntButton type="text" className="wt-compose-attach-button"
+                icon={<PaperClipOutlined/>} aria-label="添加附件"
+                disabled={!selected||!online(selectedFriend)}
+                onClick={()=>attachmentInput.current?.click()}/>
+            </Tooltip>
+            <p className="ant-compose-status">{!selected?"请先选择好友":
+              !historyReady?"本地加密历史尚未就绪":
+              !online(selectedFriend)?"对方离线":
+              sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
+          </div>
           <input type="file" hidden ref={attachmentInput}
             aria-label="选择要发送的附件"
             onChange={e=>setUploadFile(e.target.files?.[0]||null)}/>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
-            prefix={<Tooltip title="添加附件">
-              <AntButton type="text" icon={<PaperClipOutlined/>}
-                aria-label="添加附件" disabled={!selected||!online(selectedFriend)}
-                onClick={()=>attachmentInput.current?.click()}/>
-            </Tooltip>}
             header={<Sender.Header title="准备发送附件" open={!!uploadFile}
               onOpenChange={open=>{if(!open)setUploadFile(null)}}>
               {uploadFile&&<Space orientation="vertical" size="small"
@@ -1371,7 +1407,11 @@ export default function App(){
 
     {modal==="profile"&&<AntModal open title="我的 Tox 资料"
       onCancel={closeModal} footer={null} centered destroyOnHidden width={520}>
-      <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
+      <div className="wt-own-tox-id-heading">
+        <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
+        <AntButton type="text" size="small" icon={<QrcodeOutlined/>}
+          aria-label="显示 Tox ID 二维码" onClick={()=>setModal("qrcode")}>二维码</AntButton>
+      </div>
       <Typography.Paragraph className="wtox-profile-id"
         copyable={{text:user.tox_id,tooltips:["复制 Tox ID","已复制"]}}>
         {user.tox_id}
@@ -1396,6 +1436,23 @@ export default function App(){
           保存 Tox 个人资料
         </AntButton>
       </Form>
+    </AntModal>}
+
+    {modal==="qrcode"&&<AntModal open centered title="我的 Tox ID 二维码"
+      onCancel={()=>setModal("profile")}
+      footer={<AntButton onClick={()=>setModal("profile")}>返回我的资料</AntButton>}
+      width={360} destroyOnHidden>
+      <div className="wt-own-qr-content">
+        <QRCode value={user.tox_id} size={240} type="svg" bordered={false}
+          color="#161616" bgColor="#ffffff"/>
+        <Typography.Text type="secondary">扫描二维码添加 Tox 好友</Typography.Text>
+        <AntButton onClick={async()=>{
+          try{
+            await navigator.clipboard.writeText(user.tox_id);
+            uiMessageApi.success("已复制 Tox ID");
+          }catch{uiMessageApi.error("复制失败，请手动复制")}
+        }}>复制 Tox ID</AntButton>
+      </div>
     </AntModal>}
 
     {modal==="settings"&&<AntModal open title="设置与备份" onCancel={closeModal} footer={null} centered destroyOnHidden width={640}>
@@ -1431,6 +1488,6 @@ export default function App(){
         </List.Item>}/>
     </AntModal>}
 
-    {notice&&<div className="wtox-toast" role="status">{notice}</div>}
+
   </div></ConfigProvider>;
 }
