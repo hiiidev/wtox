@@ -66,6 +66,17 @@ def add_friend(body: FriendAdd, request: Request, uid: str = Depends(require_use
     except ToxActionError as exc:
         raise HTTPException(409, str(exc)) from exc
 
+@router.delete("/api/friends/{public_key}")
+def delete_friend(public_key: str, request: Request, uid: str = Depends(require_user)):
+    check_origin(request)
+    try:
+        session(uid).delete_friend(public_key)
+        return {"ok": True}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except ToxActionError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
 @router.post("/api/friends/accept")
 def accept_friend(body: FriendAccept, request: Request, uid: str = Depends(require_user)):
     check_origin(request)
