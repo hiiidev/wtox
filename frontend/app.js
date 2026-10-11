@@ -267,6 +267,18 @@ $("#import").onclick=async()=>{
     if(!result.session_started) error("身份登录成功，但 Toxcore 网络会话未启动，请检查服务器日志");
   }catch(e){error(e.message)}
 };
+$("#legacyExport").onclick=async()=>{
+  error("");
+  try{
+    const response=await api("/api/legacy/export");
+    const blob=await response.blob();
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url;link.download="wtox-legacy-backup.tox";link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),2500);
+    error("旧 Tox 备份已请求下载。保存好文件后，用上方“使用 .tox 登录”进入新版。");
+  }catch(e){error(e.message)}
+};
 $("#copyid").onclick=()=>navigator.clipboard.writeText($("#toxid").textContent).catch(e=>error(e.message));
 $("#export").onclick=async()=>{
   try{
