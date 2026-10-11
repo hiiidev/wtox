@@ -133,6 +133,9 @@ export default function App(){
     if(!window.confirm("删除这条聊天记录？\n"+detail))return;
     try{
       await history.current.deleteEvent(item.id);
+      if(item.type==="file"&&item.file_id){
+        await history.current.deleteCachedImage(item.file_id);
+      }
       await refreshHistory(history.current);
       alert("已删除当前浏览器中的该条消息");
     }catch(e){alert("删除失败："+e.message)}
@@ -672,7 +675,11 @@ export default function App(){
             <p>发送第一条消息，或等待好友回复</p>
           </div>}
           {thread.map(item=>item.type==="file"
-            ? <div key={item.id} className="ant-timeline-file">
+            ? <div key={item.id} className="ant-timeline-file"
+                onContextMenu={event=>{event.preventDefault();requestDelete(item)}}
+                onTouchStart={()=>startLongPress(item)}
+                onTouchEnd={cancelLongPress}
+                onTouchMove={cancelLongPress}>
                 <AttachmentBubble file={item}
                   accept={id=>controlFile(id,"accept")}
                   reject={id=>controlFile(id,"reject")}
