@@ -1,0 +1,310 @@
+"""Live one-Tox-instance-per-profile adapter.
+
+All native calls for each session are protected by the same RLock; callbacks
+never reach user-owned browser code directly. Compatible with c-toxcore's
+non-experimental callback API. Real network interoperability requires VPS test.
+"""
+from __future__ import annotations
+
+import ctypes as C
+import os
+import threading
+import time
+from typing import Callable
+
+from .tox_identity import ToxCore, ToxIdentityError
+
+U8 = C.c_uint8
+U32 = C.c_uint32
+P = C.c_void_p
+IP = C.POINTER(U8)
+ERR = C.POINTER(C.c_int)
+
+FriendRequestCB = C.CFUNCTYPE(None, P, IP, IP, C.c_size_t, P)
+FriendMessageCB = C.CFUNCTYPE(None, P, U32, C.c_int, IP, C.c_size_t, P)
+FriendStatusCB = C.CFUNCTYPE(None, P, U32, C.c_int, P)
+SelfStatusCB = C.CFUNCTYPE(None, P, C.c_int, P)
+
+
+class ToxActionError(Exception):
+    pass
+
+
+def hex_bytes(value: str, expected: int, label: str) -> bytes:
+    if len(value) != expected * 2:
+        raise ValueError(f"{label}必须为 {expected * 2} 个十六进制字符")
+    try:
+        data = bytes.fromhex(value)
+    except ValueError as exc:
+        raise ValueError(f"{label}不是有效的十六进制") from exc
+    if len(data) != expected:
+        raise ValueError(f"{label}长度错误")
+    return data
+
+
+def uint8_array(data: bytes):
+    return (U8 * len(data)).from_buffer_copy(data)
+
+
+class ToxSession:
+    """A single native Tox identity. Do not instantiate twice per ID."""
+
+    def __init__(self, savedata: bytes, on_event: Callable[[dict], None],
+                 on_save: Callable[[bytes], None]):
+        if not savedata:
+            raise ValueError("missing Tox savedata")
+        self.core = ToxCore()
+        lib = self.core
+        self._on_event = on_event
+        self._on_save = on_save
+        self.lock = threading.RLock()
+        self.stop_event = threading.Event()
+        self.thread = None
+        self.tox = None
+        self.last_connection = -1
+        self._last_save = time.monotonic()
+        self._last_bootstrap = 0.0
+        self._dirty = False
+        self._install_native_functions()
+
+        error = C.c_int()
+        opts = lib.options_new(C.byref(error))
+        if not opts or error.value:
+            raise ToxActionError(f"tox_options_new failed ({error.value})")
+        try:
+            save_buffer = uint8_array(savedata)
+            lib.set_savedata_type(opts, 1)  # TOX_SAVEDATA_TYPE_TOX_SAVE
+            if not lib.set_savedata_data(opts, save_buffer, len(savedata)):
+                raise ToxActionError("tox_options_set_savedata_data failed")
+            error.value = 0
+            self.tox = lib.new(opts, C.byref(error))
+            if not self.tox or error.value:
+                raise ToxActionError(f"tox_new with savedata failed ({error.value})")
+        finally:
+            lib.options_free(opts)
+
+        # Strong references: ctypes callbacks must not be garbage collected.
+        self._request_cb = FriendRequestCB(self._on_request)
+        self._message_cb = FriendMessageCB(self._on_message)
+        self._friend_status_cb = FriendStatusCB(self._on_friend_status)
+        self._self_status_cb = SelfStatusCB(self._on_self_status)
+        self.callback_request(self.tox, self._request_cb)
+        self.callback_message(self.tox, self._message_cb)
+        self.callback_friend_status(self.tox, self._friend_status_cb)
+        self.callback_self_status(self.tox, self._self_status_cb)
+
+    def _install_native_functions(self):
+        bind = self.core._fn
+        self.iterate = bind("tox_iterate", None, P, P)
+        self.interval = bind("tox_iteration_interval", U32, P)
+        self.self_status = bind("tox_self_get_connection_status", C.c_int, P)
+        self.bootstrap_native = bind("tox_bootstrap", C.c_bool, P, C.c_char_p, C.c_uint16, IP, ERR)
+        self.relay_native = bind("tox_add_tcp_relay", C.c_bool, P, C.c_char_p, C.c_uint16, IP, ERR)
+        self.callback_request = bind("tox_callback_friend_request", None, P, FriendRequestCB)
+        self.callback_message = bind("tox_callback_friend_message", None, P, FriendMessageCB)
+        self.callback_friend_status = bind("tox_callback_friend_connection_status", None, P, FriendStatusCB)
+        self.callback_self_status = bind("tox_callback_self_connection_status", None, P, SelfStatusCB)
+        self.friend_add = bind("tox_friend_add", U32, P, IP, IP, C.c_size_t, ERR)
+        self.friend_accept = bind("tox_friend_add_norequest", U32, P, IP, ERR)
+        self.friend_send = bind("tox_friend_send_message", U32, P, U32, C.c_int, IP, C.c_size_t, ERR)
+        self.friend_list_size = bind("tox_self_get_friend_list_size", C.c_size_t, P)
+        self.friend_list = bind("tox_self_get_friend_list", None, P, C.POINTER(U32))
+        self.friend_public_key = bind("tox_friend_get_public_key", C.c_bool, P, U32, IP, ERR)
+        self.friend_connection = bind("tox_friend_get_connection_status", C.c_int, P, U32, ERR)
+        self.friend_name_size = bind("tox_friend_get_name_size", C.c_size_t, P, U32, ERR)
+        self.friend_name = bind("tox_friend_get_name", C.c_bool, P, U32, IP, ERR)
+
+    def _emit(self, event: dict):
+        try:
+            self._on_event(event)
+        except Exception as exc:
+            # Never let Python exceptions escape a native callback.
+            print("Tox event persistence/delivery failed:", type(exc).__name__, flush=True)
+
+    def _friend_key(self, friend: int) -> str:
+        key = (U8 * 32)()
+        error = C.c_int()
+        ok = self.friend_public_key(self.tox, friend, key, C.byref(error))
+        if not ok or error.value:
+            raise ToxActionError(f"Cannot read friend public key ({error.value})")
+        return bytes(key).hex().upper()
+
+    def _on_request(self, _tox, pubkey, message, length, _user):
+        self._emit({"type": "friend_request",
+                    "public_key": C.string_at(pubkey, 32).hex().upper(),
+                    "text": C.string_at(message, length).decode("utf-8", "replace")})
+
+    def _on_message(self, _tox, friend, kind, data, length, _user):
+        try:
+            public_key = self._friend_key(friend)
+            self._emit({"type": "message", "public_key": public_key,
+                        "text": C.string_at(data, length).decode("utf-8", "replace"),
+                        "kind": int(kind)})
+        except Exception as exc:
+            print("Tox message callback failed:", type(exc).__name__, flush=True)
+
+    def _on_friend_status(self, _tox, friend, status, _user):
+        try:
+            self._emit({"type": "friend_connection", "public_key": self._friend_key(friend),
+                        "status": int(status)})
+        except Exception:
+            pass
+
+    def _on_self_status(self, _tox, status, _user):
+        self.last_connection = int(status)
+        self._emit({"type": "connection", "status": int(status)})
+
+    def _save_bytes(self) -> bytes:
+        n = self.core.savedata_size(self.tox)
+        if n < 1 or n > 8 * 1024 * 1024:
+            raise ToxActionError("Invalid savedata size")
+        out = (U8 * n)()
+        self.core.savedata_write(self.tox, out)
+        return bytes(out)
+
+    def _save(self):
+        self._on_save(self._save_bytes())
+        self._last_save = time.monotonic()
+        self._dirty = False
+
+    def _bootstrap(self):
+        count = 0
+        for entry in os.environ.get("WTOX_BOOTSTRAP", "").split(","):
+            parts = entry.strip().split(":")
+            if len(parts) not in (3, 4):
+                continue
+            try:
+                hostname, port = parts[0], int(parts[1])
+                key = hex_bytes(parts[2], 32, "Bootstrap key")
+                if not hostname or not 1 <= port <= 65535:
+                    continue
+                error = C.c_int()
+                key_array = uint8_array(key)
+                if self.bootstrap_native(self.tox, hostname.encode("ascii"), port,
+                                         key_array, C.byref(error)):
+                    count += 1
+                if len(parts) == 4:
+                    self.relay_native(self.tox, hostname.encode("ascii"), int(parts[3]),
+                                      key_array, C.byref(error))
+            except (ValueError, UnicodeError):
+                continue
+        self._last_bootstrap = time.monotonic()
+        if count == 0:
+            print("Tox bootstrap: no accepted nodes; check WTOX_BOOTSTRAP", flush=True)
+
+    def start(self):
+        if self.thread is not None:
+            return
+        self.thread = threading.Thread(target=self._run, name="wtox-toxcore", daemon=True)
+        self.thread.start()
+
+    def _run(self):
+        try:
+            while not self.stop_event.is_set():
+                with self.lock:
+                    if time.monotonic() - self._last_bootstrap > 120 and self.last_connection <= 0:
+                        self._bootstrap()
+                    self.iterate(self.tox, None)
+                    current = int(self.self_status(self.tox))
+                    if current != self.last_connection:
+                        self.last_connection = current
+                        self._emit({"type": "connection", "status": current})
+                    if self._dirty or time.monotonic() - self._last_save > 60:
+                        self._save()
+                    delay = min(0.25, max(0.01, self.interval(self.tox) / 1000.0))
+                self.stop_event.wait(delay)
+        except Exception as exc:
+            print("Tox session loop stopped unexpectedly:", type(exc).__name__, flush=True)
+        finally:
+            with self.lock:
+                try:
+                    self._save()
+                finally:
+                    if self.tox:
+                        self.core.kill(self.tox)
+                        self.tox = None
+
+    def close(self):
+        self.stop_event.set()
+        if self.thread:
+            self.thread.join(timeout=10)
+            if self.thread.is_alive():
+                raise RuntimeError("Tox session did not stop cleanly")
+
+    def _require_live(self):
+        if self.tox is None or self.stop_event.is_set():
+            raise ToxActionError("Tox session not running")
+
+    def friends(self) -> list[dict]:
+        with self.lock:
+            self._require_live()
+            n = self.friend_list_size(self.tox)
+            if n > 100000:
+                raise ToxActionError("Unreasonable friend list size")
+            arr = (U32 * n)()
+            self.friend_list(self.tox, arr)
+            friends = []
+            for number in arr:
+                error = C.c_int()
+                key = self._friend_key(number)
+                name_len = self.friend_name_size(self.tox, number, C.byref(error))
+                name = ""
+                if error.value == 0 and 0 < name_len < 2048:
+                    name_buf = (U8 * name_len)()
+                    if self.friend_name(self.tox, number, name_buf, C.byref(error)):
+                        name = bytes(name_buf).decode("utf-8", "replace")
+                error.value = 0
+                status = int(self.friend_connection(self.tox, number, C.byref(error)))
+                friends.append({"public_key": key, "name": name, "status": status})
+            return friends
+
+    def add_friend(self, address: str, request_text: str) -> str:
+        raw_address = hex_bytes(address.strip(), 38, "Tox ID")
+        text = request_text.encode("utf-8")
+        if not 1 <= len(text) <= 256:
+            raise ValueError("好友请求内容需为 1–256 字节")
+        with self.lock:
+            self._require_live()
+            error = C.c_int()
+            number = self.friend_add(self.tox, uint8_array(raw_address),
+                                     uint8_array(text), len(text), C.byref(error))
+            if error.value:
+                raise ToxActionError(f"tox_friend_add error {error.value}")
+            self._dirty = True
+            self._save()
+            return self._friend_key(number)
+
+    def accept_friend(self, key: str) -> str:
+        pubkey = hex_bytes(key.strip(), 32, "好友公钥")
+        with self.lock:
+            self._require_live()
+            error = C.c_int()
+            number = self.friend_accept(self.tox, uint8_array(pubkey), C.byref(error))
+            if error.value:
+                raise ToxActionError(f"tox_friend_add_norequest error {error.value}")
+            self._dirty = True
+            self._save()
+            return self._friend_key(number)
+
+    def send_message(self, key: str, text: str) -> int:
+        pubkey = hex_bytes(key.strip(), 32, "好友公钥").hex().upper()
+        encoded = text.encode("utf-8")
+        if not 1 <= len(encoded) <= 1000:
+            raise ValueError("文字消息需为 1–1000 字节")
+        with self.lock:
+            self._require_live()
+            friend = next((f for f in self.friends() if f["public_key"] == pubkey), None)
+            if friend is None:
+                raise ValueError("好友不在列表中")
+            numbers_count = self.friend_list_size(self.tox)
+            arr = (U32 * numbers_count)()
+            self.friend_list(self.tox, arr)
+            number = next((n for n in arr if self._friend_key(n) == pubkey), None)
+            if number is None:
+                raise ValueError("找不到好友")
+            error = C.c_int()
+            msg_id = self.friend_send(self.tox, number, 0, uint8_array(encoded),
+                                      len(encoded), C.byref(error))
+            if error.value:
+                raise ToxActionError(f"tox_friend_send_message error {error.value}")
+            return int(msg_id)
