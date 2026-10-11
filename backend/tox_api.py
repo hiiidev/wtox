@@ -94,8 +94,12 @@ def accept_friend(body: FriendAccept, request: Request, uid: str = Depends(requi
 def send_message(body: SendMessage, request: Request, uid: str = Depends(require_user)):
     check_origin(request)
     try:
-        message_id = session(uid).send_message(body.public_key, body.text)
-        return {"ok": True, "message_id": message_id, "public_key": body.public_key.upper()}
+        tox_session = session(uid)
+        message_id = tox_session.send_message(body.public_key, body.text)
+        return {"ok": True, "message_id": message_id,
+                "session_id": tox_session.session_id,
+                "status": "submitted",
+                "public_key": body.public_key.upper()}
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except ToxActionError as exc:
