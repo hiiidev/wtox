@@ -162,14 +162,14 @@ class ToxSession:
             print("Tox message callback failed:", type(exc).__name__, flush=True)
 
     def _on_read_receipt(self, _tox, friend, message_id, _user):
-        """Remote Tox client acknowledged this message; not a human read."""
+        """Tox read-receipt callback: peer client ack, not proven human read."""
         try:
             self._emit({
                 "type": "message_receipt",
                 "public_key": self._friend_key(friend),
                 "session_id": self.session_id,
                 "message_id": int(message_id),
-                "status": "sent",
+                "status": "read",
             })
         except Exception as exc:
             print("Tox receipt callback failed:", type(exc).__name__, flush=True)
