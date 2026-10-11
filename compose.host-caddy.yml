@@ -1,0 +1,29 @@
+# Use when Caddy is already installed on the VPS host (systemd).
+# Only the web application runs in Docker. Host Caddy handles HTTPS and WSS.
+# Important: use -f compose.host-caddy.yml explicitly (not the default compose.yml).
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WTOX_INSECURE_HTTP: "0"
+    volumes:
+      - wtox_data:/data
+    ports:
+      # Never expose the plaintext backend beyond the VPS itself.
+      - "127.0.0.1:8000:8000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 60s
+volumes:
+  wtox_data:
