@@ -37,7 +37,7 @@ Start with **1 vCPU, 2GB RAM, 20GB SSD**, Ubuntu 24.04 (estimate, not benchmarke
 
 Caddy is a full part of `compose.yml`; it automatically obtains TLS certificates and proxies WebSocket upgrades to the internal app. The app port 8000 is *not published* to the public internet.
 
-For local development only, run `WTOX_INSECURE_HTTP=1 docker compose -f compose.dev.yml up --build` and use `http://localhost:8000`. Plain HTTP must **never** be exposed publicly.
+For local development only, run `docker compose -f compose.dev.yml up --build` and use `http://localhost:8000`. Plain HTTP must **never** be exposed publicly.
 
 ## Trust / security
 
