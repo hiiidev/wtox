@@ -93,11 +93,11 @@ def frontend_health():
 @app.get("/gate",response_class=HTMLResponse)
 def gate_page():
     return """<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>wtox · 访问验证</title><style>body{background:#101827;color:#e6ebf5;font:16px system-ui;display:grid;place-items:center;min-height:100dvh;margin:0}
+<title>wTox</title><style>body{background:#101827;color:#e6ebf5;font:16px system-ui;display:grid;place-items:center;min-height:100dvh;margin:0}
 form{max-width:360px;width:86%;background:#1b2639;padding:2em;border-radius:16px}
 input,button{box-sizing:border-box;width:100%;padding:12px;border-radius:8px;margin-top:12px;font-size:1em}
 button{background:#467be8;color:white;border:0;cursor:pointer}</style>
-<form id="gate"><h2>wtox</h2><p>请输入网站访问密码</p><input type="password" autocomplete="current-password" required id="password" placeholder="访问密码">
+<form id="gate"><h2>wTox</h2><p>请输入网站访问密码</p><input type="password" autocomplete="current-password" required id="password" placeholder="访问密码">
 <button type="submit">进入</button><p id="error" role="alert"></p></form>
 <script>document.querySelector('#gate').onsubmit=async e=>{
 e.preventDefault();const r=await fetch('/api/gate/login',{method:'POST',headers:{'Content-Type':'application/json'},
