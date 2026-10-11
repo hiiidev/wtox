@@ -49,3 +49,16 @@ assert.match(refined,/\.wt-batch-toolbar/);
 assert.match(refined,/html\[data-wtox-theme="light"\]/);
 assert.match(refined,/html\[data-wtox-theme="dark"\]/);
 assert.match(refined,/\.wt-message-row \.ant-bubble-content/);
+
+assert.doesNotMatch(app,/对方离线，VPS 已准备好离线队列/);
+assert.match(app,/\(f\.name\|\|""\)\.toLocaleLowerCase\(\)\.includes\(filter\.trim\(\)\.toLocaleLowerCase\(\)\)/);
+assert.doesNotMatch(app,/\(f\.name\|\|""\)\+" "\+f\.public_key/);
+for(const variable of ["--wt-rail","--wt-sidebar","--wt-chat","--wt-search","--wt-own-text"]){
+  assert.ok(app.includes(variable),"Missing messenger palette variable: "+variable);
+}
+assert.match(refined,/scrollbar-gutter:stable/);
+assert.match(refined,/scrollbar-color:transparent transparent/);
+assert.match(refined,/\.ant-messenger\[data-theme\] \.wt-thread-shell>\.ant-thread/);
+assert.match(refined,/\.ant-messenger\[data-theme\] \.wechat-conversation\.is-selected/);
+assert.match(refined,/max-width:none!important;\s*margin-inline:0!important/);
+assert.match(refined,/background:var\(--wt-chat\)!important/);

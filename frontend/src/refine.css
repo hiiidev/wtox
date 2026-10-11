@@ -40,12 +40,12 @@ body:has(.ant-messenger){background:var(--wt-bg)!important}
   overflow:hidden!important;background:var(--wt-bg)!important}
 .ant-messenger .ant-chat-toolbar{flex-shrink:0;min-width:0!important}
 .ant-messenger .ant-thread{background:var(--wt-bg)!important;
-  overflow-x:hidden!important;min-height:0;padding:22px 24px!important;
-  scrollbar-color:var(--wt-muted) transparent}
+  overflow-x:hidden!important;min-height:0;padding:18px 14px!important;
+  scrollbar-gutter:stable;scrollbar-color:transparent transparent}
 .ant-messenger .wt-thread-shell{min-height:0;min-width:0;overflow:hidden!important;
   background:var(--wt-bg)!important}
-.ant-messenger .wt-thread-content{width:100%!important;max-width:900px!important;
-  margin-inline:auto!important;min-width:0!important;gap:12px!important;
+.ant-messenger .wt-thread-content{width:100%!important;max-width:none!important;
+  margin-inline:0!important;min-width:0!important;gap:12px!important;
   display:flex!important;flex-direction:column!important;align-items:stretch}
 .ant-messenger .wt-message-row{width:100%;min-width:0;display:flex!important;gap:8px;
   align-items:flex-start;box-sizing:border-box}
@@ -89,7 +89,7 @@ body:has(.ant-messenger){background:var(--wt-bg)!important}
 .ant-messenger .ant-compose-area{padding:12px 20px 18px!important;
   border-top:1px solid var(--wt-border)!important;
   background:var(--wt-panel)!important}
-.ant-messenger .ant-compose-area>*{width:100%;max-width:900px;margin-left:auto;margin-right:auto}
+.ant-messenger .ant-compose-area>*{width:100%;max-width:none;margin-left:auto;margin-right:auto}
 .ant-messenger .ant-compose-status{color:var(--wt-muted)!important;
   padding:0 0 8px!important;line-height:1.3}
 .ant-messenger .ant-compose-area .ant-sender{min-height:95px!important;
@@ -110,13 +110,20 @@ body:has(.ant-messenger){background:var(--wt-bg)!important}
 .ant-messenger .wt-settings-card .ant-upload-wrapper{width:100%}
 .ant-messenger .wt-settings-card .ant-upload-select{width:100%}
 .ant-messenger .wt-settings-card .ant-upload-select .ant-btn{width:100%}
-.ant-messenger .wt-thread-shell>.ant-thread{scrollbar-width:none}
+/* Do not toggle scrollbar width when the user scrolls: doing so shifts
+   all right-aligned bubbles. Keep the gutter fixed, reveal thumb by color. */
+.ant-messenger .wt-thread-shell>.ant-thread,
 .ant-messenger .wt-thread-shell>.ant-thread.wt-thread-scrolling{
- scrollbar-width:thin;scrollbar-color:var(--wt-muted) transparent}
-.ant-messenger .wt-thread-shell>.ant-thread::-webkit-scrollbar{width:0}
-.ant-messenger .wt-thread-shell>.ant-thread.wt-thread-scrolling::-webkit-scrollbar{width:5px}
+ scrollbar-width:thin;scrollbar-gutter:stable;scrollbar-color:transparent transparent}
+.ant-messenger .wt-thread-shell>.ant-thread.wt-thread-scrolling{
+ scrollbar-color:var(--wt-muted) transparent}
+.ant-messenger .wt-thread-shell>.ant-thread::-webkit-scrollbar,
+.ant-messenger .wt-thread-shell>.ant-thread.wt-thread-scrolling::-webkit-scrollbar{
+ width:6px;height:6px}
 .ant-messenger .wt-thread-shell>.ant-thread::-webkit-scrollbar-thumb{
- background:var(--wt-muted);border-radius:8px}
+ background:transparent;border-radius:8px}
+.ant-messenger .wt-thread-shell>.ant-thread.wt-thread-scrolling::-webkit-scrollbar-thumb{
+ background:var(--wt-muted)}
 @media(max-width:767px){
   .ant-messenger .ant-workspace.wechat-layout{width:100vw!important;max-width:none!important;
     margin:0!important;display:flex!important;border:0!important}
@@ -129,7 +136,7 @@ body:has(.ant-messenger){background:var(--wt-bg)!important}
     padding:0 10px!important;background:var(--wt-panel)!important}
   .ant-messenger .ant-chat-toolbar .ant-btn{color:var(--wt-text)!important;
     background:transparent!important}
-  .ant-messenger .ant-thread{padding:12px 10px!important;
+  .ant-messenger .ant-thread{padding:12px 8px!important;
     background:var(--wt-bg)!important;overflow-x:hidden!important}
   .ant-messenger .wt-thread-content{max-width:100%!important;
     gap:10px!important;min-width:0!important}
@@ -262,4 +269,129 @@ html[data-wtox-theme="dark"],html[data-wtox-theme="dark"] body{
   .ant-messenger[data-theme] .ant-chat-toolbar .ant-btn{color:var(--wt-text)!important}
   .ant-messenger[data-theme] .ant-compose-area .ant-sender{
     background:var(--wt-panel)!important;border-color:var(--wt-border)!important}
+}
+
+
+/* Desktop messenger light/dark palette follows the reference chat screenshots.
+   Keep these overrides AFTER the older WeChat rules so both themes reach the
+   chat canvas, sidebar, navigation and Sender rather than only AntD modals. */
+.ant-messenger[data-theme] .ant-workspace.wechat-layout{
+  background:var(--wt-sidebar)!important;
+  border-color:var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .wechat-rail{
+  background:var(--wt-rail)!important;
+  border-right-color:var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .ant-contact-sidebar,
+.ant-messenger[data-theme] .wechat-list,
+.ant-messenger[data-theme] .wechat-list-head,
+.ant-messenger[data-theme] .wechat-search{
+  background:var(--wt-sidebar)!important;
+}
+.ant-messenger[data-theme] .wechat-search .ant-input-affix-wrapper,
+.ant-messenger[data-theme] .wechat-search .ant-input{
+  background:var(--wt-search)!important;color:var(--wt-text)!important;
+}
+.ant-messenger[data-theme] .wechat-search .ant-input-affix-wrapper{
+  border:1px solid var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .wechat-search .ant-input::placeholder,
+.ant-messenger[data-theme] .wechat-search-icon{color:var(--wt-muted)!important}
+.ant-messenger[data-theme] .wechat-conversation,
+.ant-messenger[data-theme] .wechat-conversation-name{
+  color:var(--wt-text)!important;
+}
+.ant-messenger[data-theme] .wechat-conversation.is-selected{
+  background:var(--wt-selected)!important;
+}
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-conversation-name,
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-conversation-preview,
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-conversation-side time{
+  color:#fff!important;
+}
+.ant-messenger[data-theme] .wechat-conversation:hover:not(.is-selected){
+  background:var(--wt-hover)!important;
+}
+.ant-messenger[data-theme] .wechat-rail-button.is-active{
+  color:var(--wt-primary)!important;
+}
+.ant-messenger[data-theme] .ant-chat-area,
+.ant-messenger[data-theme] .ant-chat-toolbar,
+.ant-messenger[data-theme] .wt-thread-shell,
+.ant-messenger[data-theme] .wt-thread-shell>.ant-thread,
+.ant-messenger[data-theme] .ant-compose-area{
+  background:var(--wt-chat)!important;
+}
+.ant-messenger[data-theme] .ant-chat-toolbar{
+  border-color:var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .ant-chat-toolbar .ant-btn{
+  background:transparent!important;color:var(--wt-muted)!important;
+}
+.ant-messenger[data-theme] .ant-chat-toolbar .ant-btn:hover{
+  background:var(--wt-hover)!important;color:var(--wt-text)!important;
+}
+.ant-messenger[data-theme] .ant-peer-title strong{
+  color:var(--wt-text)!important;
+}
+.ant-messenger[data-theme] .ant-compose-area{
+  border-color:var(--wt-border)!important;
+}
+.ant-messenger[data-theme] .ant-compose-area .ant-sender{
+  background:var(--wt-chat)!important;
+  border:1px solid var(--wt-border)!important;
+  box-shadow:none!important;
+}
+.ant-messenger[data-theme] .ant-compose-area .ant-sender textarea,
+.ant-messenger[data-theme] .ant-compose-area .ant-sender textarea::placeholder{
+  background:transparent!important;
+}
+.ant-messenger[data-theme] .ant-compose-area .ant-sender textarea{
+  color:var(--wt-text)!important;
+}
+.ant-messenger[data-theme] .ant-compose-area .ant-sender textarea::placeholder{
+  color:var(--wt-muted)!important;
+}
+.ant-messenger[data-theme] .wt-message-row .ant-bubble-content,
+.ant-messenger[data-theme] .wt-message-row .ant-bubble-placement-end .ant-bubble-content,
+.ant-messenger[data-theme] .wt-message-outgoing .ant-bubble-content{
+  background:var(--wt-own)!important;color:var(--wt-own-text)!important;
+  border:none!important;
+}
+.ant-messenger[data-theme] .wt-message-incoming .ant-bubble-content,
+.ant-messenger[data-theme] .wt-message-row .ant-bubble-placement-start .ant-bubble-content{
+  background:var(--wt-incoming)!important;color:var(--wt-incoming-text)!important;
+  border:none!important;
+}
+.ant-messenger[data-theme] .wtox-attachment-row.out .wtox-attachment-bubble.ant-card{
+  background:var(--wt-own)!important;color:var(--wt-own-text)!important;
+}
+.ant-messenger[data-theme] .wtox-attachment-row:not(.out) .wtox-attachment-bubble.ant-card{
+  background:var(--wt-incoming)!important;color:var(--wt-incoming-text)!important;
+}
+.ant-messenger[data-theme] .wtox-attachment-row .ant-typography{
+  color:inherit;
+}
+.ant-messenger .wt-thread-content{
+  max-width:none!important;margin-inline:0!important;
+}
+.ant-messenger .ant-compose-area>*{
+  max-width:none!important;
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wechat-list,
+  .ant-messenger[data-theme] .wechat-list-head,
+  .ant-messenger[data-theme] .wechat-search{
+    background:var(--wt-sidebar)!important;
+  }
+  .ant-messenger[data-theme] .ant-chat-area,
+  .ant-messenger[data-theme] .ant-compose-area{
+    background:var(--wt-chat)!important;
+  }
+  .ant-messenger[data-theme] .wt-mobile-me-page,
+  .ant-messenger[data-theme] .wt-mobile-me-header,
+  .ant-messenger[data-theme] .wt-mobile-settings-scroll{
+    background:var(--wt-chat)!important;
+  }
 }

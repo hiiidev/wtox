@@ -133,9 +133,21 @@ export default function App(){
   const [systemDark,setSystemDark]=useState(()=>
     typeof window!=="undefined"&&window.matchMedia?.("(prefers-color-scheme: dark)").matches);
   const effectiveTheme=visualStyle==="system"?(systemDark?"dark":"light"):visualStyle;
-  const designTokens=useMemo(()=>antdTheme.getDesignToken({
-    algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
-  }),[effectiveTheme]);
+  // Use the reference messenger palette for all surfaces, not just AntD popups.
+  // The CSS custom properties drive rail, sidebar, chat, composer and bubbles.
+  const uiColors=effectiveTheme==="dark"?{
+    bg:"#1e1e1f",rail:"#232424",sidebar:"#2f2f30",chat:"#1e1e1f",
+    search:"#3a3a3b",hover:"#3b3b3d",border:"#373739",
+    text:"#f3f3f3",muted:"#9b9b9f",primary:"#16ac71",
+    selected:"#0da769",own:"#35d18c",incoming:"#303032",
+    ownText:"#09291d",incomingText:"#f3f3f3"
+  }:{
+    bg:"#fafafa",rail:"#c5c6c6",sidebar:"#eeeef0",chat:"#fafafa",
+    search:"#ffffff",hover:"#e3e3e5",border:"#e3e3e5",
+    text:"#222326",muted:"#96969c",primary:"#16ac71",
+    selected:"#16ac71",own:"#9df29f",incoming:"#eeeeef",
+    ownText:"#182d1e",incomingText:"#222326"
+  };
   useEffect(()=>{
     const mq=window.matchMedia("(prefers-color-scheme: dark)");
     const listener=event=>setSystemDark(event.matches);
@@ -562,7 +574,7 @@ export default function App(){
     return latest;
   },[messages]);
   const visibleFriends=useMemo(()=>friends.filter(f=>
-    ((f.name||"")+" "+f.public_key).toLowerCase().includes(filter.toLowerCase()))
+    (f.name||"").toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()))
     .sort((a,b)=>{
       if(section==="contacts")return (a.name||a.public_key).localeCompare(b.name||b.public_key,"zh-CN");
       const left=latestByPeer.get(a.public_key)?.at||0;
@@ -857,15 +869,22 @@ export default function App(){
   <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat ":"")+(section==="me"?"show-me":"")}
     data-theme={effectiveTheme}
     style={{
-      "--wt-bg":designTokens.colorBgLayout,
-      "--wt-panel":designTokens.colorBgContainer,
-      "--wt-hover":designTokens.colorFillSecondary,
-      "--wt-border":designTokens.colorBorderSecondary,
-      "--wt-text":designTokens.colorText,
-      "--wt-muted":designTokens.colorTextSecondary,
-      "--wt-primary":designTokens.colorPrimary,
-      "--wt-own":designTokens.colorPrimaryBg,
-      "--wt-incoming":designTokens.colorBgElevated
+      "--wt-bg":uiColors.bg,
+      "--wt-panel":uiColors.sidebar,
+      "--wt-rail":uiColors.rail,
+      "--wt-sidebar":uiColors.sidebar,
+      "--wt-chat":uiColors.chat,
+      "--wt-search":uiColors.search,
+      "--wt-hover":uiColors.hover,
+      "--wt-border":uiColors.border,
+      "--wt-text":uiColors.text,
+      "--wt-muted":uiColors.muted,
+      "--wt-primary":uiColors.primary,
+      "--wt-selected":uiColors.selected,
+      "--wt-own":uiColors.own,
+      "--wt-incoming":uiColors.incoming,
+      "--wt-own-text":uiColors.ownText,
+      "--wt-incoming-text":uiColors.incomingText
     }}>
     <div className="wtox-workspace ant-workspace wechat-layout">
       <nav className="wechat-rail" aria-label="主导航">
@@ -1116,7 +1135,7 @@ export default function App(){
         <div className="ant-compose-area">
           <p className="ant-compose-status">{!selected?"请先选择好友":
             !historyReady?"本地加密历史尚未就绪":
-            !online(selectedFriend)?"对方离线，VPS 已准备好离线队列":
+            !online(selectedFriend)?"对方离线":
             sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
           <input type="file" hidden ref={attachmentInput}
             aria-label="选择要发送的附件"
