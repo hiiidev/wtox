@@ -35,6 +35,16 @@
 
 **发送仍提示好友离线时：** 先确认对方 qTox/aTox 已接受好友请求并处于在线状态，然后检查 wtox 顶部的 Tox 网络状态是否在线。网站 HTTPS 连通并不代表底层 Tox DHT 已连通；若长时间离线，检查 `WTOX_BOOTSTRAP` 和 VPS 出站 UDP/TCP 网络。
 
+## 聊天记录迁移（qTox / aTox）与附件
+
+- **wtox JSON**：导出本浏览器当前 Tox 身份的文字历史，在另一台设备导入同一 Tox 身份后的浏览器中恢复。它与 `.tox` 身份备份是两个不同文件。
+- **qTox TXT**：按所选好友导出或导入 qTox 原生的制表符格式 `日期<TAB>时间<TAB>发送者<TAB>消息`。导入时填写 qTox 导出文件中自己的显示昵称，才能识别消息方向。支持正文含多行文本。qTox 的历史数据库/SQLCipher 文件不在支持范围。
+- **aTox**：已确认 aTox 0.8.0 发布了聊天历史导出，但不同导出文件字段结构尚未实测，因此**尚不能保证原生 aTox 导出文件可直接导入**。如果其导出文件符合 qTox 的四列制表符格式可以按 qTox TXT 导入；否则会明确提示不支持。需要实际脱敏样本来补充解析适配。
+- 所有历史的导入/导出发生在**浏览器本地**，不会自动上传 VPS 或重新发给 Tox 好友。当前导出为 **明文 JSON/TXT**，请加密保管。重复导入相同记录按内容、时间及好友等字段去重。只处理文字历史，不包含已传输附件或加密数据库。
+- **附件收发（实验版）**：使用原生 `tox_file_send`、分块及接收控制，与原版 Tox 文件传输协议对接。单个文件 1 字节至 5 MiB，最多 4 个同时活动的传输。发送双方必须在线；接收方需要手动接受；下载时通过已验证的 HTTPS 登录会话取回临时内存数据。
+- 附件数据只在 VPS 内存中临时保存（最多约 15 分钟），不会当作历史文件长期保存，不支持文件断点续传和 VPS 重启恢复。不能保证对方客户端会自动接受文件。
+- **实测状态**：Python/JavaScript 接口与测试代码已提交，尚需用真实 qTox/aTox 验证实际文件收发和导出文件兼容性。
+
 ## 已装原生 Caddy 的 VPS（你的部署方式）
 
 具体配置见 [宿主机原生 Caddy 部署文档](docs/HOST_CADDY.md)。Docker 只运行 wtox，使用本机端口 **6066**；Caddy 负责外部 443 HTTPS/WSS。
@@ -90,6 +100,7 @@ chat.example.com {
 - `GET /api/legacy/export` — **仅旧 Cookie 尚未过期时**的一次性迁移辅助导出
 - `POST /api/logout` — 退出 Tox 身份
 - `GET/POST/DELETE /api/friends`、`POST /api/messages` — 好友及文字消息
+- `GET /api/files`、`POST /api/files/send`、`POST /api/files/{id}/accept` / `reject`、`GET /api/files/{id}/download` — 原生 Tox 附件收发
 - `GET /api/pending`、`POST /api/ack`、`WS /ws` — 短期消息暂存与实时收发
 
 **旧的 `POST /api/register` 和 `POST /api/login` 已移除。** HTTPS 仅保护浏览器到 VPS 的连接，VPS 上运行的 Toxcore 仍需被你信任。
