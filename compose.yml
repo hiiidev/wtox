@@ -4,6 +4,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      WTOX_INSECURE_HTTP: "0"
     volumes:
       - wtox_data:/data
     expose:
