@@ -48,7 +48,7 @@ class SessionManager:
 
     def on_event(self, uid: str, event: dict):
         payload = event.copy()
-        if event.get("type") in ("message", "friend_request"):
+        if event.get("type") in ("message", "friend_request", "message_receipt"):
             try:
                 payload["id"] = store.append_pending(uid, event)
             except Exception as exc:
