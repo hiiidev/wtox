@@ -29,6 +29,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ /app/backend/
 COPY --from=frontendbuild /frontend/dist/ /app/frontend/
+# Fail loudly if the React JS/CSS or favicon is missing from the runtime image.
+RUN python3 -c "from pathlib import Path; p=Path('/app/frontend'); assert (p/'index.html').is_file(); assert (p/'logo.svg').is_file(); assert list((p/'assets').glob('*.js')); assert list((p/'assets').glob('*.css'))"
 # Fail the build if the native library cannot create and reopen a real Tox ID.
 RUN python -m backend.tox_smoke
 RUN useradd --uid 10001 --create-home wtox && mkdir /data && chown -R wtox:wtox /data
