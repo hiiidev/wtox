@@ -1,8 +1,4 @@
-"""Application entry point: access gate and independent accounts.
-
-Tox native bridge will be integrated behind this API in the next milestone.
-Do not treat this service as a functioning Tox chat client yet.
-"""
+"""Website gate, accounts and native Tox identity HTTP API (chat not yet implemented)."""
 import html
 import os
 import time
@@ -17,6 +13,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import access, store
+from .profile_api import router as profile_router
 
 _ATTEMPTS = defaultdict(deque)
 _ATTEMPT_LOCK = Lock()
@@ -126,10 +123,8 @@ def logout(request: Request,response:Response):
 def me(uid=Depends(require_user)):
     return store.user_info(uid)
 
-@app.get("/api/profile/status")
-def profile_status(uid=Depends(require_user)):
-    return {"has_profile":store.has_profile(uid),"native_tox_available":False}
-
 @app.get("/")
 def index():
     return FileResponse("/app/frontend/index.html",headers={"Cache-Control":"no-store"})
+
+app.include_router(profile_router)
