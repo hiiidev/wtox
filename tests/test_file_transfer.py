@@ -1,14 +1,27 @@
 """File transfer validation and native callback lifecycle unit tests."""
 import ctypes as C
+import os
+import tempfile
 import threading
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
+from backend import store
+from backend.attachment_disk import DiskAttachmentStore
 from backend.file_transfer import FileTransfers, MAX_FILE, U8, safe_filename
 
 
 class FileTransferTests(unittest.TestCase):
     def setUp(self):
+        self.temp=tempfile.TemporaryDirectory()
+        self.env=patch.dict(os.environ,{"WTOX_DATA_DIR":self.temp.name,
+                                        "WTOX_MASTER_KEY":"42"*32})
+        self.env.start()
+        store.init()
+        self.uid=store.create_tox_identity(SimpleNamespace(
+            address="A"*76,secret_proof=b"a"*32,savedata=b"native-test-data"))
+        self.disk=DiskAttachmentStore()
         events=[]
         tox=SimpleNamespace(
             lock=threading.RLock(), tox=object(), _require_live=lambda:None,
@@ -21,12 +34,18 @@ class FileTransferTests(unittest.TestCase):
         self.transfers=object.__new__(FileTransfers)
         self.transfers.session=tox
         self.transfers.items={}
+        self.transfers.disk=self.disk
+        self.transfers.uid=self.uid
         self.controls=[]
         def control(_tox,friend,file_number,command,error):
             self.controls.append((friend,file_number,command))
             C.cast(error,C.POINTER(C.c_int)).contents.value=0
             return True
         self.transfers.control_native=control
+
+    def tearDown(self):
+        self.env.stop()
+        self.temp.cleanup()
 
     def test_sanitize_remote_filename(self):
         self.assertEqual(safe_filename("../../evil.txt"),"evil.txt")
@@ -43,7 +62,7 @@ class FileTransferTests(unittest.TestCase):
         self.assertEqual(len(self.transfers.items),1)
         item=next(iter(self.transfers.items.values()))
         self.assertEqual(item.state,"offered")
-        self.assertIsNone(item.payload)
+        self.assertIsNone(item.document)
         self.transfers.control(item.id,True)
         self.assertEqual(self.controls,[(7,5,0)])
         chunk=(U8*4).from_buffer_copy(b"test")
@@ -64,7 +83,7 @@ class FileTransferTests(unittest.TestCase):
         self.transfers._on_receive(None,7,5,0,1024,name,len(raw),None)
         item=next(iter(self.transfers.items.values()))
         self.transfers.control(item.id,False)
-        self.assertIsNone(item.payload)
+        self.assertIsNone(item.document)
         self.assertEqual(item.state,"cancelled")
         with self.assertRaises(ValueError):
             self.transfers.download(item.id)
