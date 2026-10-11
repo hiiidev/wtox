@@ -22,7 +22,7 @@ chmod 600 .env
 nano .env
 ```
 
-设置强随机网站入口密码 `WTOX_ACCESS_PASSWORD`（≥16 字符）和独立随机的 `WTOX_MASTER_KEY`（32 字节，64 位 hex）。可用 `python3 -c 'import secrets; print(secrets.token_hex(32))'` 生成 master key。不要提交或泄露 `.env`。主密钥务必离线备份。
+设置强随机网站入口密码 `WTOX_ACCESS_PASSWORD`（最少 6 个字符，但建议使用更长的随机密码）和独立随机的 `WTOX_MASTER_KEY`（32 字节，64 位 hex）。可用 `python3 -c 'import secrets; print(secrets.token_hex(32))'` 生成 master key。不要提交或泄露 `.env`。主密钥务必离线备份。
 
 `SITE_DOMAIN` 对宿主机 Caddy 模式不是必需字段，但填入实际域名便于切换部署方案。
 
