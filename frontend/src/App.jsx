@@ -393,7 +393,7 @@ export default function App(){
 
   if(loading)return <div className="wtox-loading">正在加载 wtox…</div>;
   if(!user)return <div className="wtox-auth-layout">
-    <div className="wtox-auth-card"><span className="wtox-mark">w</span>
+    <div className="wtox-auth-card"><img className="wtox-logo" src="/logo.svg" alt="wtox"/>
       <p className="wtox-kicker">PRIVATE MESSENGER</p><h1>你的私人 Tox 通讯</h1>
       <p>使用原始 .tox 配置文件登录，无需创建额外的网站账号。</p>
       <Button kind="primary" onClick={createIdentity} disabled={busy}>＋ 创建 Tox 身份并下载备份</Button>
