@@ -278,8 +278,7 @@ export default function App(){
         await history.current.persist({
           id:client_id,type:"message",direction:"outgoing",
           public_key:peer,text,at:Date.now(),
-          outbox_id:res.status==="queued"||res.status==="dispatching"||res.status==="sent"
-            &&res.id ? res.id:undefined,
+          outbox_id:res.id||undefined,
           session_id:res.session_id,message_id:res.message_id,
           delivery_status:res.status==="queued"?"queued":"sent"
         });
@@ -436,9 +435,7 @@ export default function App(){
             {visibleFriends.map(friend=><Conversation key={friend.public_key}
               name={friend.name||"Tox 好友 "+shortKey(friend.public_key)}
               info={statusLabel(friend.status)} active={selected===friend.public_key}
-              onClick={()=>selectFriend(friend.public_key)}>
-              <Conversation.Content/>
-            </Conversation>)}
+              onClick={()=>selectFriend(friend.public_key)}/>)}
           </ConversationList>
           {!visibleFriends.length&&<p className="wtox-empty-friends">还没有联系人，点击下方添加好友。</p>}
           <div className="wtox-sidebar-bottom">
@@ -469,7 +466,7 @@ export default function App(){
               </div>
             </div>)}
           </MessageList>
-          <div as="div" className="wtox-send-zone">
+          <div className="wtox-send-zone">
             <div className="wtox-send-tip">
               {!selected?"先选择好友"
                 :!historyReady?"请完成本地历史迁移"
