@@ -22,8 +22,9 @@
 - [x] One-time safe conversion path for earlier password-encrypted history
 - [ ] Verify automatic unlock and legacy history migration on real mobile/desktop browsers
 - [x] Browser-local wtox JSON history export/import for another device (plaintext export; format validated)
-- [x] qTox tab-delimited text chat export/import for a chosen friend (source format validated)
-- [ ] Inspect real aTox 0.8.x exported history samples and implement format-specific importer
+- [x] wTox JSON history export/import with cross-identity validation (source implemented)
+- [x] Remove qTox-specific history controls
+- [ ] Verify aTox 0.8.x exported history schema and implement real aTox format conversion; do not label wTox JSON as native aTox format
 - [ ] Optional password-encrypted portable history archive
 - [ ] Confirm raw .tox identity compatibility using exported files from real aTox/qTox
 - [ ] Real qTox/aTox bidirectional interoperability tests
@@ -37,3 +38,11 @@
 - [ ] Reliability and audit work, safe database master-key rotation
 - [ ] Voice/video optional
 - [ ] Research: WebAssembly Toxcore browser-side identity/crypto (deferred)
+
+## wTox current settings and CI
+
+- [x] Tox-native nickname, status message and available/away/busy saved in Savedata
+- [x] Mandatory VPS encrypted outbox for all outgoing text, without an optional browser queue switch
+- [x] Backward migration of previously browser-queued messages on login
+- [x] Updated API/outbox unit tests and Ant Design UI structural checks
+- [ ] Verify a complete GitHub Actions build/install run and real aTox interoperability on VPS
