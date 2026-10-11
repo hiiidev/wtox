@@ -98,7 +98,7 @@ def send_message(body: SendMessage, request: Request, uid: str = Depends(require
         message_id = tox_session.send_message(body.public_key, body.text)
         return {"ok": True, "message_id": message_id,
                 "session_id": tox_session.session_id,
-                "status": "submitted",
+                "status": "sent",
                 "public_key": body.public_key.upper()}
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
