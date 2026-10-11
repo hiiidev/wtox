@@ -74,6 +74,10 @@ def init():
         );
         CREATE INDEX IF NOT EXISTS ix_pending_user ON pending(account_id,created);
         """)
+        columns = {r[1] for r in c.execute("PRAGMA table_info(accounts)")}
+        if "tox_address" not in columns:
+            c.execute("ALTER TABLE accounts ADD COLUMN tox_address TEXT")
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_unique_tox_address ON accounts(tox_address)")
 
 def add_account(username: str, password: str) -> str:
     if not (3 <= len(username) <= 40 and username.isascii()
@@ -124,6 +128,28 @@ def user_info(uid: str):
     with db() as c:
         row = c.execute("SELECT username,profile IS NOT NULL FROM accounts WHERE id=?",(uid,)).fetchone()
     return {"username":row[0],"has_profile":bool(row[1])} if row else None
+
+def profile_address(uid: str) -> str | None:
+    with db() as c:
+        row = c.execute("SELECT tox_address FROM accounts WHERE id=?", (uid,)).fetchone()
+    return row[0] if row else None
+
+def claim_profile(uid: str, savedata: bytes, address: str) -> None:
+    """First creation/import only: atomically prevent overwrite and ID duplicates."""
+    if not isinstance(savedata, bytes) or not 1 <= len(savedata) <= 8 * 1024 * 1024:
+        raise ValueError("Tox 配置大小无效")
+    if not isinstance(address, str) or len(address) != 76 or any(ch not in "0123456789ABCDEF" for ch in address):
+        raise ValueError("Tox ID 无效")
+    ciphertext = encrypt(savedata)
+    try:
+        with db() as c:
+            result = c.execute(
+                "UPDATE accounts SET profile=?,tox_address=? WHERE id=? AND profile IS NULL",
+                (ciphertext, address, uid))
+            if result.rowcount != 1:
+                raise ValueError("该账号已有 Tox 身份，不能覆盖；请先导出备份")
+    except sqlite3.IntegrityError as exc:
+        raise ValueError("这个 Tox 身份已经导入其他网站账号") from exc
 
 def active_profiles():
     with db() as c:
