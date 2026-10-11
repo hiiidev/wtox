@@ -1192,12 +1192,11 @@ export default function App(){
         <AntButton type="text" className="wechat-rail-avatar" aria-label="我的 Tox 资料"
           onClick={()=>setModal("profile")}>
           <Badge dot color={ownBadgeColor} offset={[-2,35]}>
-              <Avatar size={44} shape="square" gap={3} className="wechat-self-avatar"
-                style={{backgroundColor:avatarColor(user.public_key)}}
-                >
-                {selfAvatarText}
-              </Avatar>
-            </Badge>
+            <Avatar size={44} shape="square" gap={3} className="wechat-self-avatar"
+              style={{backgroundColor:avatarColor(user.public_key)}}>
+              {selfAvatarText}
+            </Avatar>
+          </Badge>
         </AntButton>
         <div className="wechat-rail-primary">
           <button type="button" className={"wechat-rail-button "+(section==="chats"?"is-active":"")}
@@ -1226,22 +1225,22 @@ export default function App(){
             <AntButton type="text" className="wechat-mobile-avatar" aria-label="我的 Tox 资料"
               onClick={()=>setModal("profile")}>
               <Badge dot color={ownBadgeColor} offset={[-3,35]}>
-                  <Avatar size={40} shape="square" gap={3} style={{backgroundColor:avatarColor(user.public_key)}}
-                    >
-                    {selfAvatarText}
-                  </Avatar>
-                </Badge>
+                <Avatar size={40} shape="square" gap={3}
+                  style={{backgroundColor:avatarColor(user.public_key)}}>
+                  {selfAvatarText}
+                </Avatar>
+              </Badge>
             </AntButton>
             <strong>{section==="contacts"?"通讯录":"聊天"}</strong>
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
           <div className="wt-list-actions">
-            <Badge count={friendRequests.length} size="small" color="#ef4444">
-                <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
-                  onClick={()=>setModal("requests")}/>
-              </Badge>
-              <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
-                onClick={()=>setModal("add")}/>
+            <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
+              <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
+                onClick={()=>setModal("requests")}/>
+            </Badge>
+            <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
+              onClick={()=>setModal("add")}/>
           </div>
         </div>
         <div className="wechat-search">
@@ -1341,13 +1340,13 @@ export default function App(){
             <AntButton className="ant-mobile-back" aria-label="返回联系人"
               icon={<ArrowLeftOutlined/>} onClick={()=>setMobileChat(false)}/>
             <AntButton type="text" className="wt-peer-avatar-button"
-                aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
-                onClick={()=>setPeerDetailsOpen(true)}>
-                <Avatar size={40} gap={4} className="ant-chat-avatar"
-                  style={{backgroundColor:avatarColor(selectedFriend?.public_key||user.public_key)}}>
-                  {selectedFriend?avatarLabel(selectedFriend.name,selectedFriend.public_key):"✦"}
-                </Avatar>
-              </AntButton>
+              aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
+              onClick={()=>setPeerDetailsOpen(true)}>
+              <Avatar size={40} gap={4} className="ant-chat-avatar"
+                style={{backgroundColor:avatarColor(selectedFriend?.public_key||user.public_key)}}>
+                {selectedFriend?avatarLabel(selectedFriend.name,selectedFriend.public_key):"✦"}
+              </Avatar>
+            </AntButton>
             <div className="ant-peer-title">
               <div className="wt-peer-name-row">
                 <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
