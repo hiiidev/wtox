@@ -218,3 +218,40 @@ html:has(.ant-messenger),body:has(.ant-messenger){
   .wt-message-peer-avatar.ant-btn{width:40px;min-width:40px;flex-basis:40px}
   .wt-peer-id{font-size:12px}
 }
+
+/* Mobile Me is a normal view, not a cramped modal. Shared settings forms
+   continue to use Ant Design controls and light/dark design tokens. */
+.wt-mobile-me-page{display:none;min-width:0;min-height:0}
+.wt-settings-content{min-width:0}
+.wt-settings-content .ant-btn{max-width:100%;white-space:normal;height:auto;min-height:36px}
+@media(max-width:767px){
+  .ant-messenger.show-me .ant-contact-sidebar,
+  .ant-messenger.show-me .ant-chat-area{display:none!important}
+  .ant-messenger.show-me .wt-mobile-me-page{
+    display:flex!important;width:100%;flex:1;flex-direction:column;
+    background:var(--wt-bg);color:var(--wt-text);min-height:0;
+  }
+  .wt-mobile-me-header{padding:16px 18px 9px;background:var(--wt-panel)}
+  .wt-mobile-me-header h4.ant-typography{margin:0;color:var(--wt-text)}
+  .wt-mobile-profile-card.ant-btn{
+    width:100%;height:auto;min-height:95px;padding:17px 18px;
+    border-radius:0;background:var(--wt-panel);color:var(--wt-text);
+    display:flex;align-items:center;text-align:left;gap:16px;
+  }
+  .wt-mobile-profile-name{min-width:0;flex:1;display:flex;flex-direction:column;gap:5px}
+  .wt-mobile-profile-name strong{font-size:18px;font-weight:650;overflow:hidden;text-overflow:ellipsis}
+  .wt-mobile-profile-arrow{font-size:26px;color:var(--wt-muted)}
+  .wt-mobile-settings-scroll{flex:1;overflow-y:auto;min-height:0;
+    padding:18px 16px;overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;}
+  .wt-mobile-settings-scroll .wt-settings-content{padding-bottom:15px}
+  .ant-messenger.show-me .wt-mobile-me-page>.wechat-mobile-tabs{
+    display:flex;flex-shrink:0;min-height:calc(58px + env(safe-area-inset-bottom));
+    padding-bottom:env(safe-area-inset-bottom);background:var(--wt-panel);
+    border-top:1px solid var(--wt-border);align-items:stretch;justify-content:space-around}
+  .wt-mobile-me-page .wechat-mobile-tabs button{flex:1;border:0;background:none;
+    display:flex;gap:4px;align-items:center;justify-content:center;flex-direction:column;
+    color:var(--wt-muted);font-size:10px}
+  .wt-mobile-me-page .wechat-mobile-tabs button .anticon{font-size:22px}
+  .wt-mobile-me-page .wechat-mobile-tabs button.active{color:var(--wt-primary)}
+}
