@@ -5,7 +5,10 @@
 - [x] Private GitHub repository, Docker Compose skeleton
 - [x] Caddy included for automatic HTTPS/WSS reverse proxy
 - [x] Shared website entrance password and signed HttpOnly cookie
-- [x] Open personal account registration/login (no fixed registration cap)
+- [x] Tox Savedata is the personal login credential (create/download or upload/import)
+- [x] Remove public username/password authentication routes, retain safe legacy recovery export
+- [x] Match raw Tox private-key proof rather than trust public Tox ID
+- [ ] Verify Tox-only login against a running native VPS and old database migrations
 - [x] AES-GCM encrypted SQLite profile storage foundation
 - [x] Minimal responsive entrance/login UI
 - [x] Native c-toxcore ctypes identity adapter (create/restore savedata), Docker smoke hook added
