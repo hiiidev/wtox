@@ -93,6 +93,15 @@ class FileTransfers:
                 if item.state in ("offered","waiting","receiving","sending"):
                     self._native_cancel(item)
                 del self.items[uid]
+        # Also cap completed buffers. A peer can send unlimited sequential
+        # files; keep at most eight temporary items per account in memory.
+        while len(self.items)>8:
+            finished=[x for x in self.items.values()
+                      if x.state in ("completed","cancelled","failed")]
+            if not finished:
+                break
+            oldest=min(finished,key=lambda x:x.when)
+            del self.items[oldest.id]
 
     def _native_cancel(self,item):
         err=C.c_int()
@@ -118,9 +127,15 @@ class FileTransfers:
             self.session._require_live()
             self.prune()
             if self._active_count()>=MAX_ACTIVE:raise ValueError("当前附件传输过多，请稍后再试")
+            if len(key)!=64:
+                raise ValueError("好友公钥长度不正确")
+            try:
+                key_bytes=bytes.fromhex(key)
+            except ValueError as exc:
+                raise ValueError("好友公钥不是十六进制") from exc
             pub=self.session.friend_by_key
             err=C.c_int()
-            friend=pub(self.session.tox,(U8*32).from_buffer_copy(bytes.fromhex(key)),C.byref(err))
+            friend=pub(self.session.tox,(U8*32).from_buffer_copy(key_bytes),C.byref(err))
             if err.value:raise ValueError("好友不存在")
             err.value=0
             online=self.session.friend_connection(self.session.tox,friend,C.byref(err))
@@ -134,6 +149,13 @@ class FileTransfers:
             self.items[item.id]=item
             self._emit(item)
             return self._public(item)
+
+    def friend_disconnected(self,friend_number):
+        for item in self.items.values():
+            if item.friend==friend_number and item.state in ("offered","waiting","receiving","sending"):
+                item.state="failed"
+                item.payload=None
+                self._emit(item)
 
     def list(self):
         with self.session.lock:
