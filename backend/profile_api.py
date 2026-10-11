@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from . import store
 from .tox_identity import MAX_SAVEDATA, ToxCore, ToxIdentityError
+from .session_manager import manager
 
 router = APIRouter()
 
@@ -29,7 +30,13 @@ def save_new_profile(uid: str, identity):
         store.claim_profile(uid, identity.savedata, identity.address)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
-    return {"has_profile": True, "tox_id": identity.address}
+    try:
+        manager.get(uid)
+        started = True
+    except (ValueError, RuntimeError, OSError) as exc:
+        print("New Tox identity saved but session not started:", type(exc).__name__, flush=True)
+        started = False
+    return {"has_profile": True, "tox_id": identity.address, "session_started": started}
 
 @router.get("/api/profile/status")
 def status(uid: str = Depends(owner)):
