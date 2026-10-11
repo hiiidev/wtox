@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ctypes as C
 import ctypes.util
+import hashlib
 import os
 from dataclasses import dataclass
 
@@ -21,6 +22,7 @@ class ToxIdentityError(ValueError):
 class Identity:
     address: str
     savedata: bytes
+    secret_proof: bytes  # SHA-256 commitment to native Tox secret key, never raw secret
 
 class ToxCore:
     def __init__(self, library=None):
@@ -39,6 +41,7 @@ class ToxCore:
         self.new = self._fn("tox_new", ptr, ptr, err)
         self.kill = self._fn("tox_kill", None, ptr)
         self.address = self._fn("tox_self_get_address", None, ptr, buf)
+        self.secret_key = self._fn("tox_self_get_secret_key", None, ptr, buf)
         self.savedata_size = self._fn("tox_get_savedata_size", C.c_size_t, ptr)
         self.savedata_write = self._fn("tox_get_savedata", None, ptr, buf)
         self.set_name = self._fn("tox_self_set_name", C.c_bool, ptr, buf, C.c_size_t, err)
@@ -86,7 +89,10 @@ class ToxCore:
                 raise ToxIdentityError("生成的 Tox 配置大小无效")
             out_buffer = (C.c_uint8 * size)()
             self.savedata_write(tox, out_buffer)
-            return Identity(address=address, savedata=bytes(out_buffer))
+            secret = (C.c_uint8 * 32)()
+            self.secret_key(tox, secret)
+            proof = hashlib.sha256(b"wtox-tox-identity-secret-v1:" + bytes(secret)).digest()
+            return Identity(address=address, savedata=bytes(out_buffer), secret_proof=proof)
         finally:
             if tox:
                 self.kill(tox)
