@@ -6,6 +6,7 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,7 +24,19 @@ jobs:
       - run: node tests/check_static_assets.mjs
       - run: node tests/react_structure.mjs
       - run: node tests/history_io.mjs
-      - run: python -m unittest discover -s tests -v
+      - name: Python unittest (isolated modules with hang tracebacks)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Per-module timeouts identify the exact test module that stalls.
+          # SIGABRT causes -X faulthandler to print Python thread stacks.
+          for file in tests/test_*.py; do
+            echo "::group::$(basename "$file")"
+            timeout -v --signal=SIGABRT --kill-after=10s 90s \
+              python -u -X faulthandler -m unittest discover \
+                -s tests -p "$(basename "$file")" -v
+            echo "::endgroup::"
+          done
       - run: cp .env.example .env && docker compose config -q
   native-smoke:
     # Deliberately opt-in until Dockerfile build has been checked on a clean runner.
