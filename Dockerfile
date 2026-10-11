@@ -1,3 +1,11 @@
+# Build the React/ChatScope UI. Only compiled static assets reach runtime.
+FROM node:22-bookworm-slim AS frontendbuild
+WORKDIR /frontend
+COPY frontend/package.json ./
+RUN npm install --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build
+
 FROM ubuntu:24.04 AS toxbuild
 ARG TOXCORE_REF=v0.2.23
 ENV DEBIAN_FRONTEND=noninteractive
@@ -20,7 +28,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ /app/backend/
-COPY frontend/ /app/frontend/
+COPY --from=frontendbuild /frontend/dist/ /app/frontend/
 # Fail the build if the native library cannot create and reopen a real Tox ID.
 RUN python -m backend.tox_smoke
 RUN useradd --uid 10001 --create-home wtox && mkdir /data && chown -R wtox:wtox /data
