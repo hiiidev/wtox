@@ -1,0 +1,124 @@
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:#e8f1ff;background:#0b1220;color-scheme:dark}
+*{box-sizing:border-box}html,body,#root{width:100%;height:100%;min-height:0;margin:0}
+button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.52}
+input,textarea{border:1px solid #3a4e66;border-radius:11px;padding:11px 13px;
+ background:#0f1f34;color:#f5faff;outline:0;width:100%;max-width:100%}
+input:focus,textarea:focus{border-color:#6b9cff;box-shadow:0 0 0 3px #427bd62f}
+input[type=checkbox]{width:auto;accent-color:#4b8dff}
+body{background:radial-gradient(circle at 10% -20%,#1d3252,transparent 55%),#0c1422}
+.wtox-shell{height:100dvh;width:100vw;display:flex;flex-direction:column;min-height:0;color:#e8f1ff}
+.wtox-top{height:68px;flex:none;background:#111c2d;border-bottom:1px solid #25384e;
+ display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.wtox-brand{display:flex;gap:12px;align-items:center}.wtox-brand>div{display:flex;flex-direction:column}
+.wtox-brand strong{font-size:21px;line-height:1.1;letter-spacing:-.5px}
+.wtox-brand small{color:#89a2be;font-size:11px}
+.wtox-mark{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:14px;
+ font-weight:800;font-size:27px;color:#fff;background:linear-gradient(140deg,#327de0,#6478f0);
+ box-shadow:0 9px 22px #1459c326}
+.wtox-tools{display:flex;align-items:center;gap:6px}
+.wtox-tools button,.wtox-header-action{border:0;color:#c0d5ef;background:transparent;border-radius:9px;
+ padding:8px 10px;font-size:20px;min-width:38px}
+.wtox-tools button:hover,.wtox-header-action:hover{background:#283d59}
+.wtox-network{display:inline-flex;align-items:center;gap:8px;color:#aac0d8;font-size:12px;
+ background:#1a2c43;border-radius:20px;padding:8px 12px;margin-right:8px}
+.wtox-dot{width:8px;height:8px;border-radius:50%;background:#d2a166;display:inline-block;flex:none}
+.wtox-dot.on{background:#50d9a4;box-shadow:0 0 0 3px #46c99a26}
+.wtox-workspace{flex:1;min-height:0;position:relative;overflow:hidden}
+.wtox-workspace>.cs-main-container{height:100%;border:0}
+.wtox-sidebar{background:#142136!important;width:320px!important;max-width:40vw;
+ border-right:1px solid #2b3d56!important;display:flex!important}
+.wtox-sidebar-top{padding:22px 16px 12px}
+.wtox-heading{display:flex;align-items:baseline;gap:10px;margin:0 0 13px}
+.wtox-heading h2{font-size:23px;margin:0;letter-spacing:-.5px}
+.wtox-heading span,.wtox-secondary-note{color:#96aeca;font-size:12px}
+.wtox-sidebar-top input{background:#1d3049;border-color:#2c4260}
+.wtox-conversations{flex:1;min-height:0;background:#142136!important}
+.wtox-conversations .cs-conversation{background:transparent!important;color:#e2eefa}
+.wtox-conversations .cs-conversation:hover{background:#233c5a!important}
+.wtox-conversations .cs-conversation.cs-conversation--active{background:#234a78!important}
+.wtox-conversations .cs-conversation__name{color:#e6f2ff!important}
+.wtox-conversations .cs-conversation__info{color:#9bb3d1!important}
+.wtox-sidebar-bottom{padding:14px 16px 18px;border-top:1px solid #2b3b52;
+ display:flex;flex-direction:column;gap:8px}
+.wtox-empty-friends{font-size:13px;color:#92a8c0;padding:14px}
+.wtox-btn{border-radius:10px;padding:11px 14px;background:#253f5d;border:1px solid #43607e;
+ color:#e9f5ff;font-size:13px;font-weight:650;margin:4px}
+.wtox-btn.primary{background:#377eea;border-color:#377eea;color:white}
+.wtox-btn:hover:not(:disabled){filter:brightness(1.12)}
+.wtox-chat{background:#111c2c!important}
+.wtox-chat .cs-conversation-header{background:#15243a!important;border-bottom:1px solid #2a3c53!important}
+.wtox-chat .cs-conversation-header__user-name{color:#e8f3ff}
+.wtox-chat .cs-conversation-header__info{color:#92aac6}
+.wtox-chat .cs-message-list{background:#101d30!important}
+.wtox-message-list{background:#0f1c2d!important}
+.wtox-message-item{margin:10px 12px}
+.wtox-message-item .cs-message__content{word-break:break-word;white-space:pre-wrap}
+.wtox-message-item .cs-message--outgoing .cs-message__content{
+ background:#3675cf!important;color:#fff!important}
+.wtox-message-item .cs-message--incoming .cs-message__content{
+ background:#253b59!important;color:#e9f3ff!important}
+.wtox-message-meta{font-size:10px;color:#8ba6c5;margin:3px 14px}
+.wtox-message-meta.out{text-align:right}
+.wtox-send-zone{padding:8px 12px 14px;background:#15243a;border-top:1px solid #293e55}
+.wtox-send-zone .cs-message-input{background:#1e324e!important;border:1px solid #365277!important;
+ border-radius:13px!important;color:#eef5ff}
+.wtox-send-zone .cs-message-input__content-editor{color:#e8f3ff!important;background:transparent!important}
+.wtox-send-zone .cs-button--send{color:#70a8ff!important}
+.wtox-send-tip{font-size:12px;padding:4px 6px 9px;color:#8fbbef}
+.wtox-auth-layout{width:100%;height:100dvh;display:grid;place-items:center;padding:20px}
+.wtox-auth-card{display:flex;flex-direction:column;gap:13px;width:min(460px,94vw);max-height:94dvh;
+ overflow:auto;background:#132239;border:1px solid #324966;border-radius:22px;
+ box-shadow:0 32px 110px #0009;padding:34px;color:#dae9fc}
+.wtox-auth-card h1{font-size:27px;margin:4px 0;letter-spacing:-.7px}
+.wtox-auth-card p{margin:0;color:#a9bed8;line-height:1.6}
+.wtox-auth-card small{color:#869dbb;line-height:1.6}
+.wtox-auth-card details{color:#b8c9dc;font-size:12px}
+.wtox-auth-card summary{cursor:pointer;color:#8bb8fa}
+.wtox-kicker{letter-spacing:2px;color:#83b4ff!important;font-size:10px!important;font-weight:800}
+.wtox-separator{margin:17px 0 9px;padding-top:8px;border-top:1px solid #314760;color:#91aac9;font-size:12px}
+.wtox-auth-card label,.wtox-modal label{display:flex;flex-direction:column;gap:8px;
+ color:#b8cde5;font-size:13px;margin:12px 0}
+.wtox-auth-card .wtox-btn{margin:0}
+.wtox-overlay{position:fixed;inset:0;background:#050b15c8;z-index:100;
+ display:grid;place-items:center;padding:16px;backdrop-filter:blur(5px)}
+.wtox-modal{width:min(515px,100%);max-height:92dvh;background:#14243a;border:1px solid #3e5874;
+ border-radius:20px;box-shadow:0 26px 90px #000b;color:#e7f1ff;display:flex;flex-direction:column;min-height:0}
+.wtox-modal header{padding:17px 21px;border-bottom:1px solid #32465e;
+ display:flex;align-items:center;justify-content:space-between}
+.wtox-modal h2{font-size:19px;margin:0}
+.wtox-modal header button{background:transparent;border:0;color:#afc5e0;font-size:27px}
+.wtox-modal-scroll{padding:17px 21px;overflow:auto;min-height:0}
+.wtox-modal-scroll p{font-size:13px;color:#aec2da;line-height:1.6}
+.wtox-modal-scroll small{display:block;color:#95afc8;margin:9px 0}
+.wtox-tox-id{font:12px/1.8 ui-monospace,monospace;word-break:break-all;
+ background:#0e1a2c;padding:13px;border-radius:10px;margin:14px 0}
+.wtox-info{border:1px solid #34516e;background:#1a314d;border-radius:10px;padding:12px}
+.wtox-warning{color:#f0bf9c!important}
+.wtox-toggle{display:flex!important;flex-direction:row!important;align-items:start;gap:12px!important}
+.wtox-toggle span{display:flex;flex-direction:column;gap:4px}
+.wtox-toggle small{margin:0}
+.wtox-transfer{display:flex;flex-direction:column;gap:6px;padding:12px;
+ background:#20354e;border-radius:11px;margin:10px 0}
+.wtox-transfer strong{word-break:break-word}
+.wtox-transfer small{color:#a9bfd8}
+.wtox-toast{position:fixed;z-index:200;bottom:max(18px,env(safe-area-inset-bottom));
+ left:50%;transform:translateX(-50%);background:#283a53;color:#fff;border:1px solid #56749c;
+ border-radius:14px;padding:13px 18px;box-shadow:0 12px 50px #0007;
+ max-width:min(520px,94vw);width:max-content;text-align:center;font-size:13px}
+.wtox-loading{height:100dvh;display:grid;place-items:center;color:#acc5e3}
+@media(max-width:700px){
+ .wtox-top{height:60px;padding:0 12px}.wtox-network{font-size:11px;margin-right:0;padding:7px}
+ .wtox-tools{gap:0}.wtox-tools button{padding:5px 7px}
+ .wtox-brand small{display:none}
+ .wtox-sidebar{width:100vw!important;max-width:100vw!important;display:flex!important}
+ .wtox-shell:not(.show-chat) .wtox-chat{display:none!important}
+ .wtox-shell.show-chat .wtox-sidebar{display:none!important}
+ .wtox-shell.show-chat .wtox-chat{display:flex!important;width:100vw!important}
+ .wtox-workspace .cs-main-container{display:flex}
+ .wtox-conversations .cs-conversation{min-height:66px}
+ .wtox-modal{max-height:calc(100dvh - 28px)}
+ .wtox-message-item{margin:9px 0}
+ .wtox-send-zone{padding:6px 8px max(8px,env(safe-area-inset-bottom))}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
