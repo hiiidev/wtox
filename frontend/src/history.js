@@ -185,7 +185,7 @@ export async function openIdentityHistory(owner){
     const IMAGE_CACHE_TTL=7*86400*1000;
     async function cacheImage(id,blob){
       requireKey();
-      if(typeof id!=="string"||!^[a-f0-9]{32}$/i.test(id))
+      if(typeof id!=="string"||!/^[a-f0-9]{32}$/i.test(id))
         throw new Error("无效附件 ID");
       if(!blob||blob.size<=0||blob.size>5*1024*1024)
         throw new Error("图片缓存不能超过 5 MiB");
