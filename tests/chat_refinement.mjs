@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+
+const app=readFileSync("frontend/src/App.jsx","utf8");
+const refined=readFileSync("frontend/src/refine.css","utf8");
+const entry=readFileSync("frontend/src/main.jsx","utf8");
+const pkg=JSON.parse(readFileSync("frontend/package.json","utf8"));
+
+assert.ok(pkg.dependencies["@ant-design/x"]&&pkg.dependencies.antd);
+assert.match(entry,/import "\.\/refine\.css"/);
+assert.match(app,/visualStyle==="system"/);
+assert.match(app,/matchMedia\("\(prefers-color-scheme: dark\)"\)/);
+assert.match(app,/options=\{\[\{label:"跟随系统",value:"system"\}/);
+assert.doesNotMatch(app,/风格只保存在当前浏览器|消息传输/);
+assert.match(app,/setModal\("");\s*alert\("Tox 个人资料已保存"\)/);
+const profileStart=app.indexOf('{modal==="profile"&&');
+const settingsStart=app.indexOf('{modal==="settings"&&',profileStart);
+assert.ok(profileStart>0&&settingsStart>profileStart);
+assert.doesNotMatch(app.slice(profileStart,settingsStart),/wtox-profile-header/);
+assert.match(app,/className="wt-mobile-me-page"/);
+assert.match(app,/aria-label="设置"/);
+assert.doesNotMatch(app,/查看并修改我的 Tox 资料/);
+assert.match(app,/prefix=\{<Tooltip title="添加附件">/);
+assert.match(app,/<Sender\.Header title="准备发送附件"/);
+assert.match(app,/<FileCard name=\{uploadFile\.name\}/);
+assert.match(app,/onPasteFile=\{files=>/);
+assert.match(app,/<input type="file" hidden ref=\{attachmentInput\}/);
+assert.match(app,/await h\.persistFile\(transfer\)/);
+assert.match(app,/await h\.cacheImage\(transfer\.id/);
+assert.match(app,/<FileCard name=\{file\.file_name\}/);
+assert.match(app,/<Image className="wtox-attachment-image"/);
+assert.match(refined,/max-width:900px/);
+assert.match(refined,/wt-message-outgoing\{justify-content:flex-end/);
+assert.match(refined,/background:var\(--wt-bg\)/);
+assert.match(refined,/scrollbar-width:none/);
+console.log("System themes, settings, Sender attachments, timeline images and token-based layout checks OK");
