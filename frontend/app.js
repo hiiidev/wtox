@@ -308,6 +308,7 @@ $("#closeAdd").onclick=()=>closeDialog("#addDialog");
 $("#openIdentity").onclick=()=>showDialog("#identityDialog");
 $("#closeIdentity").onclick=()=>closeDialog("#identityDialog");
 $("#historyButton").onclick=()=>showDialog("#historyDialog");
+$("#historyFromContacts").onclick=()=>showDialog("#historyDialog");
 $("#closeHistory").onclick=()=>closeDialog("#historyDialog");
 $("#backToContacts").onclick=()=>$("#account").classList.remove("chat-open");
 $("#contactSearch").oninput=renderContacts;
