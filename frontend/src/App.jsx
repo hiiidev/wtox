@@ -106,7 +106,9 @@ export default function App(){
   const [filter,setFilter]=useState(""),[draft,setDraft]=useState("");
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
-  const [offlineQueue,setOfflineQueue]=useState(false),[sending,setSending]=useState(false);
+  const [sending,setSending]=useState(false);
+  const [ownProfile,setOwnProfile]=useState({name:"",status_message:"",user_status:0});
+  const [profileSaving,setProfileSaving]=useState(false);
   const [visualStyle,setVisualStyle]=useState(()=>{
     try{return localStorage.getItem("wtox-visual-style")||"mist"}catch{return "mist"}
   });
@@ -182,7 +184,8 @@ export default function App(){
       const pending=(await h.read()).filter(m=>m.type==="message"&&
         m.direction==="outgoing"&&m.delivery_status==="queued_local");
       for(const item of pending.slice(0,30)){
-        if(!online(peers.find(f=>f.public_key===item.public_key)))continue;
+        // Migrate historical browser-only queued records into the mandatory
+        // encrypted VPS queue, even if the recipient is still offline.
         // Claim locally before an HTTP request. After an uncertain network
         // failure we must NOT resend silently (could duplicate a Tox message).
         await h.patchEvent(item.id,{delivery_status:"dispatching_local"});
@@ -368,9 +371,12 @@ export default function App(){
 
   useEffect(()=>{
     if(!user?.public_key)return;
-    Promise.allSettled([refreshFriends(),refreshNetwork(),getJson("/api/settings")
-      .then(settings=>setOfflineQueue(settings.offline_queue!==false))]);
-  },[user?.public_key,refreshFriends,refreshNetwork]);
+    Promise.allSettled([
+      refreshFriends(),refreshNetwork(),
+      getJson("/api/profile/self").then(setOwnProfile).catch(error=>
+        alert("无法获取 Tox 个人资料："+error.message))
+    ]);
+  },[user?.public_key,refreshFriends,refreshNetwork,alert]);
   const selectedFriend=friends.find(f=>f.public_key===selected);
   const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
     .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
@@ -422,32 +428,24 @@ export default function App(){
     const text=String(innerText||textContent||innerHtml||"").replace(/<[^>]+>/g,"").trim();
     if(!text)return;
     const h=history.current;
-    if(!h?.ready()){setModal("settings");alert("请先完成本地加密历史迁移");return}
+    if(!h?.ready()){setModal("settings");alert("请先完成旧聊天历史迁移");return}
     const client_id=crypto.randomUUID().replaceAll("-","");
-    const isPeerOnline=online(friends.find(f=>f.public_key===peer));
     sendBusy.current=true;setSending(true);
     try{
-      if(!isPeerOnline&&!offlineQueue){
-        // No plaintext leaves the browser. Encrypted IndexedDB survives
-        // reloads, but sending only resumes while this browser is running.
-        await h.persist({id:client_id,type:"message",direction:"outgoing",
-          public_key:peer,text,at:Date.now(),delivery_status:"queued_local"});
-        drafts.current.set(peer,"");
-        if(selectedRef.current===peer)setDraft("");
-        await refreshHistory(h);
-        alert("已加入本浏览器加密队列；网页运行且好友上线后自动发送");
-      }else{
-        const result=await postJson("/api/messages",{public_key:peer,text,client_id});
-        drafts.current.set(peer,"");
-        if(selectedRef.current===peer)setDraft("");
-        try{
-          await h.persist({id:client_id,type:"message",direction:"outgoing",
-            public_key:peer,text,at:Date.now(),outbox_id:result.id||undefined,
-            session_id:result.session_id,message_id:result.message_id,
-            delivery_status:result.status==="queued"?"queued":"sent"});
-          await recoverPending(h);
-        }catch(error){alert("服务器已接受请求，但本地历史保存失败："+error.message)}
-      }
+      // Every send enters the encrypted VPS outbox, even if the peer is
+      // already online. The native worker sends asynchronously.
+      const res=await postJson("/api/messages",{public_key:peer,text,client_id});
+      drafts.current.set(peer,"");
+      if(selectedRef.current===peer)setDraft("");
+      try{
+        await h.persist({
+          id:client_id,type:"message",direction:"outgoing",
+          public_key:peer,text,at:Date.now(),outbox_id:res.id||client_id,
+          session_id:res.session_id,message_id:res.message_id,
+          delivery_status:res.status==="sent"?"sent":"queued"
+        });
+        await recoverPending(h);
+      }catch(error){alert("消息已加入 VPS 队列，但本地历史保存失败："+error.message)}
     }catch(error){
       drafts.current.set(peer,text);
       if(selectedRef.current===peer)setDraft(text);
@@ -476,12 +474,18 @@ export default function App(){
       setSelected(null);selectedRef.current=null;setMobileChat(false);await refreshFriends();
     }catch(error){alert(error.message)}
   }
-  async function changeOfflineQueue(next){
+  async function saveOwnProfile(){
+    setProfileSaving(true);
     try{
-      const setting=await api("/api/settings",{method:"PUT",body:JSON.stringify({offline_queue:next})});
-      setOfflineQueue((await setting.json()).offline_queue);
-      alert(next?"已开启 VPS 离线代发，关闭网页后仍能发送":"已切换到浏览器队列（需网页运行），原有 VPS 队列仍会处理");
+      const response=await api("/api/profile/self",{
+        method:"PUT",
+        body:JSON.stringify(ownProfile)
+      });
+      const updated=await response.json();
+      setOwnProfile(updated);
+      alert("Tox 昵称、状态消息和状态已保存，并同步到身份配置");
     }catch(error){alert(error.message)}
+    finally{setProfileSaving(false)}
   }
   async function migrateHistory(){
     try{
@@ -635,7 +639,7 @@ export default function App(){
         </div>
         <div className="ant-sidebar-footer">
           <span>好友状态自动刷新 · 12 秒</span>
-          <span>{offlineQueue?"云端离线队列":"设备本地队列"}</span>
+          <span>VPS 加密离线队列 · 自动发送</span>
         </div>
       </aside>
       <main className="ant-chat-area">
@@ -703,8 +707,7 @@ export default function App(){
         <div className="ant-compose-area">
           <p className="ant-compose-status">{!selected?"请先选择好友":
             !historyReady?"本地加密历史尚未就绪":
-            offlineQueue&&!online(selectedFriend)?"对方离线，将在 VPS 加密队列等待":
-            !online(selectedFriend)?"对方离线，暂存本机，打开网页后继续发送":
+            !online(selectedFriend)?"对方离线，VPS 已准备好离线队列":
             sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
           <Sender value={draft} placeholder="输入消息…"
             onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
