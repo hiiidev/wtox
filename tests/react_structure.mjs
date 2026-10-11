@@ -39,23 +39,27 @@ assert.match(app,/recoverPending/);
 assert.match(app,/refreshOutbox/);
 assert.match(app,/正在发送/);
 assert.match(app,/已送达/);
-assert.match(app,/offline_queue/);
-assert.match(app,/onChange=\{e=>changeOfflineQueue\(e.target.checked\)\}/);
+assert.doesNotMatch(app,/changeOfflineQueue|setOfflineQueue/,
+  "The optional VPS queue toggle must no longer exist");
 assert.match(history,/indexedDB\.open\("wtox-local-"/);
 assert.match(history,/device-key-v2/);
 assert.match(history,/applyOutboxStatuses/);
 assert.match(python,/@router\.get\("\/api\/outbox"\)/);
-assert.match(python,/@router\.put\("\/api\/settings"\)/);
+assert.match(python,/@router\.put\("\/api\/profile\/self"\)/);
 assert.match(store,/encrypt\(text\.encode\("utf-8"\)\)/);
 assert.match(mgr,/await asyncio\.sleep\(3\)/);
-assert.ok(app.includes('const [offlineQueue,setOfflineQueue]=useState(false)'),
-  "VPS offline queue must be opt-in; browser is default");
-assert.ok(app.includes('delivery_status:"queued_local"'),
-  "Browser-local encrypted offline queue is missing");
+assert.ok(app.includes('Every send enters the encrypted VPS outbox'),
+  "Client must submit all text through VPS queue");
 assert.ok(app.includes('flushBrowserQueue'),
-  "Browser queue must flush while page is active");
-assert.ok(app.includes('patchEvent(item.id'),
-  "Browser queued send status must be updated in IndexedDB");
+  "Old browser-only records must be transferred after upgrade");
+assert.ok(python.includes('entry=store.enqueue_outbox('),
+  "API must always store messages in VPS encrypted outbox");
+assert.ok(!python.includes('if store.offline_queue_enabled(uid)'),
+  "No per-account queue mode is allowed");
+assert.ok(!python.includes('@router.put("/api/settings")'),
+  "Queue toggle endpoint must be removed");
+assert.ok(app.includes('saveOwnProfile')&&app.includes('/api/profile/self'),
+  "Native Tox nickname and status must be editable");
 assert.ok(app.includes('modal==="settings"') && !app.includes('modal==="identity"') &&
   !app.includes('modal==="history"'),"Account and chat-history management must be in one settings modal");
 assert.ok(app.includes('AttachmentBubble') && app.includes('wtox-attachment-image'),
@@ -69,4 +73,7 @@ assert.ok(history.includes("cacheImage")&&history.includes("expireImages"),
   "Encrypted image cache expiry is required");
 assert.ok(existsSync("frontend/public/logo.svg"),"Generated wtox logo missing");
 assert.ok(html.includes('href="/logo.svg"'),"Generated logo not registered as favicon");
-console.log("React responsive messenger, encrypted offline queue and real-time fallback structural checks OK");
+console.log("wTox Ant Design chat, mandatory VPS queue and native profile structural checks OK");
+
+assert.ok(app.includes("wTox")&&html.includes("<title>wTox</title>"),"wTox branding must be uniform");
+assert.ok(!app.includes("exportQtox")&&!app.includes("toQtoxTsv"),"qTox history export must be removed");
