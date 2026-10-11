@@ -1,7 +1,7 @@
 import React, {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
   Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal,
-  Dropdown, Badge, List, Typography, Empty, Form, Select } from "antd";
+  Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid } from "antd";
 import { Bubble, Conversations, Sender } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
@@ -93,6 +93,7 @@ export default function App(){
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
   const [section,setSection]=useState("chats");
   const [friendRequests,setFriendRequests]=useState([]);
+  const [peerDetailsOpen,setPeerDetailsOpen]=useState(false);
   const [seen,setSeen]=useState({});
   const [filter,setFilter]=useState(""),[draft,setDraft]=useState("");
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
@@ -404,7 +405,13 @@ export default function App(){
         alert("无法获取 Tox 个人资料："+error.message))
     ]);
   },[user?.public_key,refreshFriends,refreshNetwork,refreshFriendRequests,alert]);
+  const screens=Grid.useBreakpoint();
+  const isMobile=!!screens.xs && !screens.md;
   const selectedFriend=friends.find(f=>f.public_key===selected);
+  const peerStatus=selectedFriend?.status===0||!selectedFriend?"离线":
+    ["在线","离开","忙碌"][selectedFriend.user_status]||"在线";
+  const peerStatusColor=selectedFriend?.status===0||!selectedFriend?"default":
+    ["success","warning","error"][selectedFriend.user_status]||"success";
   const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
     .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
   const latestByPeer=useMemo(()=>{
@@ -431,6 +438,7 @@ export default function App(){
   function selectFriend(key){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
     selectedRef.current=key;setSelected(key);
+    setPeerDetailsOpen(false);
     setDraft(drafts.current.get(key)||"");setMobileChat(true);
     setSeen(previous=>({...previous,[key]:Date.now()}));
   }
@@ -752,9 +760,15 @@ export default function App(){
           <div className="ant-chat-identity">
             <AntButton className="ant-mobile-back" aria-label="返回联系人"
               icon={<ArrowLeftOutlined/>} onClick={()=>setMobileChat(false)}/>
-            <Avatar size={40} className="ant-chat-avatar">
-              {selectedFriend?(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase():"✦"}
-            </Avatar>
+            <Tooltip title={selectedFriend?"查看好友资料":""}>
+              <AntButton type="text" className="wt-peer-avatar-button"
+                aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
+                onClick={()=>setPeerDetailsOpen(true)}>
+                <Avatar size={40} className="ant-chat-avatar">
+                  {selectedFriend?(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase():"✦"}
+                </Avatar>
+              </AntButton>
+            </Tooltip>
             <div className="ant-peer-title">
               <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
               <small>{selectedFriend?statusLabel(selectedFriend.status):"端到端 Tox 网络"}</small>
@@ -821,6 +835,86 @@ export default function App(){
         </div>
       </main>
     </div>
+
+    {selectedFriend&&<>
+      {isMobile
+        ? <Drawer open={peerDetailsOpen} title="好友资料" placement="bottom"
+            height="auto" styles={{body:{maxHeight:"68dvh",overflowY:"auto"}}}
+            onClose={()=>setPeerDetailsOpen(false)} destroyOnHidden>
+            <div className="wt-peer-profile">
+              <Space size="middle" align="center">
+                <Badge dot color={selectedFriend.status===0?"#8c8c8c":
+                  ["#52c41a","#faad14","#ff4d4f"][selectedFriend.user_status]||"#52c41a"}
+                  offset={[-2,37]}>
+                  <Avatar size={48} shape="square">
+                    {(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase()}
+                  </Avatar>
+                </Badge>
+                <div>
+                  <Typography.Title level={5} style={{margin:0}}>
+                    {selectedFriend.name||"Tox 好友"}
+                  </Typography.Title>
+                  <Badge status={peerStatusColor} text={peerStatus}/>
+                </div>
+              </Space>
+              <Divider/>
+              <Typography.Text type="secondary">状态消息</Typography.Text>
+              <Typography.Paragraph className="wt-peer-status-message">
+                {selectedFriend.status_message||"对方暂未设置状态消息"}
+              </Typography.Paragraph>
+              <Typography.Text type="secondary">
+                {selectedFriend.tox_id?"完整 Tox ID（76 位）":"好友公钥（64 位）"}
+              </Typography.Text>
+              <Typography.Paragraph className="wt-peer-id" copyable={{
+                text:selectedFriend.tox_id||selectedFriend.public_key,
+                tooltips:["复制","已复制"]
+              }}>
+                {selectedFriend.tox_id||selectedFriend.public_key}
+              </Typography.Paragraph>
+              {!selectedFriend.tox_id&&<Typography.Text type="secondary">
+                只有公钥时无法还原完整 Tox ID。
+              </Typography.Text>}
+            </div>
+          </Drawer>
+        : <AntModal open={peerDetailsOpen} title="好友资料"
+            onCancel={()=>setPeerDetailsOpen(false)} footer={null}
+            centered destroyOnHidden width={500}>
+            <div className="wt-peer-profile">
+              <Space size="middle" align="center">
+                <Badge dot color={selectedFriend.status===0?"#8c8c8c":
+                  ["#52c41a","#faad14","#ff4d4f"][selectedFriend.user_status]||"#52c41a"}
+                  offset={[-2,37]}>
+                  <Avatar size={48} shape="square">
+                    {(selectedFriend.name||selectedFriend.public_key).slice(0,1).toUpperCase()}
+                  </Avatar>
+                </Badge>
+                <div>
+                  <Typography.Title level={5} style={{margin:0}}>
+                    {selectedFriend.name||"Tox 好友"}
+                  </Typography.Title>
+                  <Badge status={peerStatusColor} text={peerStatus}/>
+                </div>
+              </Space>
+              <Divider/>
+              <Typography.Text type="secondary">状态消息</Typography.Text>
+              <Typography.Paragraph className="wt-peer-status-message">
+                {selectedFriend.status_message||"对方暂未设置状态消息"}
+              </Typography.Paragraph>
+              <Typography.Text type="secondary">
+                {selectedFriend.tox_id?"完整 Tox ID（76 位）":"好友公钥（64 位）"}
+              </Typography.Text>
+              <Typography.Paragraph className="wt-peer-id" copyable={{
+                text:selectedFriend.tox_id||selectedFriend.public_key,
+                tooltips:["复制","已复制"]
+              }}>
+                {selectedFriend.tox_id||selectedFriend.public_key}
+              </Typography.Paragraph>
+              {!selectedFriend.tox_id&&<Typography.Text type="secondary">
+                只有公钥时无法还原完整 Tox ID。
+              </Typography.Text>}
+            </div>
+          </AntModal>}
+    </>}
 
     {modal==="profile"&&<AntModal open title="我的 Tox 资料"
       onCancel={closeModal} footer={null} centered destroyOnHidden width={520}>
