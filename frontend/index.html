@@ -126,6 +126,21 @@
       <p class="muted">新消息写入加密 IndexedDB 后，才会向 VPS 确认领取。</p>
     </div>
     <p class="footnote">密钥只保存在本浏览器设备，不会发给 VPS。换设备、清理站点数据或丢失浏览器资料时，仅凭 .tox 文件无法恢复本地聊天历史。建议定期备份重要消息。</p>
+    <section class="history-transfer">
+      <h3>聊天记录导入 / 导出</h3>
+      <p class="muted">wtox JSON 用于备份或换设备；qTox TXT 使用原生的日期、时间、昵称、正文格式。aTox 特有的导出结构尚待验证，不会误当作 qTox 格式导入。</p>
+      <div class="button-row">
+        <button id="historyExportJson" class="button outline">导出全部 JSON</button>
+        <button id="historyExportQtox" class="button subtle">导出选中好友 qTox TXT</button>
+      </div>
+      <label class="field-label" for="historyImportFile">选择历史文件（.json / qTox .txt）</label>
+      <input type="file" id="historyImportFile" accept=".json,.txt,application/json,text/plain">
+      <label class="field-label" for="historyOwnName">qTox 导出时自己的显示昵称</label>
+      <input id="historyOwnName" type="text" maxlength="128" placeholder="仅导入 qTox TXT 时填写（例如 Alice）">
+      <button id="historyImport" class="button primary full">导入历史到当前身份</button>
+      <p class="footnote">qTox TXT 按当前选中的好友导入。历史导出文件是<strong>未加密明文</strong>，请加密储存，不要分享。导入仅写入当前浏览器，不会发送给 Tox 好友。</p>
+    </section>
+
   </dialog>
 
   <div id="error" class="toast" role="status" aria-live="polite" hidden></div>
