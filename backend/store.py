@@ -105,6 +105,15 @@ def init():
             message_id INTEGER,
             error TEXT
         )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS archived_attachments (
+            id TEXT PRIMARY KEY,
+            account_id TEXT NOT NULL REFERENCES accounts(id),
+            filename BLOB NOT NULL,
+            size INTEGER NOT NULL,
+            created INTEGER NOT NULL,
+            expires INTEGER NOT NULL
+        )""")
+        c.execute("CREATE INDEX IF NOT EXISTS ix_archived_attachment_expiry ON archived_attachments(expires)")
         c.execute("CREATE INDEX IF NOT EXISTS ix_outbox_user ON outbox(account_id,status,created)")
         # Native Tox send may have succeeded immediately before a crash.
         # NEVER blindly replay a dispatch that was in-flight on restart:
