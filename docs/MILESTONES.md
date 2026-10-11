@@ -21,7 +21,10 @@
 - [x] Browser IndexedDB AES-256-GCM histories, automatically unlocked using per-Tox-identity device keys (code implemented)
 - [x] One-time safe conversion path for earlier password-encrypted history
 - [ ] Verify automatic unlock and legacy history migration on real mobile/desktop browsers
-- [ ] Encrypted local chat history export/import for transfer between devices
+- [x] Browser-local wtox JSON history export/import for another device (plaintext export; format validated)
+- [x] qTox tab-delimited text chat export/import for a chosen friend (source format validated)
+- [ ] Inspect real aTox 0.8.x exported history samples and implement format-specific importer
+- [ ] Optional password-encrypted portable history archive
 - [ ] Confirm raw .tox identity compatibility using exported files from real aTox/qTox
 - [ ] Real qTox/aTox bidirectional interoperability tests
 - [ ] Security review, backup procedure and end-to-end VPS deployment tests
@@ -29,7 +32,8 @@
 ## Later
 
 - [ ] Better mobile UI and PWA
-- [ ] File sending/receiving
+- [x] Native c-toxcore file transfer send/receive/accept/download APIs and responsive UI (source code)
+- [ ] Real qTox/aTox bidirectional file-transfer test and security review
 - [ ] Reliability and audit work, safe database master-key rotation
 - [ ] Voice/video optional
 - [ ] Research: WebAssembly Toxcore browser-side identity/crypto (deferred)
