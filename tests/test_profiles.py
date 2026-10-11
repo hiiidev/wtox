@@ -35,11 +35,15 @@ class ToxLoginTests(unittest.TestCase):
         self.client = TestClient(app)
         response = self.client.post("/api/gate/login", json={"password":"123456"})
         self.assertEqual(response.status_code, 200, response.text)
+        self.backup_mock = patch("backend.profile_api.encrypt_savedata",
+                                 side_effect=lambda data,password: b"toxEsave-mock-encrypted")
+        self.backup_mock.start()
         self.alice = fixture_identity("A", b"1"*32, b"native-alice-tox-save")
         self.bob = fixture_identity("B", b"2"*32, b"native-bob-tox-save")
 
     def tearDown(self):
         self.client.close()
+        self.backup_mock.stop()
         self.env.stop()
         self.tmp.cleanup()
 
@@ -62,9 +66,9 @@ class ToxLoginTests(unittest.TestCase):
 
     def test_create_export_logout_and_tox_login(self):
         with patch("backend.profile_api.core", return_value=self.native()), patch("backend.profile_api.activate",return_value=True):
-            created=self.client.post("/api/tox/create")
+            created=self.client.post("/api/tox/create",json={"password":"中文🔐"})
             self.assertEqual(created.status_code,200,created.text)
-            self.assertEqual(created.content,self.alice.savedata)
+            self.assertEqual(created.content,b"toxEsave-mock-encrypted")
             self.assertEqual(created.headers["x-tox-id"],self.alice.address)
             self.assertTrue(self.client.cookies.get("wtox_tox_session"))
             self.assertEqual(self.client.get("/api/me").json()["public_key"],"A"*64)
@@ -79,7 +83,7 @@ class ToxLoginTests(unittest.TestCase):
 
     def test_import_other_key_never_exposes_first_profile(self):
         with patch("backend.profile_api.core",return_value=self.native()), patch("backend.profile_api.activate",return_value=True):
-            self.client.post("/api/tox/create")
+            self.client.post("/api/tox/create",json={"password":"中文🔐"})
             self.client.post("/api/logout")
             imported=self.client.post("/api/tox/login",content=self.bob.savedata)
             self.assertEqual(imported.status_code,200)
@@ -91,7 +95,7 @@ class ToxLoginTests(unittest.TestCase):
 
     def test_public_tox_id_without_private_key_cannot_login(self):
         with patch("backend.profile_api.core",return_value=self.native()), patch("backend.profile_api.activate",return_value=True):
-            self.client.post("/api/tox/create")
+            self.client.post("/api/tox/create",json={"password":"中文🔐"})
             self.client.post("/api/logout")
             result=self.client.post("/api/tox/login", content=b"fake-public-key-only")
             self.assertEqual(result.status_code,403)
@@ -136,6 +140,41 @@ class ToxLoginTests(unittest.TestCase):
             self.assertFalse(response.json()["imported"])
         self.assertEqual(store.get_pending(uid)[0]["id"], pending_id)
         self.assertEqual(self.client.get("/api/profile/export").content,self.alice.savedata)
+
+
+    def test_create_requires_nonempty_password(self):
+        self.assertEqual(self.client.post("/api/tox/create",json={}).status_code,422)
+        self.assertEqual(self.client.post("/api/tox/create",json={"password":""}).status_code,422)
+        self.assertEqual(self.client.get("/api/me").status_code,401)
+
+    def test_password_prefixed_encrypted_import(self):
+        def decrypt(data,password):
+            self.assertEqual(data,b"toxEsave"+b"x"*80)
+            if password != "中文🔐":
+                raise ToxIdentityError("解密失败：密码不正确")
+            return self.alice.savedata
+        with patch("backend.profile_api.core",return_value=self.native()), \
+             patch("backend.profile_api.activate",return_value=True), \
+             patch("backend.profile_api.decrypt_savedata",side_effect=decrypt):
+            pw="中文🔐".encode("utf-8")
+            encrypted=b"toxEsave"+b"x"*80
+            response=self.client.post("/api/tox/login",
+                content=pw+encrypted,headers={"X-Tox-Password-Bytes":str(len(pw))})
+            self.assertEqual(response.status_code,200,response.text)
+            self.client.post("/api/logout")
+            failed=self.client.post("/api/tox/login",
+                content=b"wrong"+encrypted,headers={"X-Tox-Password-Bytes":"5"})
+            self.assertEqual(failed.status_code,400)
+            self.assertEqual(self.client.get("/api/me").status_code,401)
+
+    def test_encrypted_profile_export(self):
+        with patch("backend.profile_api.core",return_value=self.native()), \
+             patch("backend.profile_api.activate",return_value=True):
+            self.client.post("/api/tox/create",json={"password":"original"})
+            response=self.client.post("/api/profile/export/encrypted",json={"password":"new🔒"})
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertEqual(response.content,b"toxEsave-mock-encrypted")
+            self.assertEqual(self.client.post("/api/profile/export/encrypted",json={"password":""}).status_code,400)
 
 
 if __name__ == "__main__":
