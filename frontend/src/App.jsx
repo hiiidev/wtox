@@ -554,7 +554,7 @@ export default function App(){
   if(loading)return <div className="wtox-loading">正在加载 wtox…</div>;
   if(!user)return <div className="wtox-auth-layout">
     <div className="wtox-auth-card"><img className="wtox-logo" src="/logo.svg" alt="wtox"/>
-      <p className="wtox-kicker">PRIVATE MESSENGER</p><h1>你的私人 Tox 通讯</h1>
+      <h1>wTox</h1>
       <p>使用原始 .tox 配置文件登录，无需创建额外的网站账号。</p>
       <Button kind="primary" onClick={createIdentity} disabled={busy}>＋ 创建 Tox 身份并下载备份</Button>
       <div className="wtox-separator">已有身份</div>
@@ -581,7 +581,7 @@ export default function App(){
     <header className="wtox-top ant-topbar">
       <div className="wtox-brand">
         <img className="wtox-logo" src="/logo.svg" alt="wtox logo"/>
-        <div><strong>wtox</strong><small>安全 Tox 即时通讯</small></div>
+        <div><strong>wTox</strong></div>
       </div>
       <nav className="wtox-tools">
         <Tag color={network>0?"success":"warning"} bordered={false}>
@@ -712,19 +712,32 @@ export default function App(){
           {label:"🌙 午夜",value:"midnight"},
           {label:"🌊 海蓝",value:"ocean"}]}/>
       <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
-      <div className="wtox-separator">消息与离线队列</div>
-      <label className="wtox-toggle">
-        <input type="checkbox" checked={offlineQueue}
-          onChange={e=>changeOfflineQueue(e.target.checked)}/>
-        <span><strong>通过 VPS 代发离线消息（可选）</strong>
-          <small>默认关闭：消息加密留在当前浏览器，页面运行且好友在线时发送。
-          开启后：VPS 加密保留队列，关闭页面也能等待好友上线后发送。</small>
-        </span>
+      <div className="wtox-separator">Tox 个人资料</div>
+      <label>昵称
+        <input value={ownProfile.name} maxLength={128}
+          placeholder="昵称（其他 Tox 客户端可见）"
+          onChange={e=>setOwnProfile(p=>({...p,name:e.target.value}))}/>
       </label>
-      <p className="wtox-info">浏览器队列可跨刷新恢复，但手机锁屏或切到后台可能暂停网页，
-      不保证持续运行。VPS 队列最长暂存 7 天、每个身份最多 250 条。
-      已经进入 VPS 的消息在关闭此开关后仍会完成现有队列。</p>
-      <p className="wtox-info">好友状态约每 12 秒刷新，消息每 8 秒补领，手机回到网页时主动同步。</p>
+      <label>状态消息
+        <textarea rows={2} value={ownProfile.status_message} maxLength={1007}
+          placeholder="向好友展示的状态消息"
+          onChange={e=>setOwnProfile(p=>({...p,status_message:e.target.value}))}/>
+      </label>
+      <label>状态
+        <select className="wtox-profile-status"
+          value={ownProfile.user_status}
+          onChange={e=>setOwnProfile(p=>({...p,user_status:Number(e.target.value)}))}>
+          <option value={0}>在线</option>
+          <option value={1}>离开</option>
+          <option value={2}>忙碌</option>
+        </select>
+      </label>
+      <Button kind="primary" disabled={profileSaving} onClick={saveOwnProfile}>
+        保存 Tox 个人资料
+      </Button>
+      <div className="wtox-separator">消息传输</div>
+      <p className="wtox-info">所有文字消息默认进入 VPS 加密队列；即使关闭网页，
+        VPS 也会在好友上线时发送。队列最多保留 7 天。</p>
       <div className="wtox-separator">Tox 身份与私钥备份</div>
       <p>当前 Tox ID 可以分享，但 .tox 备份含私钥，不要分享。</p>
       <div className="wtox-tox-id">{user.tox_id}</div>
@@ -734,22 +747,18 @@ export default function App(){
         catch(e){alert(e.message)}
       }}>下载最新 .tox 备份</Button>
       <div className="wtox-separator">本地加密历史与导入导出</div>
-      <p>当前身份的消息使用此浏览器不可导出的 AES-256-GCM 密钥保存，无需反复输入口令。</p>
-      <div className="wtox-info">{historyReady?"✓ 加密历史已自动解锁":
-        migrateRequired?"需要迁移旧版口令加密历史":"本地历史尚未就绪"}</div>
+      {!historyReady&&!migrateRequired&&<p className="wtox-info">本地历史尚未就绪。</p>}
       {migrateRequired&&<><label>旧版历史密码
         <input type="password" value={legacyPass} onChange={e=>setLegacyPass(e.target.value)}/></label>
         <Button kind="primary" onClick={migrateHistory}>一次性迁移旧历史</Button></>}
       <div className="wtox-separator">历史导出</div>
-      <Button onClick={exportJson}>导出 wtox JSON</Button>
-      <Button onClick={exportQtox}>导出选中好友 qTox TXT</Button>
+      <Button onClick={exportJson}>导出聊天记录（wTox JSON）</Button>
       <p className="wtox-warning">以上历史文件均为明文，请妥善加密保管。</p>
       <div className="wtox-separator">导入历史</div>
-      <label>选择 JSON 或 qTox TXT 文件
-        <input type="file" accept=".json,.txt" onChange={e=>setHistoryFile(e.target.files?.[0]||null)}/></label>
-      <label>qTox TXT 导出时自己的昵称<input value={ownName} onChange={e=>setOwnName(e.target.value)}/></label>
+      <label>选择 wTox JSON 文件
+        <input type="file" accept=".json,application/json" onChange={e=>setHistoryFile(e.target.files?.[0]||null)}/></label>
       <Button kind="primary" onClick={importHistory}>导入到此浏览器</Button>
-      <small>aTox 专有导出格式尚待样本验证。历史只保存在本机，换设备需自行导出导入。</small>
+      <small>aTox 提供聊天历史导出，但其专有格式尚待验证；目前仅保证 wTox 自身 JSON 的备份和恢复。</small>
       <div className="wtox-separator">当前登录会话</div>
       <Button onClick={logout}>退出当前 Tox 身份</Button>
     </Modal>}
