@@ -20,8 +20,8 @@ The VPS runs native Toxcore and **holds the decrypted Tox identity and message p
 
 ## First start (Docker Compose)
 
-1. Point DNS for `chat.example.com` to your VPS and open TCP 80/443. Toxcore also needs outbound UDP and/or TCP.
-2. Copy `.env.example` to `.env`. Set `SITE_DOMAIN` and generate a random 32-byte master key:
+1. Provide an existing HTTPS/WSS terminator (e.g. your host Nginx, a managed TLS ingress or Cloudflare Tunnel) for `chat.example.com`. The backend binds **only** to VPS loopback `127.0.0.1:8000`. Direct public HTTP access is unsafe because the app uses session cookies, private Tox files and WebSocket authentication. Toxcore needs outbound UDP and/or TCP.
+2. Copy `.env.example` to `.env` and generate a random 32-byte master key:
 
    ```sh
    cp .env.example .env
@@ -31,10 +31,33 @@ The VPS runs native Toxcore and **holds the decrypted Tox identity and message p
    ```
 
 3. `docker compose up -d --build`. Initial toxcore build may take several minutes.
-4. Open `https://chat.example.com`, create an account if `WTOX_ALLOW_SIGNUP=1`, or temporarily enable signup for the first account then disable it and restart.
+4. Configure your existing TLS frontend to reverse-proxy the site and `/ws` WebSocket upgrade to `http://127.0.0.1:8000`; **do not publish port 8000**. Then open `https://chat.example.com`, create an account if `WTOX_ALLOW_SIGNUP=1`, or temporarily enable signup for the first account then disable it and restart.
 5. Import a **raw unencrypted** Tox savedata file, or generate a new Tox ID. Back up the exported Tox identity.
 
 For localhost-only development (no public TLS), use `docker compose -f compose.dev.yml up --build` then visit `http://localhost:8000` (development only; no TLS).
+
+### Example: existing host Nginx (optional, no Caddy dependency)
+
+If your VPS already has Nginx handling HTTPS, add a location block under its existing TLS virtual host. This is an example only; bring your own certificates and existing server configuration:
+
+```nginx
+location / {
+  proxy_pass http://127.0.0.1:8000;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto https;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_read_timeout 3600;
+}
+```
+
+When deploying through Cloudflare Tunnel or another existing proxy, ensure HTTPS/WSS and WebSocket upgrades work end to end. No Caddy, Worker, or extra proxy container is part of `compose.yml`.
+
+## Pure-browser architecture research
+
+See [docs/BROWSER_ONLY.md](docs/BROWSER_ONLY.md). Standard browsers lack unrestricted raw TCP/UDP sockets. A WebAssembly Toxcore plus WebSocket-to-Tox transport tunnel is **research**, not an implemented feature. Browser-held keys reduce VPS plaintext exposure but do not give background availability after closing the page.
 
 ## API surface (same origin)
 
@@ -49,7 +72,7 @@ For localhost-only development (no public TLS), use `docker compose -f compose.d
 ```text
 Web browser (HTML/JS + encrypted IndexedDB)
     HTTPS/WSS
-Caddy reverse proxy (TLS)
+Your existing HTTPS ingress (not bundled)
     |
 FastAPI (session cookie, accounts, short-lived encrypted delivery queue)
     |
