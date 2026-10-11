@@ -4,7 +4,7 @@ A small self-hosted multi-user browser client for the **original Tox network**.
 Target deployment: **VPS + Docker Compose + Caddy HTTPS/WSS + native c-toxcore**.
 No Cloudflare Worker is required.
 
-> **Current status (work in progress):** Caddy deployment, website access password, independent web accounts and encrypted SQLite profile storage foundations have been committed. A basic browser login UI exists. **The native Toxcore bridge, Tox profile create/import/export endpoints and messaging are NOT implemented yet. This is not a usable Tox chat client and must not be deployed publicly without hardening and live interop testing.**
+> **Current status (work in progress):** Caddy, entrance password, personal accounts, encrypted SQLite storage, native ctypes Tox **identity** adapter, and create/import/export API + UI have been committed. The Docker image includes a native identity roundtrip smoke test, but its execution has not been independently verified here. **Live network sessions, friends and messaging are NOT implemented yet. Do not expose this prototype to untrusted users.**
 
 ## Agreed product decisions
 
@@ -21,7 +21,7 @@ No Cloudflare Worker is required.
 
 Start with **1 vCPU, 2GB RAM, 20GB SSD**, Ubuntu 24.04 (estimate, not benchmarked). Allow outbound UDP/TCP for Tox, inbound TCP 80/443 for Caddy. You only need **one** VPS for three people.
 
-## Deployment configuration (backend not yet usable for Tox)
+## Deployment configuration (identity prototype, not yet a functioning chat client)
 
 1. Set DNS of `chat.example.com` to VPS public IP. Ensure port 80/443 is reachable for Caddy's automatic certificate.
 2. `cp .env.example .env`.
@@ -32,8 +32,8 @@ Start with **1 vCPU, 2GB RAM, 20GB SSD**, Ubuntu 24.04 (estimate, not benchmarke
    ```
 
 4. Keep `.env` private (`chmod 600 .env`) and back up the master key securely off-VPS.
-5. `docker compose up -d --build` (currently a work-in-progress prototype; Tox functionality is not ready).
-6. Open `https://chat.example.com`: enter the shared website access password, then register or sign into a personal account.
+5. `docker compose up -d --build`. The build runs `python -m backend.tox_identity` to validate basic native Tox creation and identity restore. If this fails, **do not bypass the check**. Build success does not prove network interoperability.
+6. Open `https://chat.example.com`: enter the shared website access password, register or sign into a personal account, then create or import a **raw unencrypted** Tox savedata file and download an encrypted-at-rest but **raw on export** private backup. Encrypted aTox-specific file formats and historic messages cannot be imported yet.
 
 Caddy is a full part of `compose.yml`; it automatically obtains TLS certificates and proxies WebSocket upgrades to the internal app. The app port 8000 is *not published* to the public internet.
 
@@ -56,7 +56,10 @@ For local development only, run `docker compose -f compose.dev.yml up --build` a
 - `POST /api/gate/login` — check website password, set signed entrance cookie
 - `POST /api/register` — open account registration (after site password)
 - `POST /api/login` / `POST /api/logout` — personal web account session
-- `GET /api/me` / `GET /api/profile/status` — personal account and preliminary profile status
+- `GET /api/me` / `GET /api/profile/status` — personal account and Tox identity status
+- `POST /api/profile/create` — generate and save a new native Tox identity
+- `POST /api/profile/import` — upload raw binary `.tox` savedata (up to 8 MiB, only if account has no identity)
+- `GET /api/profile/export` — download raw identity backup (contains private key)
 - `GET /health` — minimal container health check
 
-See [development milestones](docs/MILESTONES.md). GitHub Actions runs Python syntax/tests and Compose syntax checks.
+See [development milestones](docs/MILESTONES.md). GitHub Actions checks Python/API tests and Compose syntax; a full Docker native smoke build can be triggered manually. **A passed Python test does not prove the native library works on your VPS.**
