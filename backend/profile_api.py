@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from . import store
 from .tox_identity import MAX_SAVEDATA, ToxCore, ToxIdentityError
 from .session_manager import manager
+from .tox_runtime import ToxActionError
 
 router = APIRouter()
 
@@ -33,7 +34,7 @@ def save_new_profile(uid: str, identity):
     try:
         manager.get(uid)
         started = True
-    except (ValueError, RuntimeError, OSError) as exc:
+    except (ValueError, RuntimeError, OSError, AttributeError, ToxActionError) as exc:
         print("New Tox identity saved but session not started:", type(exc).__name__, flush=True)
         started = False
     return {"has_profile": True, "tox_id": identity.address, "session_started": started}
