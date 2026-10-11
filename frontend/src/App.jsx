@@ -249,6 +249,16 @@ export default function App(){
         history.current=h;
         setHistoryReady(h.ready());setMigrateRequired(h.needsMigration());
         if(h.ready()){
+          // A previous tab may have closed AFTER invoking Tox send but BEFORE
+          // storing the API reply. Do not silently retry such messages.
+          for(const item of await h.read()){
+            if(item.direction==="outgoing"&&item.delivery_status==="dispatching_local"){
+              await h.patchEvent(item.id,{
+                delivery_status:"uncertain",
+                delivery_error:"浏览器上次在发送途中关闭，需手动核对发送结果"
+              });
+            }
+          }
           await recoverPending(h);
           await flushBrowserQueue(null,h);
         }
