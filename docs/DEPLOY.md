@@ -22,7 +22,7 @@ docker compose version
 ```sh
 git clone git@github.com:hiiidev/wtox.git
 cd wtox
-cp .env.example .env
+test -f .env || cp .env.example .env
 chmod 600 .env
 ```
 
@@ -51,20 +51,20 @@ docker compose ps
 docker compose logs --tail=100 web caddy
 ```
 
-将 SITE_DOMAIN 指向 VPS，打开 `https://你的域名/`。应该先看到**网站统一访问密码**页面，随后可以创建独立个人账号，再创建或导入原始 `.tox` 配置文件。
+将 SITE_DOMAIN 指向 VPS，打开 `https://你的域名/`。应该先看到**网站统一访问密码**页面，随后可以直接创建新的 Tox 身份（立即下载 `.tox` 备份），或上传已有原始 `.tox` 文件登录/首次导入。无需网站用户名和个人账号密码。
 
 如果服务器无法取得自动 HTTPS 证书，请检查域名 A/AAAA 记录、80/443 入站和 Caddy 日志。
 
 ## 5. 手工互通验收
 
-1. 在网站创建 **用户 A**，生成并备份新的 Tox ID。
+1. 在网站创建 **Tox 身份 A**，保存下载的 `.tox` 备份。
 2. 用 qTox（或 aTox 的**另一个**身份）添加用户 A，网站解锁浏览器本地历史后，检查好友请求是否出现。
 3. 网站接受好友请求，确认双方都能变为在线。
 4. 网站发送「你好，来自 wtox」，检查 qTox/aTox 能接收。
 5. qTox/aTox 回发消息，检查网站显示且加密存入 IndexedDB。
 6. 关闭浏览器但保持 VPS 运行，使用另一客户端发消息；随后重新打开网页、解锁历史，确认临时消息可以领取并从服务器队列删除。
-7. 创建 **用户 B**，验证账号隔离、不同 Tox ID、不可读取 A 的身份备份。
-8. `docker compose restart web`，验证 A、B 的 Tox ID、好友列表仍能恢复。
+7. 另建 **Tox 身份 B**，验证用 B 配置无法读取 A 的身份备份。
+8. 使用当前部署方式重启 web 容器，验证 A、B 的 Tox ID、好友列表仍能恢复。
 
 同一 Tox ID **不能同时在 aTox 和 wtox 两个独立 Toxcore 实例上运行**，否则可能出现在线状态和消息问题。只导入原始 Tox Savedata，不支持直接导入加密客户端数据库、聊天历史等其他格式。
 
