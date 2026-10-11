@@ -5,7 +5,8 @@ import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
 import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
-  UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined, ArrowDownOutlined } from "@ant-design/icons";
+  UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
+  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined } from "@ant-design/icons";
 import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
@@ -128,6 +129,7 @@ export default function App(){
   const [threadScrolling,setThreadScrolling]=useState(false);
   const [selectedMessageIds,setSelectedMessageIds]=useState(()=>new Set());
   const [deletingMessages,setDeletingMessages]=useState(false);
+  const [singleDeleteId,setSingleDeleteId]=useState(null);
   const threadEl=useRef(null);
   const followLatest=useRef(true);
   const previousThread=useRef({peer:null,ids:[]});
@@ -238,6 +240,48 @@ export default function App(){
       event.preventDefault();event.stopPropagation();
       toggleMessageSelection(id);
     }
+  }
+  async function copyMessage(item){
+    const text=item.type==="file" ? item.file_name||item.name||"文件" : String(item.text||"");
+    if(!text){alert("没有可复制的消息内容");return}
+    try{
+      await navigator.clipboard.writeText(text);
+      alert(item.type==="file"?"已复制文件名":"已复制消息","success");
+    }catch{alert("复制失败，请检查浏览器剪贴板权限","error")}
+  }
+  const messageMenu=item=>({
+    items:[
+      {key:"copy",label:item.type==="file"?"复制文件名":"复制",icon:<CopyOutlined/>},
+      {type:"divider"},
+      {key:"delete",label:"删除",icon:<DeleteOutlined/>,danger:true,
+        disabled:!historyReady||deletingMessages},
+      {key:"multi",label:"多选",icon:<CheckSquareOutlined/>,
+        disabled:!historyReady||deletingMessages}
+    ],
+    onClick:({key,domEvent})=>{
+      domEvent?.stopPropagation();
+      if(key==="copy")void copyMessage(item);
+      if(key==="delete")setSingleDeleteId(item.id);
+      if(key==="multi")setSelectedMessageIds(previous=>new Set([...previous,item.id]));
+    }
+  });
+  async function deleteSingleMessage(){
+    if(!singleDeleteId||deletingMessages||!history.current?.ready())return;
+    const h=history.current;
+    const item=messages.find(record=>record.id===singleDeleteId);
+    if(!item){setSingleDeleteId(null);return}
+    setDeletingMessages(true);
+    try{
+      await h.deleteEvent(item.id);
+      if(item.type==="file"&&item.file_id)await h.deleteCachedImage(item.file_id);
+      await refreshHistory(h);
+      setSelectedMessageIds(previous=>{
+        const next=new Set(previous);next.delete(item.id);return next;
+      });
+      setSingleDeleteId(null);
+      alert("已删除当前浏览器中的记录","success");
+    }catch(error){await refreshHistory(h).catch(()=>{});alert("删除失败："+error.message,"error")}
+    finally{setDeletingMessages(false)}
   }
   async function requestDelete(){
     const h=history.current;
@@ -1295,10 +1339,10 @@ export default function App(){
             <p>发送一条消息，开始你们的对话</p>
           </div>}
           {thread.map(item=>item.type==="file"
-            ? <div key={item.id} className={"ant-timeline-file wt-selectable-message"+
+            ? <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}>
+              <div className={"ant-timeline-file wt-selectable-message"+
                 (selectedMessageIds.has(item.id)?" is-batch-selected":"")+
                 (selectedMessageIds.size?" is-selecting":"")}
-                onContextMenu={event=>{event.preventDefault();setSelectedMessageIds(p=>new Set([...p,item.id]))}}
                 onPointerDown={event=>startLongPress(item,event)}
                 onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
                 onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
@@ -1308,11 +1352,12 @@ export default function App(){
                   reject={id=>controlFile(id,"reject")}
                   download={downloadFile} historyHandle={history.current}/>
               </div>
-            : <div key={item.id} className={"ant-message-wrap wt-message-row wt-selectable-message "+
+              </Dropdown>
+            : <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}>
+              <div className={"ant-message-wrap wt-message-row wt-selectable-message "+
                 (item.direction==="outgoing"?"wt-message-outgoing":"wt-message-incoming")+
                 (selectedMessageIds.has(item.id)?" is-batch-selected":"")+
                 (selectedMessageIds.size?" is-selecting":"")}
-                onContextMenu={event=>{event.preventDefault();setSelectedMessageIds(p=>new Set([...p,item.id]))}}
                 onPointerDown={event=>startLongPress(item,event)}
                 onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
                 onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
@@ -1325,7 +1370,8 @@ export default function App(){
                     {item.direction==="outgoing"?" · "+stateText(item):""}
                   </span>}
                   footerPlacement={item.direction==="outgoing"?"outer-end":"outer-start"}/>
-              </div>)}
+              </div>
+              </Dropdown>)}
             </div>
           </div>
           {selected&&newBelowCount>0&&<AntButton type="primary" shape="round"
@@ -1376,6 +1422,18 @@ export default function App(){
         </div>
       </main>
     </div>
+
+    <AntModal open={!!singleDeleteId} title="删除聊天记录" centered
+      onCancel={()=>setSingleDeleteId(null)} onOk={deleteSingleMessage}
+      okText="删除记录" cancelText="取消"
+      okButtonProps={{danger:true,loading:deletingMessages}}
+      cancelButtonProps={{disabled:deletingMessages}}
+      closable={!deletingMessages} maskClosable={!deletingMessages}>
+      <Typography.Paragraph>确定删除这条聊天记录吗？</Typography.Paragraph>
+      <Typography.Text type="secondary">
+        只删除当前浏览器中的记录，不会撤回对方已经收到的消息，也不会取消 VPS 待发队列。
+      </Typography.Text>
+    </AntModal>
 
     <AntModal open={deleteFriendOpen&&!!selectedFriend} title="删除好友"
       centered destroyOnHidden onCancel={()=>setDeleteFriendOpen(false)}
