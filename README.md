@@ -2,9 +2,9 @@
 
 Self-hosted multi-account **Web Tox** prototype using native [TokTok/c-toxcore](https://github.com/TokTok/c-toxcore), Python/FastAPI and an ordinary VPS. No Cloudflare Workers required.
 
-**Status: early MVP / security review and end-to-end interoperability testing still required. Do not expose to untrusted users yet.**
+**Status: design + deployment scaffolding only. Backend and frontend application source have not yet been committed; Docker Compose is NOT runnable as-is. Native interoperability is untested. Do not deploy publicly.**
 
-## Scope
+## Planned scope
 
 - Each account owns one independent native Tox identity; create a new ID or import/export raw Tox savedata (often `.tox`).
 - Friends, incoming friend requests, one-to-one text messages and online state.
@@ -18,7 +18,7 @@ Self-hosted multi-account **Web Tox** prototype using native [TokTok/c-toxcore](
 
 The VPS runs native Toxcore and **holds the decrypted Tox identity and message plaintext while running**. TLS secures browser ↔ VPS, but this is *not* zero-knowledge or browser-to-friend end-to-end encryption. A hostile VPS can read messages. Do not run the same Tox identity concurrently in aTox/qTox and wtox.
 
-## First start (Docker Compose)
+## Planned deployment (after the application source is implemented)
 
 1. Provide an existing HTTPS/WSS terminator (e.g. your host Nginx, a managed TLS ingress or Cloudflare Tunnel) for `chat.example.com`. The backend binds **only** to VPS loopback `127.0.0.1:8000`. Direct public HTTP access is unsafe because the app uses session cookies, private Tox files and WebSocket authentication. Toxcore needs outbound UDP and/or TCP.
 2. Copy `.env.example` to `.env` and generate a random 32-byte master key:
@@ -94,8 +94,8 @@ One FastAPI/Uvicorn worker only. Do not scale it to multiple workers: each profi
 - Bootstrap servers can change: see https://nodes.tox.chat/ and update `WTOX_BOOTSTRAP` as needed.
 - Currently builds upstream c-toxcore from its default branch; pin a reviewed commit before production. Respect GPLv3 obligations if distributing linked software.
 
-## Development / CI
+## Intended development / CI
 
-`python -m compileall backend` and `python -m unittest discover -s tests` run syntax and helper tests. GitHub Actions runs these checks. Native interop requires a Linux VPS and a second real Tox client.
+`python -m compileall backend` and `python -m unittest discover -s tests` run syntax and helper tests. CI has not been configured yet. Native interop requires a Linux VPS and a second real Tox client.
 
 See [docs/MILESTONES.md](docs/MILESTONES.md) for remaining work.
