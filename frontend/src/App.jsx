@@ -1,13 +1,15 @@
-import React, {useCallback,useEffect,useMemo,useRef,useState} from "react";
+import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
   Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal,
   Dropdown, Badge, List, Typography, Empty, Form, Select, Drawer, Grid } from "antd";
 import { Bubble, Conversations, Sender } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
-  UserOutlined, PlusOutlined, MoreOutlined, SmileOutlined, FolderOutlined } from "@ant-design/icons";
+  UserOutlined, PlusOutlined, MoreOutlined, SmileOutlined, FolderOutlined, ArrowDownOutlined } from "@ant-design/icons";
 import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
+import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
+import {isNearBottom,countNewEntries} from "./thread_scroll.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
@@ -97,6 +99,13 @@ export default function App(){
   const [seen,setSeen]=useState({});
   const [filter,setFilter]=useState(""),[draft,setDraft]=useState("");
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
+  const [avatarColors,setAvatarColors]=useState({});
+  const [newBelowCount,setNewBelowCount]=useState(0);
+  const [threadScrolling,setThreadScrolling]=useState(false);
+  const threadEl=useRef(null);
+  const followLatest=useRef(true);
+  const previousThread=useRef({peer:null,ids:[]});
+  const scrollIdleTimer=useRef(null);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
   const [ownProfile,setOwnProfile]=useState({name:"",status_message:"",user_status:0});
@@ -129,6 +138,13 @@ export default function App(){
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),noticeTimer=useRef(null),lastMessage=useRef(0);
+  useEffect(()=>{
+    if(!user?.public_key)return;
+    const keys=[user.public_key,...friends.map(f=>f.public_key)];
+    setAvatarColors(ensureAvatarColors(user.public_key,keys,
+      typeof localStorage!=="undefined"?localStorage:null));
+  },[user?.public_key,friends]);
+  const avatarColor=useCallback(key=>avatarColors[key]||avatarFallbackColor(key),[avatarColors]);
   const longPressTimer=useRef(null);
   const cancelLongPress=()=>{if(longPressTimer.current)clearTimeout(longPressTimer.current);longPressTimer.current=null};
   async function requestDelete(item){
