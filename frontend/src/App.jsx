@@ -3,8 +3,8 @@ import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
   Space, Tooltip, Segmented, Avatar, Divider, Popconfirm } from "antd";
 import { Bubble, Conversations, Sender } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
-  UserAddOutlined, DeleteOutlined, CloudOutlined, CloudSyncOutlined,
-  MessageOutlined } from "@ant-design/icons";
+  UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
+  UserOutlined, PlusOutlined, MoreOutlined } from "@ant-design/icons";
 import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
@@ -103,6 +103,8 @@ export default function App(){
   const [user,setUser]=useState(null),[loading,setLoading]=useState(true);
   const [friends,setFriends]=useState([]),[network,setNetwork]=useState(-1);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
+  const [section,setSection]=useState("chats");
+  const [seen,setSeen]=useState({});
   const [filter,setFilter]=useState(""),[draft,setDraft]=useState("");
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
@@ -110,7 +112,7 @@ export default function App(){
   const [ownProfile,setOwnProfile]=useState({name:"",status_message:"",user_status:0});
   const [profileSaving,setProfileSaving]=useState(false);
   const [visualStyle,setVisualStyle]=useState(()=>{
-    try{return localStorage.getItem("wtox-visual-style")||"mist"}catch{return "mist"}
+    try{return localStorage.getItem("wtox-visual-style")||"wechat"}catch{return "wechat"}
   });
   useEffect(()=>{
     document.documentElement.setAttribute("data-wtox-theme",visualStyle);
@@ -278,6 +280,22 @@ export default function App(){
   // the same non-extractable AES-GCM key; no history migration is necessary.
   useEffect(()=>{
     if(!user?.public_key)return;
+    try{setSeen(JSON.parse(localStorage.getItem("wtox-seen-"+user.public_key)||"{}"))}
+    catch{setSeen({})}
+  },[user?.public_key]);
+  useEffect(()=>{
+    if(!user?.public_key)return;
+    try{localStorage.setItem("wtox-seen-"+user.public_key,JSON.stringify(seen))}catch{}
+  },[user?.public_key,seen]);
+  useEffect(()=>{
+    if(selected&&mobileChat&&messages.length){
+      const last=Math.max(0,...messages.filter(m=>m.public_key===selected&&
+        m.direction==="incoming").map(m=>m.at||0));
+      if(last>(seen[selected]||0))setSeen(previous=>({...previous,[selected]:last}));
+    }
+  },[selected,mobileChat,messages,seen]);
+  useEffect(()=>{
+    if(!user?.public_key)return;
     let dead=false;
     const previous=history.current;history.current=null;previous?.close();
     setHistoryReady(false);setMigrateRequired(false);setMessages([]);
@@ -380,14 +398,32 @@ export default function App(){
   const selectedFriend=friends.find(f=>f.public_key===selected);
   const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
     .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
+  const latestByPeer=useMemo(()=>{
+    const latest=new Map();
+    for(const item of messages){
+      if(!["message","file"].includes(item.type) || !item.public_key)continue;
+      const prior=latest.get(item.public_key);
+      if(!prior||item.at>prior.at)latest.set(item.public_key,item);
+    }
+    return latest;
+  },[messages]);
   const visibleFriends=useMemo(()=>friends.filter(f=>
-    (f.name+" "+f.public_key).toLowerCase().includes(filter.toLowerCase()))
-    .sort((a,b)=>Number(online(b))-Number(online(a))),[friends,filter]);
+    ((f.name||"")+" "+f.public_key).toLowerCase().includes(filter.toLowerCase()))
+    .sort((a,b)=>{
+      if(section==="contacts")return (a.name||a.public_key).localeCompare(b.name||b.public_key,"zh-CN");
+      const left=latestByPeer.get(a.public_key)?.at||0;
+      const right=latestByPeer.get(b.public_key)?.at||0;
+      return right-left || Number(online(b))-Number(online(a));
+    }),[friends,filter,latestByPeer,section]);
+  const unreadFor=useCallback(peer=>messages.filter(m=>m.type==="message" &&
+    m.direction==="incoming"&&m.public_key===peer&&(m.at||0)>(seen[peer]||0)).length,
+    [messages,seen]);
 
   function selectFriend(key){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
     selectedRef.current=key;setSelected(key);
     setDraft(drafts.current.get(key)||"");setMobileChat(true);
+    setSeen(previous=>({...previous,[key]:Date.now()}));
   }
   useEffect(()=>{
     if(selected&&!friends.some(f=>f.public_key===selected)){
