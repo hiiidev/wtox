@@ -406,7 +406,7 @@ export default function App(){
     ]);
   },[user?.public_key,refreshFriends,refreshNetwork,refreshFriendRequests,alert]);
   const screens=Grid.useBreakpoint();
-  const isMobile=!!screens.xs && !screens.md;
+  const isMobile=(!!screens.xs||!!screens.sm)&&!screens.md;
   const selectedFriend=friends.find(f=>f.public_key===selected);
   const peerStatus=selectedFriend?.status===0||!selectedFriend?"离线":
     ["在线","离开","忙碌"][selectedFriend.user_status]||"在线";
