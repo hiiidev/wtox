@@ -1,10 +1,11 @@
 import React, {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input, Tag,
-  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm } from "antd";
+  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal,
+  Dropdown, Badge, List, Typography, Empty, Form, Select } from "antd";
 import { Bubble, Conversations, Sender } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
-  UserOutlined, PlusOutlined, MoreOutlined } from "@ant-design/icons";
+  UserOutlined, PlusOutlined, MoreOutlined, SmileOutlined, FolderOutlined } from "@ant-design/icons";
 import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
@@ -28,19 +29,6 @@ function stateText(record){
 function Button({children,onClick,kind="",disabled=false}){
   return <AntButton type={kind==="primary"?"primary":"default"}
     onClick={onClick} disabled={disabled} className="wtox-ant-btn">{children}</AntButton>;
-}
-function Modal({title,close,children}){
-  useEffect(()=>{
-    const onKey=e=>{if(e.key==="Escape")close()};
-    addEventListener("keydown",onKey);
-    return()=>removeEventListener("keydown",onKey);
-  },[close]);
-  return <div className="wtox-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}>
-    <section className="wtox-modal" role="dialog" aria-modal="true" aria-label={title}>
-      <header><h2>{title}</h2><button aria-label="关闭" onClick={close}>×</button></header>
-      <div className="wtox-modal-scroll">{children}</div>
-    </section>
-  </div>;
 }
 function AttachmentBubble({file,accept,reject,download,historyHandle}){
   const [preview,setPreview]=useState("");
@@ -104,6 +92,7 @@ export default function App(){
   const [friends,setFriends]=useState([]),[network,setNetwork]=useState(-1);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
   const [section,setSection]=useState("chats");
+  const [friendRequests,setFriendRequests]=useState([]);
   const [seen,setSeen]=useState({});
   const [filter,setFilter]=useState(""),[draft,setDraft]=useState("");
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
@@ -120,7 +109,7 @@ export default function App(){
   },[visualStyle]);
   const [modal,setModal]=useState(""),[notice,setNotice]=useState("");
   const [loginFile,setLoginFile]=useState(null),[busy,setBusy]=useState(false);
-  const [friendId,setFriendId]=useState(""),[requestKey,setRequestKey]=useState("");
+  const [friendId,setFriendId]=useState("");
   const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
@@ -156,6 +145,10 @@ export default function App(){
 
   const refreshFriends=useCallback(async()=>{
     setFriends((await getJson("/api/friends")).friends||[]);
+  },[]);
+  const refreshFriendRequests=useCallback(async()=>{
+    const data=await getJson("/api/friend-requests");
+    setFriendRequests(data.requests||[]);
   },[]);
   const refreshNetwork=useCallback(async()=>{
     setNetwork((await getJson("/api/network")).status??-1);
@@ -222,23 +215,26 @@ export default function App(){
       try{
         if(e.type==="message_receipt"){
           if(await h.deliverReceipt(e))await postJson("/api/ack",{ids:[row.id]});
-        }else if(e.type==="message"||e.type==="friend_request"){
+        }else if(e.type==="message"){
           await h.persist(e);
           await postJson("/api/ack",{ids:[row.id]});
-          if(e.type==="friend_request")setRequestKey(e.public_key);
+        }else if(e.type==="friend_request"){
+          // Friend requests remain encrypted in the server inbox
+          // until accepted/rejected or their seven-day expiry.
+          await refreshFriendRequests();
         }
       }catch(error){alert("消息暂存处理失败："+error.message);break}
     }
     await refreshOutbox(h);
     await refreshHistory(h);
-  },[alert,refreshHistory,refreshOutbox]);
+  },[alert,refreshHistory,refreshOutbox,refreshFriendRequests]);
 
   const onRealtime=useCallback(async e=>{
     const h=history.current;
     if(["message","friend_request"].includes(e.type)){
       if(e.type==="friend_request"){
-        setRequestKey(e.public_key);
-        alert("收到好友请求，请打开添加好友面板接受");
+        refreshFriendRequests().catch(()=>{});
+        alert("收到新的 Tox 好友请求");
       }
       if(h?.ready()){
         try{
@@ -267,7 +263,7 @@ export default function App(){
     }else if(["connection","friend_connection"].includes(e.type)){
       refreshNetwork().catch(()=>{});refreshFriends().catch(()=>{});
     }
-  },[alert,refreshHistory,refreshFriends,refreshNetwork,refreshTransfers]);
+  },[alert,refreshHistory,refreshFriends,refreshNetwork,refreshTransfers,refreshFriendRequests]);
 
   const loadIdentity=useCallback(async()=>{
     try{const info=await getJson("/api/me");setUser(info)}
@@ -390,11 +386,11 @@ export default function App(){
   useEffect(()=>{
     if(!user?.public_key)return;
     Promise.allSettled([
-      refreshFriends(),refreshNetwork(),
+      refreshFriends(),refreshNetwork(),refreshFriendRequests(),
       getJson("/api/profile/self").then(setOwnProfile).catch(error=>
         alert("无法获取 Tox 个人资料："+error.message))
     ]);
-  },[user?.public_key,refreshFriends,refreshNetwork,alert]);
+  },[user?.public_key,refreshFriends,refreshNetwork,refreshFriendRequests,alert]);
   const selectedFriend=friends.find(f=>f.public_key===selected);
   const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
     .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
@@ -496,11 +492,18 @@ export default function App(){
       setModal("");alert("好友请求已保存，请等待对方接受");
     }catch(error){alert(error.message)}
   }
-  async function acceptFriend(){
+  async function acceptRequest(item){
     try{
-      const data=await postJson("/api/friends/accept",{public_key:requestKey.trim()});
-      await refreshFriends();selectFriend(data.public_key);
-      setModal("");alert("好友已接受，等待对方建立 Tox 连接");
+      const result=await postJson("/api/friend-requests/"+encodeURIComponent(item.id)+"/accept");
+      await Promise.all([refreshFriendRequests(),refreshFriends()]);
+      selectFriend(result.public_key);setModal("");
+      alert("已接受好友请求");
+    }catch(error){alert(error.message)}
+  }
+  async function rejectRequest(item){
+    try{
+      await api("/api/friend-requests/"+encodeURIComponent(item.id),{method:"DELETE"});
+      await refreshFriendRequests();
     }catch(error){alert(error.message)}
   }
   async function removeFriend(){
@@ -777,7 +780,7 @@ export default function App(){
       </main>
     </div>
 
-    {modal==="settings"&&<Modal title="设置与备份" close={closeModal}>
+    {modal==="settings"&&<AntModal open title="设置与备份" onCancel={closeModal} footer={null} centered destroyOnHidden width={640}>
       <h3>界面风格</h3>
       <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
         options={[{label:"微信桌面",value:"wechat"},{label:"☀️ 雾白",value:"mist"},
@@ -833,19 +836,38 @@ export default function App(){
       <small>aTox 提供聊天历史导出，但其专有格式尚待验证；目前仅保证 wTox 自身 JSON 的备份和恢复。</small>
       <div className="wtox-separator">当前登录会话</div>
       <Button onClick={logout}>退出当前 Tox 身份</Button>
-    </Modal>}
+    </AntModal>}
 
-    {modal==="add"&&<Modal title="添加好友" close={closeModal}>
-      <label>好友 Tox ID（76 位）
-        <textarea rows="3" value={friendId} onChange={e=>setFriendId(e.target.value)} placeholder="完整 Tox ID"/></label>
-      <label>好友请求内容<input value={requestText} onChange={e=>setRequestText(e.target.value)}/></label>
-      <Button kind="primary" onClick={addFriend}>发送好友请求</Button>
-      <div className="wtox-separator">接受请求</div>
-      <label>请求者公钥（64 位）<input value={requestKey} onChange={e=>setRequestKey(e.target.value)}/></label>
-      <Button onClick={acceptFriend}>接受好友</Button>
-    </Modal>}
+    {modal==="add"&&<AntModal open title="添加 Tox 好友" onCancel={closeModal}
+      footer={null} centered destroyOnHidden>
+      <Form layout="vertical" onFinish={addFriend}>
+        <Form.Item label="好友 Tox ID（76 位）" required>
+          <Input.TextArea rows={3} value={friendId} onChange={e=>setFriendId(e.target.value)}
+            placeholder="输入好友完整 Tox ID"/>
+        </Form.Item>
+        <Form.Item label="附言">
+          <Input value={requestText} onChange={e=>setRequestText(e.target.value)}/>
+        </Form.Item>
+        <AntButton type="primary" htmlType="submit" block>发送好友请求</AntButton>
+      </Form>
+    </AntModal>}
+    {modal==="requests"&&<AntModal open title={`好友请求（${friendRequests.length}）`}
+      onCancel={closeModal} footer={null} centered destroyOnHidden>
+      <List dataSource={friendRequests} locale={{emptyText:"暂无待处理的好友请求"}}
+        renderItem={item=><List.Item actions={[
+          <AntButton key="accept" type="primary" size="small" onClick={()=>acceptRequest(item)}>接受</AntButton>,
+          <AntButton key="reject" size="small" danger onClick={()=>rejectRequest(item)}>拒绝</AntButton>
+        ]}>
+          <List.Item.Meta title={<Typography.Text copyable={{text:item.public_key}}>
+            {shortKey(item.public_key)}</Typography.Text>}
+            description={<><div>{item.text||"希望添加你为好友"}</div>
+              <Typography.Text type="secondary">
+                {new Date(item.created*1000).toLocaleString("zh-CN")}
+              </Typography.Text></>}/>
+        </List.Item>}/>
+    </AntModal>}
 
-    {modal==="files"&&<Modal title="附件收发" close={closeModal}>
+    {modal==="files"&&<AntModal open title="附件收发" onCancel={closeModal} footer={null} centered destroyOnHidden>
       <p>附件使用原生 Tox 协议，需好友在线，单文件最多 5 MiB；接收文件需要手动同意。</p>
       <label>选择发送文件
         <input type="file" onChange={e=>setUploadFile(e.target.files?.[0]||null)}/></label>
@@ -863,7 +885,7 @@ export default function App(){
           <Button onClick={()=>downloadFile(file)}>下载文件</Button>}
       </div>)}
       <small>附件只在 VPS 内存短暂保留，不支持断线续传。</small>
-    </Modal>}
+    </AntModal>}
     {notice&&<div className="wtox-toast" role="status">{notice}</div>}
   </div></ConfigProvider>;
 }
