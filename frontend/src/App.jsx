@@ -101,8 +101,14 @@ export default function App(){
   const [ownProfile,setOwnProfile]=useState({name:"",status_message:"",user_status:0});
   const [profileSaving,setProfileSaving]=useState(false);
   const [visualStyle,setVisualStyle]=useState(()=>{
-    try{return localStorage.getItem("wtox-visual-style")||"wechat"}catch{return "wechat"}
+    try {
+      const stored=localStorage.getItem("wtox-visual-style");
+      return stored==="dark"||["wechat","midnight","ocean"].includes(stored)?"dark":"light";
+    } catch {return "light"}
   });
+  const designTokens=useMemo(()=>antdTheme.getDesignToken({
+    algorithm:visualStyle==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
+  }),[visualStyle]);
   useEffect(()=>{
     document.documentElement.setAttribute("data-wtox-theme",visualStyle);
     try{localStorage.setItem("wtox-visual-style",visualStyle)}catch{}
@@ -612,11 +618,21 @@ export default function App(){
   </div>;
 
   return <ConfigProvider theme={{
-    algorithm:visualStyle==="mist"?antdTheme.defaultAlgorithm:antdTheme.darkAlgorithm,
-    token:{colorPrimary:visualStyle==="wechat"?"#07b759":visualStyle==="ocean"?"#06b6d4":visualStyle==="midnight"?"#818cf8":"#477ee8",
-      borderRadius:12,fontFamily:"Inter, system-ui, -apple-system, sans-serif"}
+    algorithm:visualStyle==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
   }}>
-  <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat":"")}>
+  <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat ":"")+(section==="me"?"show-me":"")}
+    data-theme={visualStyle}
+    style={{
+      "--wt-bg":designTokens.colorBgLayout,
+      "--wt-panel":designTokens.colorBgContainer,
+      "--wt-hover":designTokens.colorFillSecondary,
+      "--wt-border":designTokens.colorBorderSecondary,
+      "--wt-text":designTokens.colorText,
+      "--wt-muted":designTokens.colorTextSecondary,
+      "--wt-primary":designTokens.colorPrimary,
+      "--wt-own":designTokens.colorPrimaryBg,
+      "--wt-incoming":designTokens.colorBgElevated
+    }}>
     <div className="wtox-workspace ant-workspace wechat-layout">
       <nav className="wechat-rail" aria-label="主导航">
         <button type="button" className="wechat-rail-avatar" aria-label="我的资料与设置"
@@ -783,30 +799,26 @@ export default function App(){
     {modal==="settings"&&<AntModal open title="设置与备份" onCancel={closeModal} footer={null} centered destroyOnHidden width={640}>
       <h3>界面风格</h3>
       <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
-        options={[{label:"微信桌面",value:"wechat"},{label:"☀️ 雾白",value:"mist"},
-          {label:"🌙 午夜",value:"midnight"},
-          {label:"🌊 海蓝",value:"ocean"}]}/>
+        options={[{label:"浅色",value:"light"},{label:"黑夜",value:"dark"}]}/>
       <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
       <div className="wtox-separator">Tox 个人资料</div>
-      <label>昵称
-        <input value={ownProfile.name} maxLength={128}
-          placeholder="昵称（其他 Tox 客户端可见）"
-          onChange={e=>setOwnProfile(p=>({...p,name:e.target.value}))}/>
-      </label>
-      <label>状态消息
-        <textarea rows={2} value={ownProfile.status_message} maxLength={1007}
-          placeholder="向好友展示的状态消息"
-          onChange={e=>setOwnProfile(p=>({...p,status_message:e.target.value}))}/>
-      </label>
-      <label>状态
-        <select className="wtox-profile-status"
-          value={ownProfile.user_status}
-          onChange={e=>setOwnProfile(p=>({...p,user_status:Number(e.target.value)}))}>
-          <option value={0}>在线</option>
-          <option value={1}>离开</option>
-          <option value={2}>忙碌</option>
-        </select>
-      </label>
+      <Form layout="vertical" className="profile-editor">
+        <Form.Item label="昵称">
+          <Input value={ownProfile.name} maxLength={128} showCount
+            placeholder="昵称（其他 Tox 客户端可见）"
+            onChange={e=>setOwnProfile(p=>({...p,name:e.target.value}))}/>
+        </Form.Item>
+        <Form.Item label="状态消息">
+          <Input.TextArea rows={2} value={ownProfile.status_message} maxLength={1007}
+            placeholder="向好友展示的状态消息"
+            onChange={e=>setOwnProfile(p=>({...p,status_message:e.target.value}))}/>
+        </Form.Item>
+        <Form.Item label="状态">
+          <Select value={ownProfile.user_status}
+            onChange={value=>setOwnProfile(p=>({...p,user_status:value}))}
+            options={[{label:"在线",value:0},{label:"离开",value:1},{label:"忙碌",value:2}]}/>
+        </Form.Item>
+      </Form>
       <Button kind="primary" disabled={profileSaving} onClick={saveOwnProfile}>
         保存 Tox 个人资料
       </Button>
