@@ -77,6 +77,10 @@ class ChatApiTests(unittest.TestCase):
         network = self.client.get("/api/network")
         self.assertEqual(network.status_code, 200, network.text)
         self.assertEqual(network.json()["status"], 1)
+        self.assertEqual(network.json()["online_friends"],1)
+        self.assertEqual(network.json()["total_friends"],1)
+        self.assertEqual(network.json()["queued"],0)
+        self.assertIn("tox_running",network.json())
         original=self.client.get("/api/friends").json()["friends"]
         self.assertEqual(len(original),1)
         self.assertIsNone(original[0]["tox_id"])

@@ -45,6 +45,20 @@ class OutboxTests(unittest.TestCase):
                                     (self.uid,)).fetchone()[0]
         self.assertEqual(flag,1)
 
+    def test_status_summary_is_private_and_distinguishes_queued_from_sent(self):
+        self.assertEqual(store.outbox_counts(self.uid),
+                         {"queued":0,"dispatching":0,"uncertain":0})
+        self.enqueue()
+        self.assertEqual(store.outbox_counts(self.uid)["queued"],1)
+        identity=SimpleNamespace(address="C"*76,secret_proof=b"y"*32,savedata=b"other")
+        another=store.create_tox_identity(identity)
+        self.assertEqual(store.outbox_counts(another)["queued"],0)
+        self.assertTrue(store.outbox_claim(self.uid,"c"*32))
+        self.assertEqual(store.outbox_counts(self.uid)["dispatching"],1)
+        store.outbox_finish(self.uid,"c"*32,"sent",session_id="tox",message_id=5)
+        self.assertEqual(store.outbox_counts(self.uid)["queued"],0)
+        self.assertEqual(store.outbox_counts(self.uid)["dispatching"],0)
+
     def test_outbox_is_encrypted_idempotent_and_owned_by_account(self):
         record=self.enqueue()
         self.assertEqual(record["status"],"queued")
