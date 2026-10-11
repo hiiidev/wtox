@@ -1,9 +1,13 @@
-# Local testing only: no TLS; never expose port 8000 to the public internet.
+# Local-only development. No HTTPS. NEVER expose port 8000 publicly.
 services:
   web:
     build: .
     env_file: .env
+    environment:
+      WTOX_INSECURE_HTTP: "1"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./data:/data
+      - wtox_dev_data:/data
+volumes:
+  wtox_dev_data:
