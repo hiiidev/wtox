@@ -122,8 +122,12 @@ def init():
             size INTEGER NOT NULL,
             created INTEGER NOT NULL,
             expires INTEGER NOT NULL,
-            direction TEXT NOT NULL
+            direction TEXT NOT NULL,
+            public_key BLOB
         )""")
+        attachment_columns = {r[1] for r in c.execute("PRAGMA table_info(disk_attachments)")}
+        if "public_key" not in attachment_columns:
+            c.execute("ALTER TABLE disk_attachments ADD COLUMN public_key BLOB")
         c.execute("CREATE INDEX IF NOT EXISTS ix_disk_attachment_expiry ON disk_attachments(expires)")
         c.execute("""CREATE TABLE IF NOT EXISTS friend_addresses (
             account_id TEXT NOT NULL REFERENCES accounts(id),

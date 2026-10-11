@@ -36,6 +36,7 @@ class FileTransferTests(unittest.TestCase):
         self.transfers.items={}
         self.transfers.disk=self.disk
         self.transfers.uid=self.uid
+        self.transfers.should_auto_accept=lambda:False
         self.controls=[]
         def control(_tox,friend,file_number,command,error):
             self.controls.append((friend,file_number,command))
@@ -70,6 +71,37 @@ class FileTransferTests(unittest.TestCase):
         self.transfers._on_receive_chunk(None,7,5,4,None,0,None)
         self.assertEqual(self.transfers.download(item.id),("file.bin",b"test"))
         self.assertTrue(any(e["state"]=="completed" for e in self.events))
+
+    def test_offline_browser_auto_receives_and_persists_in_inbox(self):
+        self.transfers.should_auto_accept=lambda:True
+        raw=b"offline-photo.jpg"
+        name=(U8*len(raw)).from_buffer_copy(raw)
+        self.transfers._on_receive(None,7,6,0,5,name,len(raw),None)
+        item=next(iter(self.transfers.items.values()))
+        self.assertEqual(item.state,"receiving")
+        self.assertEqual(self.controls,[(7,6,0)])
+        payload=(U8*5).from_buffer_copy(b"photo")
+        self.transfers._on_receive_chunk(None,7,6,0,payload,5,None)
+        self.transfers._on_receive_chunk(None,7,6,5,None,0,None)
+        self.assertEqual(item.state,"completed")
+        # The browser can reopen after the in-memory Tox transfer is gone.
+        self.transfers.items.clear()
+        listing=self.transfers.list()
+        self.assertEqual(len(listing),1)
+        self.assertEqual(listing[0]["id"],item.id)
+        self.assertEqual(listing[0]["public_key"],"AB"*32)
+        self.assertEqual(listing[0]["state"],"completed")
+        self.assertEqual(listing[0]["progress"],5)
+        self.assertEqual(self.disk.download(self.uid,item.id)[1],5)
+
+    def test_auto_receive_rejects_unavailable_disk(self):
+        self.transfers.should_auto_accept=lambda:True
+        self.transfers.disk=None
+        raw=b"missing.bin"
+        name=(U8*len(raw)).from_buffer_copy(raw)
+        self.transfers._on_receive(None,7,8,0,4,name,len(raw),None)
+        self.assertEqual(self.transfers.items,{})
+        self.assertEqual(self.controls,[(7,8,2)])
 
     def test_reject_oversize_and_filename(self):
         name=(U8*4).from_buffer_copy(b"file")

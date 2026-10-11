@@ -56,6 +56,9 @@ class SessionManager:
                 self.disk = DiskAttachmentStore()
             session.files.disk = self.disk
             session.files.uid = uid
+            # No browser socket: receive native file offers on behalf of the
+            # signed-in account. A connected browser retains manual Accept.
+            session.files.should_auto_accept = lambda account=uid: not bool(self.sockets.get(account))
             self.sessions[uid] = session
             session.start()
             return session

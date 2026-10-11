@@ -1,8 +1,8 @@
-"""Native, online-only Tox FILE_KIND_DATA backed by encrypted VPS disk chunks.
+"""Native Tox FILE_KIND_DATA and encrypted seven-day disk file inbox.
 
-All file bytes are spooled in 64-KiB AES-GCM blocks, not held as entire payloads
-by a ToxSession. Users still must be online for native transfer; completed
-incoming files can be downloaded from the authenticated VPS for up to 7 days.
+Incoming offers automatically accept while the account has no open browser
+WebSocket, so browser closure does not interrupt receipt from online Tox peers.
+Native sender and VPS Toxcore must still be mutually online.
 """
 from __future__ import annotations
 import ctypes as C
@@ -56,6 +56,8 @@ class FileTransfers:
         self.items={}
         self.disk=None
         self.uid=None
+        # The owning session manager installs a socket-aware policy.
+        self.should_auto_accept=lambda:False
         self.bind_native()
 
     def bind_native(self):
@@ -171,7 +173,13 @@ class FileTransfers:
     def list(self):
         with self.session.lock:
             self.prune()
-            return [self._public(item) for item in self.items.values()]
+            active={item.id:self._public(item) for item in self.items.values()}
+            # Merge completed encrypted files from disk; survives Tox/VPS restart.
+            if self.disk is not None and self.uid is not None:
+                for archived in self.disk.list_received(self.uid):
+                    if archived["id"] not in active:
+                        active[archived["id"]]=archived
+            return list(active.values())
 
     def control(self,ident,accept):
         with self.session.lock:
@@ -183,7 +191,8 @@ class FileTransfers:
                 if self.disk is None or self.uid is None:
                     raise ValueError("磁盘附件暂存服务不可用")
                 item.document=self.disk.begin(self.uid,item.name,expected=item.size,
-                                              direction="incoming",ident=item.id)
+                                              direction="incoming",ident=item.id,
+                                              public_key=item.public_key)
             ok=self.control_native(self.session.tox,item.friend,item.file_number,0 if accept else 2,C.byref(err))
             if not ok or err.value:
                 if item.document is not None:
@@ -203,6 +212,7 @@ class FileTransfers:
         return name,b"".join(chunks)
 
     def _on_receive(self,_tox,friend,file_number,kind,size,filename,length,_user):
+        item=None
         try:
             self.prune()
             if kind!=0 or not 1<=size<=MAX_FILE or self._active_count()>=MAX_ACTIVE:
@@ -213,8 +223,17 @@ class FileTransfers:
             item=Transfer(uuid.uuid4().hex,int(friend),int(file_number),"incoming",
                           name,int(size),"offered",time.time(),None,0,key)
             self.items[item.id]=item
-            self._emit(item)
+            if self.should_auto_accept():
+                # A disconnected browser cannot click Accept; use the same
+                # bounded, authenticated-disk path as manual reception.
+                self.control(item.id,True)
+            else:
+                self._emit(item)
         except Exception as exc:
+            if item is not None:
+                self.items.pop(item.id,None)
+                if item.document is not None:
+                    item.document.abort()
             print("Tox file offer handling error:",type(exc).__name__,flush=True)
             try:self.control_native(self.session.tox,friend,file_number,2,C.byref(C.c_int()))
             except Exception:pass

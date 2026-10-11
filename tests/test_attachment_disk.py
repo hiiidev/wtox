@@ -53,6 +53,28 @@ class DiskAttachmentTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             fresh.download(self.other,writer.id)
 
+    def test_persistent_inbox_scoped_to_identity_and_expiry(self):
+        peer="CD"*32
+        incoming=self.disk.begin(self.uid,"背景图.png",expected=3,
+                                 direction="incoming",public_key=peer)
+        incoming.write(b"hey")
+        incoming.finish()
+        disk_after_restart=DiskAttachmentStore()
+        received=disk_after_restart.list_received(self.uid)
+        self.assertEqual(len(received),1)
+        self.assertEqual(received[0]["public_key"],peer)
+        self.assertEqual(received[0]["created"],incoming.created)
+        self.assertEqual(received[0]["name"],"背景图.png")
+        self.assertEqual(disk_after_restart.list_received(self.other),[])
+        with store.db() as db:
+            stored_key=db.execute("SELECT public_key FROM disk_attachments WHERE id=?",
+                                  (incoming.id,)).fetchone()[0]
+        self.assertNotIn(peer.encode("ascii"),stored_key)
+        with store.db() as db:
+            db.execute("UPDATE disk_attachments SET expires=? WHERE id=?",
+                       (int(time.time())-1,incoming.id))
+        self.assertEqual(disk_after_restart.list_received(self.uid),[])
+
     def test_expiry_rejects_before_hourly_cleanup(self):
         writer=self.disk.begin(self.uid,"expired.txt",expected=3)
         writer.write(b"abc")

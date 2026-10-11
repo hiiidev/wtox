@@ -20,6 +20,7 @@ MAX_FILE = 5 * 1024 * 1024
 TTL = 7 * 86400
 MAX_ACCOUNT_BYTES = 200 * 1024 * 1024
 MAX_TOTAL_BYTES = 1024 * 1024 * 1024
+MAX_ACCOUNT_FILES = 250
 _HEX32 = re.compile(r"^[a-f0-9]{32}$")
 
 
@@ -40,12 +41,16 @@ def _write_private(path: Path, contents: bytes) -> None:
 
 class DiskAttachment:
     def __init__(self, storage, uid: str, ident: str, name: str,
-                 expected: int | None, direction: str):
+                 expected: int | None, direction: str, public_key: str | None = None):
         self.storage = storage
         self.uid = _identifier(uid)
         self.id = _identifier(ident)
         self.name = name
         self.direction = direction
+        # Encrypt the sender's public key in the persistent attachment index.
+        if public_key is not None and not re.fullmatch(r"[A-Fa-f0-9]{64}", public_key):
+            raise ValueError("发送方公钥不合法")
+        self.public_key = public_key.upper() if public_key else None
         self.expected = expected
         self.size = 0
         self._buffer = bytearray()
@@ -95,10 +100,11 @@ class DiskAttachment:
         with store.db() as db:
             db.execute(
                 "INSERT INTO disk_attachments"
-                "(id,account_id,filename,size,created,expires,direction)"
-                " VALUES(?,?,?,?,?,?,?)",
+                "(id,account_id,filename,size,created,expires,direction,public_key)"
+                " VALUES(?,?,?,?,?,?,?,?)",
                 (self.id, self.uid, store.encrypt(self.name.encode("utf-8")),
-                 self.size, self.created, expires, self.direction))
+                 self.size, self.created, expires, self.direction,
+                 store.encrypt(self.public_key.encode("ascii")) if self.public_key else None))
         self.complete = True
         return self
 
@@ -134,7 +140,8 @@ class DiskAttachmentStore:
         return self.root / _identifier(uid) / _identifier(ident)
 
     def begin(self, uid: str, name: str, expected: int | None = None,
-              direction: str = "incoming", ident: str | None = None) -> DiskAttachment:
+              direction: str = "incoming", ident: str | None = None,
+              public_key: str | None = None) -> DiskAttachment:
         if direction not in ("incoming", "outgoing"):
             raise ValueError("未知附件方向")
         _identifier(uid)
@@ -151,11 +158,17 @@ class DiskAttachmentStore:
                 "SELECT COALESCE(SUM(size),0) FROM disk_attachments WHERE expires>?",
                 (int(time.time()),)
             ).fetchone()[0]
+            retained_count = db.execute(
+                "SELECT COUNT(*) FROM disk_attachments WHERE account_id=? AND expires>?",
+                (uid, int(time.time()))
+            ).fetchone()[0]
         if used_user + reserve > MAX_ACCOUNT_BYTES or used_total + reserve > MAX_TOTAL_BYTES:
             raise ValueError("附件磁盘暂存空间已达容量上限，请等待 7 天清理")
+        if retained_count >= MAX_ACCOUNT_FILES:
+            raise ValueError("附件暂存数量已达上限，请等待过期清理")
         parent = self.root / uid
         parent.mkdir(mode=0o700, exist_ok=True)
-        return DiskAttachment(self, uid, ident, name, expected, direction)
+        return DiskAttachment(self, uid, ident, name, expected, direction, public_key)
 
     def discard(self, uid: str, ident: str) -> None:
         path = self.folder(uid, ident)
@@ -163,6 +176,37 @@ class DiskAttachmentStore:
             shutil.rmtree(path)
         with store.db() as db:
             db.execute("DELETE FROM disk_attachments WHERE id=? AND account_id=?", (ident, uid))
+
+    def list_received(self, uid: str) -> list[dict]:
+        """Durable completed inbox, including files received with no browser open.
+
+        Older completed files without a sender key remain downloadable by ID,
+        but cannot be safely attached to a conversation after a restart.
+        """
+        uid = _identifier(uid)
+        with store.db() as db:
+            rows = db.execute(
+                "SELECT id,filename,size,created,public_key FROM disk_attachments "
+                "WHERE account_id=? AND direction='incoming' AND public_key IS NOT NULL "
+                "AND expires>? ORDER BY created DESC LIMIT ?",
+                (uid, int(time.time()), MAX_ACCOUNT_FILES)
+            ).fetchall()
+        result = []
+        for ident, encrypted_name, size, created, encrypted_peer in rows:
+            try:
+                peer = store.decrypt(encrypted_peer).decode("ascii").upper()
+                name = store.decrypt(encrypted_name).decode("utf-8")
+                if not re.fullmatch(r"[A-F0-9]{64}", peer):
+                    continue
+                result.append({
+                    "id":ident,"direction":"incoming","public_key":peer,
+                    "name":name,"size":size,"state":"completed",
+                    "progress":size,"created":created
+                })
+            except (ValueError,UnicodeError):
+                # One corrupt index must not hide the rest of the inbox.
+                continue
+        return result
 
     def download(self, uid: str, ident: str):
         uid, ident = _identifier(uid), _identifier(ident)
