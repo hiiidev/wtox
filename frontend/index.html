@@ -113,17 +113,19 @@
   <dialog id="historyDialog" class="dialog-panel">
     <div class="dialog-heading"><div><div class="eyebrow">ON THIS DEVICE</div><h2>本地加密聊天记录</h2></div>
       <button id="closeHistory" class="icon-button" aria-label="关闭">×</button></div>
-    <div id="historyLock">
-      <p class="muted">聊天记录使用你自己设置的本地口令加密，保存在这个浏览器的 IndexedDB 中。口令不会发送到服务器。</p>
-      <label class="field-label" for="historyPass">本地历史口令</label>
-      <input id="historyPass" type="password" autocomplete="off" placeholder="至少 12 位字符">
-      <button id="unlock" class="button primary full">解锁 / 首次设置</button>
-      <p class="footnote">忘记本地口令、清理浏览器数据都可能导致历史丢失。</p>
+    <p class="muted">聊天历史按当前 Tox 身份分别保存在此浏览器中，使用自动生成的设备 AES-256-GCM 密钥加密。以后登录同一 Tox 身份，无须再设置历史口令。</p>
+    <div id="historyLock" hidden>
+      <p class="muted">检测到旧版本以口令加密的聊天历史。为避免丢失数据，只需<strong>最后输入一次原来的本地历史口令</strong>，就能迁移到自动解锁模式。</p>
+      <label class="field-label" for="historyPass">旧版历史口令（仅用于迁移）</label>
+      <input id="historyPass" type="password" autocomplete="off" placeholder="输入你之前设置的本地历史口令">
+      <button id="unlock" class="button primary full">迁移旧历史并自动解锁</button>
+      <p class="footnote">迁移完成前不会覆盖旧记录，也不会确认领取未保存在本地的消息。</p>
     </div>
     <div id="historyActive" hidden>
-      <p class="unlock-success">✓ 已解锁本地加密历史</p>
-      <p class="muted">新消息写入 IndexedDB 后才会向 VPS 确认领取。</p>
+      <p class="unlock-success">✓ 已与当前 Tox 身份绑定 · 自动解锁</p>
+      <p class="muted">新消息写入加密 IndexedDB 后，才会向 VPS 确认领取。</p>
     </div>
+    <p class="footnote">密钥只保存在本浏览器设备，不会发给 VPS。换设备、清理站点数据或丢失浏览器资料时，仅凭 .tox 文件无法恢复本地聊天历史。建议定期备份重要消息。</p>
   </dialog>
 
   <div id="error" class="toast" role="status" aria-live="polite" hidden></div>
