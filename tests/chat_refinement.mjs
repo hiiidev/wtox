@@ -87,8 +87,8 @@ assert.doesNotMatch(app,/<MessageOutlined\/><span>聊天<\/span>\s*<\/button>\s*
 assert.match(app,/className="wt-peer-profile-presence"/);
 assert.match(refined,/\.wt-peer-avatar-button\.ant-btn:active/);
 assert.match(refined,/\.wt-select-indicator\{display:none!important;\}/);
-assert.match(app,/\/"api\/tox\/create",\{method:"POST",/);
+assert.match(app,/api\("\/api\/tox\/create",\{method:"POST",/);
 assert.match(app,/password:createPassword/);
 assert.match(app,/X-Tox-Password-Bytes/);
 assert.match(app,/password:backupPassword/);
-assert.match(app,/\.\/api\/profile\/export\/encrypted/);
+assert.match(app,/\/api\/profile\/export\/encrypted/);
