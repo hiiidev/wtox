@@ -19,4 +19,10 @@ assert.match(css, /\.app-window\.chat-open \.chat-pane/, "Missing mobile convers
 assert.match(css, /\.bubble-row\.mine/, "Missing outgoing message bubble");
 assert.match(js, /function updateComposer\(/, "Missing online/offline send UX");
 assert.match(js, /friend\.status|f\.status/, "Missing per-friend presence");
+assert.ok(js.includes("beginHistoryForIdentity()"), "auto-open must run");
+assert.ok(js.includes("migrateLegacyHistory()"), "legacy migration must run");
+assert.ok(js.includes("generateKey("), "device key creation is required");
+assert.ok(js.includes("AUTO_KEY_ID"), "device key must persist per browser");
+assert.ok(js.includes("historyDb.transaction([\"meta\",\"events\"],\"readwrite\")"), "legacy history must migrate atomically");
+console.log("wtox local history automatic setup checks OK");
 console.log("wtox desktop/mobile messenger UI structure OK");
