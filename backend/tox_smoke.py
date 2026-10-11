@@ -19,7 +19,9 @@ def main():
         core = ToxCore()
         created = core.identity(nickname="wtox smoke test")
         assert len(created.address) == 76
-        assert core.identity(created.savedata).address == created.address
+        restored = core.identity(created.savedata)
+        assert restored.address == created.address
+        assert restored.secret_proof == created.secret_proof, "Tox private-key proof changed across restore"
 
         saved = []
         events = []
