@@ -732,35 +732,44 @@ export default function App(){
   // Shared Ant Design settings, rendered as a full mobile "Me" page or
   // a desktop modal; do not duplicate form state or export controls.
   const settingsContent=<div className="wt-settings-content">
-
-      <h3>界面风格</h3>
-      <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
-        options={[{label:"浅色",value:"light"},{label:"黑夜",value:"dark"}]}/>
-      <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
-      <div className="wtox-separator">消息传输</div>
-      <p className="wtox-info">所有文字消息默认进入 VPS 加密队列；即使关闭网页，
-        VPS 也会在好友上线时发送。队列最多保留 7 天。</p>
-      <div className="wtox-separator">身份备份</div>
-      <p>.tox 文件包含身份私钥，请妥善保管，切勿分享给他人。</p>
-      <Button kind="primary" onClick={async()=>{
-        try{downloadBlob(await(await api("/api/profile/export")).blob(),"wtox-profile.tox")}
+    <Card size="small" title="外观" className="wt-settings-card">
+      <Segmented block value={visualStyle} onChange={setVisualStyle}
+        options={[{label:"跟随系统",value:"system"},{label:"浅色",value:"light"},
+          {label:"深色",value:"dark"}]}/>
+    </Card>
+    <Card size="small" title="Tox 身份备份" className="wt-settings-card">
+      <Typography.Paragraph type="secondary">
+        .tox 文件包含身份私钥，请妥善保管，切勿分享。
+      </Typography.Paragraph>
+      <AntButton block onClick={async()=>{
+        try{downloadBlob(await(await api("/api/profile/export")).blob(),"wTox-profile.tox")}
         catch(e){alert(e.message)}
-      }}>下载最新 .tox 备份</Button>
-      <div className="wtox-separator">本地加密历史与导入导出</div>
-      {!historyReady&&!migrateRequired&&<p className="wtox-info">本地历史尚未就绪。</p>}
-      {migrateRequired&&<><label>旧版历史密码
-        <input type="password" value={legacyPass} onChange={e=>setLegacyPass(e.target.value)}/></label>
-        <Button kind="primary" onClick={migrateHistory}>一次性迁移旧历史</Button></>}
-      <div className="wtox-separator">历史导出</div>
-      <Button onClick={exportJson}>导出聊天记录（wTox JSON）</Button>
-      <p className="wtox-warning">以上历史文件均为明文，请妥善加密保管。</p>
-      <div className="wtox-separator">导入历史</div>
-      <label>选择 wTox JSON 文件
-        <input type="file" accept=".json,application/json" onChange={e=>setHistoryFile(e.target.files?.[0]||null)}/></label>
-      <Button kind="primary" onClick={importHistory}>导入到此浏览器</Button>
-      <small>aTox 提供聊天历史导出，但其专有格式尚待验证；目前仅保证 wTox 自身 JSON 的备份和恢复。</small>
-      <div className="wtox-separator">当前登录会话</div>
-      <Button onClick={logout}>退出当前 Tox 身份</Button>
+      }}>下载 .tox 配置</AntButton>
+    </Card>
+    <Card size="small" title="聊天记录" className="wt-settings-card">
+      {migrateRequired&&<Form layout="vertical">
+        <Form.Item label="迁移旧版加密历史">
+          <Input.Password value={legacyPass} onChange={e=>setLegacyPass(e.target.value)}/>
+        </Form.Item>
+        <AntButton type="primary" onClick={migrateHistory}>迁移旧历史</AntButton>
+      </Form>}
+      <Space orientation="vertical" style={{width:"100%"}} size="middle">
+        <AntButton block onClick={exportJson}>导出聊天记录（wTox JSON）</AntButton>
+        <Upload accept=".json,application/json" maxCount={1}
+          beforeUpload={file=>{setHistoryFile(file);return false}}
+          onRemove={()=>setHistoryFile(null)}
+          fileList={historyFile?[{uid:"import",name:historyFile.name,status:"done"}]:[]}>
+          <AntButton block>选择历史记录文件</AntButton>
+        </Upload>
+        <AntButton type="primary" block disabled={!historyFile} onClick={importHistory}>
+          导入聊天记录
+        </AntButton>
+      </Space>
+      <Typography.Paragraph type="secondary" className="wt-settings-footnote">
+        历史 JSON 导出文件是明文，需自行妥善保存。
+      </Typography.Paragraph>
+    </Card>
+    <AntButton danger block onClick={logout}>退出当前身份</AntButton>
   </div>;
 
   if(loading)return <div className="wtox-loading">正在加载 wTox…</div>;
@@ -1066,18 +1075,6 @@ export default function App(){
 
     {modal==="profile"&&<AntModal open title="我的 Tox 资料"
       onCancel={closeModal} footer={null} centered destroyOnHidden width={520}>
-      <div className="wtox-profile-header">
-        <Badge dot color={ownBadgeColor} offset={[-3,53]}>
-          <Avatar size={64} shape="square" gap={5} style={{backgroundColor:avatarColor(user.public_key)}}
-            icon={!ownProfile.name?<UserOutlined/>:undefined}>
-            {ownProfile.name?avatarLabel(ownProfile.name):undefined}
-          </Avatar>
-        </Badge>
-        <div>
-          <Typography.Title level={4} style={{margin:0}}>{ownProfile.name||"Tox 用户"}</Typography.Title>
-          <Badge status={ownBadgeStatus} text={ownStatusLabel}/>
-        </div>
-      </div>
       <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
       <Typography.Paragraph className="wtox-profile-id"
         copyable={{text:user.tox_id,tooltips:["复制 Tox ID","已复制"]}}>
