@@ -33,9 +33,14 @@ def save_new_profile(uid: str, identity):
 
 @router.get("/api/profile/status")
 def status(uid: str = Depends(owner)):
+    try:
+        core()
+        native_available = True
+    except HTTPException:
+        native_available = False
     return {"has_profile": store.has_profile(uid),
             "tox_id": store.profile_address(uid),
-            "native_tox_available": True}
+            "native_tox_available": native_available}
 
 @router.post("/api/profile/create")
 def create_profile(request: Request, uid: str = Depends(owner)):
