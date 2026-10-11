@@ -26,7 +26,7 @@ docker compose logs --tail=80 web caddy
 
 **The generated 32-byte hex value is the encrypted database master key; back it up securely.** Never commit the real `.env` or send it to anyone.
 
-Caddy automatically provisions HTTPS for the configured hostname and forwards WebSocket. The backend does not publish port 8000.
+Caddy automatically provisions HTTPS for the configured hostname and forwards WebSocket. The backend does not publish port 6066.
 
 ## Smoke tests
 
