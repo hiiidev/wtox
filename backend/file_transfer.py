@@ -47,6 +47,7 @@ class Transfer:
     when: float
     payload: bytes | bytearray | None = None
     progress: int = 0
+    public_key: str = ""
 
 
 class FileTransfers:
@@ -80,7 +81,7 @@ class FileTransfers:
         self.session._emit({"type":"file", **self._public(item)})
 
     def _public(self,item):
-        return {"id":item.id,"direction":item.direction,"public_key":self.session._friend_key(item.friend),
+        return {"id":item.id,"direction":item.direction,"public_key":item.public_key,
                 "name":item.name,"size":item.size,"state":item.state,"progress":item.progress}
 
     def _active_count(self):
@@ -145,7 +146,7 @@ class FileTransfers:
             err.value=0
             n=self.send_native(self.session.tox,friend,0,len(data),None,filename,len(encoded),C.byref(err))
             if err.value:raise ValueError("原生 Tox 附件发送失败（错误码 %d）"%err.value)
-            item=Transfer(uuid.uuid4().hex,friend,int(n),"outgoing",name,len(data),"waiting",time.time(),data)
+            item=Transfer(uuid.uuid4().hex,friend,int(n),"outgoing",name,len(data),"waiting",time.time(),data,0,key.upper())
             self.items[item.id]=item
             self._emit(item)
             return self._public(item)
@@ -192,8 +193,9 @@ class FileTransfers:
                 self.control_native(self.session.tox,friend,file_number,2,C.byref(C.c_int()))
                 return
             name=safe_filename(C.string_at(filename,length).decode("utf-8","replace"))
+            key=self.session._friend_key(int(friend))
             item=Transfer(uuid.uuid4().hex,int(friend),int(file_number),"incoming",
-                          name,int(size),"offered",time.time())
+                          name,int(size),"offered",time.time(),None,0,key)
             self.items[item.id]=item
             self._emit(item)
         except Exception as exc:
