@@ -587,7 +587,7 @@ export default function App(){
     }catch(error){alert(error.message)}
   }
 
-  if(loading)return <div className="wtox-loading">正在加载 wtox…</div>;
+  if(loading)return <div className="wtox-loading">正在加载 wTox…</div>;
   if(!user)return <div className="wtox-auth-layout">
     <div className="wtox-auth-card"><img className="wtox-logo" src="/logo.svg" alt="wtox"/>
       <h1>wTox</h1>
@@ -610,11 +610,11 @@ export default function App(){
 
   return <ConfigProvider theme={{
     algorithm:visualStyle==="mist"?antdTheme.defaultAlgorithm:antdTheme.darkAlgorithm,
-    token:{colorPrimary:visualStyle==="ocean"?"#06b6d4":visualStyle==="midnight"?"#818cf8":"#477ee8",
+    token:{colorPrimary:visualStyle==="wechat"?"#07b759":visualStyle==="ocean"?"#06b6d4":visualStyle==="midnight"?"#818cf8":"#477ee8",
       borderRadius:12,fontFamily:"Inter, system-ui, -apple-system, sans-serif"}
   }}>
   <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat":"")}>
-    <div className="wtox-workspace ant-workspace">
+    <div className="wtox-workspace ant-workspace wechat-layout">
       <nav className="wechat-rail" aria-label="主导航">
         <button type="button" className="wechat-rail-avatar" aria-label="我的资料与设置"
           title="我的资料与设置" onClick={()=>setModal("settings")}>
@@ -732,7 +732,7 @@ export default function App(){
         <div className="ant-thread" role="log" aria-label="聊天记录">
           {!selected&&<div className="ant-empty-chat">
             <img src="/logo.svg" alt="" width="74" height="74"/>
-            <h3>欢迎使用 wtox</h3><p>选择一位好友，开始私人对话</p>
+            <h3>欢迎使用 wTox</h3><p>选择一位好友，开始私人对话</p>
           </div>}
           {selected&&!thread.length&&<div className="ant-empty-chat">
             <MessageOutlined style={{fontSize:42}}/><h3>还没有聊天记录</h3>
@@ -780,7 +780,7 @@ export default function App(){
     {modal==="settings"&&<Modal title="设置与备份" close={closeModal}>
       <h3>界面风格</h3>
       <Segmented block size="large" value={visualStyle} onChange={setVisualStyle}
-        options={[{label:"☀️ 雾白",value:"mist"},
+        options={[{label:"微信桌面",value:"wechat"},{label:"☀️ 雾白",value:"mist"},
           {label:"🌙 午夜",value:"midnight"},
           {label:"🌊 海蓝",value:"ocean"}]}/>
       <p className="wtox-info">风格只保存在当前浏览器，不影响 Tox 身份和聊天记录。</p>
