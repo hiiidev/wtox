@@ -455,20 +455,14 @@ export default function App(){
               <button className="wtox-header-action" title="删除好友" disabled={!selected} onClick={removeFriend}>⋯</button>
             </ConversationHeader.Actions>
           </ConversationHeader>
-          <MessageList className="wtox-message-list">
-            {!thread.length
-              ? <MessageList.Content><div className="wtox-empty-thread">
-                  {selected?"暂无聊天记录":"选择左侧联系人开始聊天"}
-                </div></MessageList.Content>
-              : thread.map(item=><Message key={item.id} className="wtox-message-item"
-                  model={{message:String(item.text||""),type:"text",
-                    direction:item.direction==="outgoing"?"outgoing":"incoming",
-                    position:"single"}}>
-                  <Message.Footer sentTime={
-                    new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+
-                    (item.direction==="outgoing"?" · "+stateText(item):"")
-                  }/>
-                </Message>)}
+          <MessageList className="wtox-message-list"
+            empty={selected?"暂无聊天记录":"选择左侧联系人开始聊天"}>
+            {thread.map(item=><Message key={item.id}
+              model={{message:String(item.text||""),sentTime:
+                new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+
+                (item.direction==="outgoing"?" · "+stateText(item):""),
+                direction:item.direction==="outgoing"?"outgoing":"incoming",
+                position:"single"}} />)}
           </MessageList>
           <MessageInput className="wtox-send-input" placeholder="输入消息…" attachButton={false}
             value={draft} onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
