@@ -119,6 +119,7 @@ export async function openIdentityHistory(owner){
       requireKey();
       if(!["message","friend_request"].includes(event.type))return false;
       const id=event.id||crypto.randomUUID().replaceAll("-","");
+      if(await meta(db,"deleted-"+id))return false;
       const row={
         id,type:event.type,at:event.created?event.created*1000:(event.at||Date.now()),
         direction:event.direction||"incoming",
@@ -161,6 +162,8 @@ export async function openIdentityHistory(owner){
       requireKey();
       if(!file?.id||!file.public_key||!file.name)return false;
       const id="file-"+file.id;
+      // A removed transfer must not reappear on the next server file poll.
+      if(await meta(db,"deleted-"+id))return false;
       const prior=await request(db.transaction("events").objectStore("events").get(id));
       let old=null;
       if(prior)old=await cryptoOpen(prior,key);
@@ -230,8 +233,9 @@ export async function openIdentityHistory(owner){
       if(typeof id!=="string"||id.length>200)throw new Error("消息 ID 无效");
       // Delete only this device's encrypted IndexedDB entry. Nothing is
       // sent to the Tox peer, and server-queued messages are not revoked.
-      const tx=db.transaction("events","readwrite");
+      const tx=db.transaction(["events","meta"],"readwrite");
       tx.objectStore("events").delete(id);
+      tx.objectStore("meta").put({id:"deleted-"+id,at:Date.now()});
       await completed(tx);
     }
     async function patchEvent(id,changes){
