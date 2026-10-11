@@ -10,6 +10,7 @@ import {api,getJson,postJson,downloadBlob,shortKey,statusLabel} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
+import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
@@ -133,6 +134,17 @@ export default function App(){
   const [sending,setSending]=useState(false);
   const [ownProfile,setOwnProfile]=useState({name:"",status_message:"",user_status:0});
   const [profileSaving,setProfileSaving]=useState(false);
+  // Permission is only requested from the explicit settings button, never on load.
+  const [notificationsEnabled,setNotificationsEnabled]=useState(()=>{
+    try{return localStorage.getItem("wtox-browser-notifications")==="1"}catch{return false}
+  });
+  const [notificationPermission,setNotificationPermission]=useState(()=>
+    typeof Notification==="undefined"?"unsupported":Notification.permission);
+  const notificationsEnabledRef=useRef(notificationsEnabled);
+  const notifiedMessageIds=useRef(new Set());
+  const friendsRef=useRef([]);
+  useEffect(()=>{friendsRef.current=friends},[friends]);
+  const selfAvatarText=avatarLabel(ownProfile.name?.trim()||"我",user?.public_key);
   // Native Tox status: 0 available, 1 away, 2 busy. When the Tox network
   // connection is down, show a neutral offline dot instead of false green.
   const ownStatus=ownProfile.user_status;
@@ -155,13 +167,13 @@ export default function App(){
     bg:"#1e1e1f",rail:"#232424",sidebar:"#2f2f30",chat:"#1e1e1f",
     search:"#3a3a3b",hover:"#3b3b3d",border:"#373739",
     text:"#f3f3f3",muted:"#9b9b9f",primary:"#16ac71",
-    selected:"#0da769",own:"#35d18c",incoming:"#303032",
+    selected:"#294b3e",own:"#35d18c",incoming:"#303032",
     ownText:"#09291d",incomingText:"#f3f3f3"
   }:{
     bg:"#f5f5f5",rail:"#e6e8ea",sidebar:"#eeeef0",chat:"#f5f5f5",
     search:"#ffffff",hover:"#e3e3e5",border:"#e3e3e5",
     text:"#222326",muted:"#96969c",primary:"#16ac71",
-    selected:"#16ac71",own:"#9df29f",incoming:"#eeeeef",
+    selected:"#dcece4",own:"#9df29f",incoming:"#eeeeef",
     ownText:"#182d1e",incomingText:"#222326"
   };
   useEffect(()=>{
@@ -240,6 +252,61 @@ export default function App(){
       alert("已从当前浏览器删除 "+records.length+" 条聊天记录");
     }catch(e){await refreshHistory(h).catch(()=>{});alert("批量删除失败："+e.message)}
     finally{setDeletingMessages(false)}
+  }
+  const notifyIncoming=useCallback((event,recovered=false)=>{
+    if(!notificationsEnabledRef.current||typeof Notification==="undefined"||
+       Notification.permission!=="granted")return;
+    const isViewing=document.visibilityState==="visible"&&document.hasFocus?.()&&
+      selectedRef.current===event.public_key;
+    if(!shouldNotifyMessage(event,{recovered,isViewing}))return;
+    const id=messageNotificationId(event);
+    if(notifiedMessageIds.current.has(id))return;
+    notifiedMessageIds.current.add(id);
+    if(notifiedMessageIds.current.size>300){
+      notifiedMessageIds.current.delete(notifiedMessageIds.current.values().next().value);
+    }
+    const peer=friendsRef.current.find(friend=>friend.public_key===event.public_key);
+    try{
+      const notification=new Notification("wTox · 新消息",{
+        body:(peer?.name||"Tox 好友")+" 发来一条新消息",
+        tag:"wtox-message-"+event.public_key,
+        icon:"/logo.svg"
+      });
+      notification.onclick=()=>{
+        window.focus();
+        selectedRef.current=event.public_key;
+        setSection("chats");setSelected(event.public_key);setMobileChat(true);
+        notification.close();
+      };
+    }catch{
+      // Some mobile browsers grant permission but do not expose Notification
+      // construction without a service worker. Do not crash message syncing.
+    }
+  },[]);
+  async function toggleBrowserNotifications(){
+    if(notificationsEnabled){
+      notificationsEnabledRef.current=false;
+      setNotificationsEnabled(false);
+      try{localStorage.setItem("wtox-browser-notifications","0")}catch{}
+      return;
+    }
+    if(typeof Notification==="undefined"||!window.isSecureContext){
+      setNotificationPermission("unsupported");
+      alert("当前浏览器或访问方式不支持系统通知，请使用 HTTPS 环境中的兼容浏览器");
+      return;
+    }
+    try{
+      // requestPermission() is called directly inside the user click handler.
+      const permission=await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if(permission!=="granted"){
+        alert(permission==="denied"?"通知已被浏览器拒绝，请到浏览器网站权限中开启":"尚未获得通知权限");
+        return;
+      }
+      notificationsEnabledRef.current=true;
+      setNotificationsEnabled(true);
+      try{localStorage.setItem("wtox-browser-notifications","1")}catch{}
+    }catch(error){alert("无法启用浏览器通知："+error.message)}
   }
   const closeModal=useCallback(()=>setModal(""),[]);
   const alert=useCallback(message=>{
@@ -342,6 +409,7 @@ export default function App(){
         }else if(e.type==="message"){
           await h.persist(e);
           await postJson("/api/ack",{ids:[row.id]});
+          notifyIncoming(e,true);
         }else if(e.type==="friend_request"){
           // Friend requests remain encrypted in the server inbox
           // until accepted/rejected or their seven-day expiry.
@@ -351,7 +419,7 @@ export default function App(){
     }
     await refreshOutbox(h);
     await refreshHistory(h);
-  },[alert,refreshHistory,refreshOutbox,refreshFriendRequests]);
+  },[alert,refreshHistory,refreshOutbox,refreshFriendRequests,notifyIncoming]);
 
   const onRealtime=useCallback(async e=>{
     const h=history.current;
@@ -364,6 +432,7 @@ export default function App(){
           await h.persist(e);
           if(e.id)await postJson("/api/ack",{ids:[e.id]});
           await refreshHistory(h);
+          notifyIncoming(e);
         }catch(error){alert("实时消息本地保存失败："+error.message)}
       }else alert("收到消息，但本地加密历史尚未就绪，请先迁移旧数据");
     }else if(e.type==="message_receipt"){
@@ -386,7 +455,7 @@ export default function App(){
     }else if(["connection","friend_connection"].includes(e.type)){
       refreshNetwork().catch(()=>{});refreshFriends().catch(()=>{});
     }
-  },[alert,refreshHistory,refreshFriends,refreshNetwork,refreshTransfers,refreshFriendRequests]);
+  },[alert,refreshHistory,refreshFriends,refreshNetwork,refreshTransfers,refreshFriendRequests,notifyIncoming]);
 
   const loadIdentity=useCallback(async()=>{
     try{const info=await getJson("/api/me");setUser(info)}
@@ -865,6 +934,25 @@ export default function App(){
         options={[{label:"跟随系统",value:"system"},{label:"浅色",value:"light"},
           {label:"深色",value:"dark"}]}/>
     </Card>
+    <Card size="small" title="新消息通知" className="wt-settings-card">
+      <Typography.Paragraph type="secondary">
+        授权后，新消息可显示浏览器系统通知。需要 HTTPS 和浏览器支持；
+        网页需保持打开，关闭网页后无法接收此类通知。
+      </Typography.Paragraph>
+      <Space wrap>
+        <AntButton onClick={toggleBrowserNotifications}
+          disabled={notificationPermission==="unsupported"||notificationPermission==="denied"&&!notificationsEnabled}
+          type={notificationsEnabled&&notificationPermission==="granted"?"default":"primary"}>
+          {notificationsEnabled&&notificationPermission==="granted"?"关闭新消息通知":"开启新消息通知"}
+        </AntButton>
+        <Typography.Text type="secondary">
+          {notificationPermission==="unsupported"?"浏览器不支持":
+            notificationPermission==="denied"?"浏览器已阻止通知":
+            notificationsEnabled&&notificationPermission==="granted"?"已启用":
+            notificationPermission==="granted"?"权限已允许 · 尚未启用":"尚未授权"}
+        </Typography.Text>
+      </Space>
+    </Card>
     <Card size="small" title="Tox 身份备份" className="wt-settings-card">
       <Typography.Paragraph type="secondary">
         .tox 文件包含身份私钥，请妥善保管，切勿分享。
@@ -974,7 +1062,7 @@ export default function App(){
               <Avatar size={44} shape="square" gap={3} className="wechat-self-avatar"
                 style={{backgroundColor:avatarColor(user.public_key)}}
                 >
-                {avatarLabel(ownProfile.name||"我",user.public_key)}
+                {selfAvatarText}
               </Avatar>
             </Badge>
           </Tooltip>
@@ -1007,7 +1095,7 @@ export default function App(){
                 <Badge dot color={ownBadgeColor} offset={[-2,25]}>
                   <Avatar size={32} shape="square" gap={3} style={{backgroundColor:avatarColor(user.public_key)}}
                     >
-                    {avatarLabel(ownProfile.name||"我",user.public_key)}
+                    {selfAvatarText}
                   </Avatar>
                 </Badge>
               </Tooltip>
@@ -1196,7 +1284,7 @@ export default function App(){
                 onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
                 onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
                 onClickCapture={event=>messageSelectionClick(event,item.id)}>
-                <Bubble content={String(item.text||"")}
+                <Bubble className="wt-conversation-bubble" content={String(item.text||"")}
                   placement={item.direction==="outgoing"?"end":"start"}
                   shape="round" variant="filled"
                   footer={<span className="ant-message-status">

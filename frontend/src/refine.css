@@ -521,3 +521,73 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
   .wt-friend-request-message .ant-message-notice-content{max-width:calc(100vw - 24px);}
   .wt-request-message-content{max-width:calc(100vw - 88px);}
 }
+
+/* A selected chat/contact row must not camouflage green presence indicators. */
+.ant-messenger[data-theme] .wechat-conversation.is-selected{
+  background:var(--wt-selected)!important;
+}
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-conversation-name{
+  color:var(--wt-text)!important;
+}
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-conversation-preview,
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-conversation-side time{
+  color:var(--wt-muted)!important;
+}
+.ant-messenger[data-theme] .wechat-conversation .wechat-presence.online{
+  background:#0bbd70!important;
+  opacity:1!important;
+  width:9px;height:9px;
+  box-shadow:0 0 0 2px var(--wt-sidebar);
+  outline:1px solid color-mix(in srgb,var(--wt-text) 27%,transparent);
+  outline-offset:2px;
+}
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-presence.online{
+  box-shadow:0 0 0 2px var(--wt-selected);
+  outline-color:color-mix(in srgb,var(--wt-text) 38%,transparent);
+}
+.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-unread{
+  background:#ee5757!important;color:white!important;
+}
+/* Ant Design X Bubble uses a flex body. Constrain both the root and internal
+   content to intrinsic width so a short outgoing "123" never becomes a pill. */
+.ant-messenger[data-theme] .wt-message-row>.wt-conversation-bubble.ant-bubble{
+  display:inline-flex!important;
+  width:max-content!important;
+  min-width:0!important;
+  max-width:min(84%,650px)!important;
+  flex:0 1 auto!important;
+}
+.ant-messenger[data-theme] .wt-message-outgoing>.wt-conversation-bubble.ant-bubble{
+  margin-left:auto!important;
+  align-self:flex-end!important;
+}
+.ant-messenger[data-theme] .wt-message-incoming>.wt-conversation-bubble.ant-bubble{
+  margin-right:auto!important;
+  align-self:flex-start!important;
+}
+.ant-messenger[data-theme] .wt-conversation-bubble .ant-bubble-body,
+.ant-messenger[data-theme] .wt-conversation-bubble .ant-bubble-content-wrapper{
+  width:fit-content!important;
+  min-width:0!important;
+  max-width:100%!important;
+  flex:0 1 auto!important;
+}
+.ant-messenger[data-theme] .wt-conversation-bubble .ant-bubble-content{
+  display:block!important;
+  width:fit-content!important;
+  min-width:0!important;
+  max-width:100%!important;
+  flex:0 1 auto!important;
+  white-space:pre-wrap!important;
+  overflow-wrap:anywhere!important;
+  padding:8px 12px!important;
+}
+.ant-messenger[data-theme] .wt-conversation-bubble .ant-bubble-footer{
+  flex:0 0 auto!important;
+  max-width:100%;
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wt-message-row>.wt-conversation-bubble.ant-bubble{
+    max-width:min(88%,440px)!important;
+  }
+}

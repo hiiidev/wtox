@@ -41,7 +41,8 @@ console.log("System themes, settings, Sender attachments, timeline images and to
 assert.match(app,/aria-label="好友请求"/);
 assert.match(app,/onClick=\{\(\)=>setModal\("requests"\)\}/);
 assert.match(app,/friend\.status_message\?\.trim\(\)/);
-assert.match(app,/avatarLabel\(ownProfile\.name\|\|"我",user\.public_key\)/);
+assert.match(app,/selfAvatarText=avatarLabel\(ownProfile\.name\?\.trim\(\)\|\|"我",user\?\.public_key\)/);
+assert.equal((app.match(/\{selfAvatarText\}/g)||[]).length,2);
 assert.match(app,/selectedMessageIds\.size>0/);
 assert.match(app,/onClickCapture=\{event=>messageSelectionClick\(event,item\.id\)\}/);
 assert.match(app,/wt-empty-conversation/);
@@ -98,3 +99,13 @@ assert.match(encryptedHistory,/await meta\(db,"deleted-"\+id\)/);
 assert.match(encryptedHistory,/db\.transaction\(\["events","meta"\],"readwrite"\)/);
 assert.match(encryptedHistory,/tx\.objectStore\("meta"\)\.put\(\{id:"deleted-"\+id/);
 assert.doesNotMatch(app,/wt-select-indicator" aria-hidden/);
+
+assert.match(app,/requestPermission\(\)/);
+assert.match(app,/toggleBrowserNotifications/);
+assert.match(app,/notificationPermission==="denied"/);
+assert.match(app,/notifyIncoming\(e,true\)/);
+assert.match(app,/notifyIncoming\(e\)/);
+assert.match(app,/className="wt-conversation-bubble"/);
+assert.match(refined,/\.wt-conversation-bubble \.ant-bubble-body/);
+assert.match(refined,/width:max-content!important/);
+assert.match(refined,/\.wechat-conversation\.is-selected \.wechat-presence\.online/);

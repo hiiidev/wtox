@@ -40,3 +40,15 @@ assert.equal(ensureAvatarColors("D".repeat(64),[friendA],storage,()=>8)[friendA]
   AVATAR_PALETTE[8],"Different Tox identities need isolated avatar preferences");
 assert.deepEqual(JSON.parse(data.get("wtox-avatar-colors-"+account)),second);
 console.log("Chat scroll anchoring and per-friend Avatar preferences OK");
+
+const {shouldNotifyMessage,messageNotificationId}=await source("frontend/src/message_notifications.js");
+const event={id:"abc",type:"message",direction:"incoming",
+  public_key:friendA,text:"Hello",created:1999};
+assert.equal(shouldNotifyMessage(event),true);
+assert.equal(shouldNotifyMessage({...event,direction:"outgoing"}),false);
+assert.equal(shouldNotifyMessage({...event,type:"message_receipt"}),false);
+assert.equal(shouldNotifyMessage(event,{isViewing:true}),false);
+assert.equal(shouldNotifyMessage(event,{recovered:true,now:2_000_000}),true);
+assert.equal(shouldNotifyMessage(event,{recovered:true,now:2_200_001}),false);
+assert.equal(messageNotificationId(event),"abc");
+assert.equal(messageNotificationId({...event,id:null}),[friendA,1999,"Hello"].join(":"));
