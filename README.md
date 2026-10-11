@@ -4,8 +4,9 @@ A small self-hosted multi-user browser client for the **original Tox network**.
 Target deployment: **VPS + Docker Compose + Caddy HTTPS/WSS + native c-toxcore**.
 No Cloudflare Worker is required.
 
-> **Current status (pre-release):** Native c-toxcore network sessions, friend requests, one-to-one text APIs, browser WebSocket updates, seven-day encrypted pending queue, and browser AES-GCM/IndexedDB chat history are now **implemented in source**. Production Docker build and qTox/aTox real-world interoperability are **not yet verified**. Do not treat this as security-audited or production-ready.
+> **Current status (prototype, unverified):** Native c-toxcore long-running sessions, friend requests, friend list/removal, one-to-one text API, WebSocket events, encrypted pending queue and browser encrypted IndexedDB history are now in source. **Docker native smoke test and real qTox/aTox interoperability have not been confirmed on an actual VPS.** Do not treat this as production-ready or deploy to untrusted users.
 
+See [VPS installation and test plan](docs/DEPLOY.md) before attempting to run it.
 
 ## Agreed product decisions
 
@@ -37,7 +38,7 @@ For step-by-step instructions and a real-client test checklist see [VPS_DEPLOY.m
    ```
 
 4. Keep `.env` private (`chmod 600 .env`) and back up the master key securely off-VPS.
-5. `docker compose up -d --build`. The build runs `python -m backend.tox_identity` to validate basic native Tox creation and identity restore. If this fails, **do not bypass the check**. Build success does not prove network interoperability.
+5. `docker compose up -d --build`. The build runs `python -m backend.tox_smoke` to check identity creation/restore, callbacks, native event loop and basic friend-list access. If this fails, **do not bypass the check**. Build success does not prove network interoperability.
 6. Open `https://chat.example.com`: enter the shared website access password, register or sign into a personal account, then create or import a **raw unencrypted** Tox savedata file and download an encrypted-at-rest but **raw on export** private backup. Encrypted aTox-specific file formats and historic messages cannot be imported yet.
 
 Caddy is a full part of `compose.yml`; it automatically obtains TLS certificates and proxies WebSocket upgrades to the internal app. The app port 8000 is *not published* to the public internet.
@@ -70,6 +71,12 @@ For local development only, run `docker compose -f compose.dev.yml up --build` a
 - `POST /api/messages` — direct text send to a friend public key
 - `GET /api/pending`, `POST /api/ack` — encrypted pending queue with browser acknowledgement
 - `WS /ws` — same-origin authenticated message/friend/connection event stream
+- `GET /api/network` — per-user Tox network status
+- `GET /api/friends`, `POST /api/friends`, `POST /api/friends/accept` — native friend operations
+- `DELETE /api/friends/{public_key}` — remove friend and save profile
+- `POST /api/messages` — send Tox one-to-one text
+- `GET /api/pending`, `POST /api/ack` — encrypted temporary message delivery and ACK
+- `WS /ws` — per-account authenticated messages / requests / status events
 - `GET /health` — minimal container health check
 
 See [development milestones](docs/MILESTONES.md). GitHub Actions checks Python/API tests, frontend JavaScript syntax and Compose syntax. The full native Docker build test remains to be confirmed. **Passing mocked Python tests does not prove native library interoperability.**
