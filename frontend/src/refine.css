@@ -841,3 +841,47 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
 .ant-messenger[data-theme] .wechat-conversation:not(.is-selected):hover{
   background:var(--wt-hover)!important;
 }
+
+/* Touch bottom bar: larger tap targets and consistently visible active icons.
+   Ant Design Badge has its own color token; inherit the active tab color. */
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wechat-mobile-tabs,
+  .ant-messenger[data-theme].show-me .wt-mobile-me-page>.wechat-mobile-tabs{
+    min-height:calc(74px + env(safe-area-inset-bottom))!important;
+    height:calc(74px + env(safe-area-inset-bottom))!important;
+    padding:0 4px env(safe-area-inset-bottom)!important;
+    flex-shrink:0!important;
+    align-items:stretch!important;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button,
+  .ant-messenger[data-theme] .wt-mobile-me-page .wechat-mobile-tabs button{
+    flex:1 1 0;min-width:0!important;min-height:66px!important;
+    padding:7px 3px 5px!important;gap:5px!important;
+    display:flex!important;flex-direction:column!important;
+    align-items:center!important;justify-content:center!important;
+    font-size:12px!important;line-height:1.25!important;
+    font-weight:500;
+    color:var(--wt-muted)!important;
+    background:transparent!important;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button.active,
+  .ant-messenger[data-theme] .wt-mobile-me-page .wechat-mobile-tabs button.active{
+    color:var(--wt-primary)!important;
+    font-weight:650!important;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button .wt-nav-chat-badge.ant-badge{
+    color:inherit!important;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button.active .wt-nav-chat-badge.ant-badge,
+  .ant-messenger[data-theme] .wt-mobile-me-page .wechat-mobile-tabs button.active .wt-nav-chat-badge.ant-badge{
+    color:var(--wt-primary)!important;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button svg{
+    width:28px!important;height:28px!important;
+    fill:currentColor!important;display:block!important;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button span:not(.ant-badge-count){
+    color:inherit;
+  }
+}

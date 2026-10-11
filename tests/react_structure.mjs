@@ -53,8 +53,10 @@ assert.match(store,/encrypt\(text\.encode\("utf-8"\)\)/);
 assert.match(mgr,/await asyncio\.sleep\(3\)/);
 assert.ok(app.includes('Every send enters the encrypted VPS outbox'),
   "Client must submit all text through VPS queue");
-assert.ok(app.includes('flushBrowserQueue'),
-  "Old browser-only records must be transferred after upgrade");
+assert.ok(app.includes('migrateLegacyBrowserQueue') &&
+  app.includes('await migrateLegacyBrowserQueue(h)') &&
+  !app.includes('flushBrowserQueue'),
+  "Legacy messages must migrate once without browser polling");
 assert.ok(python.includes('entry=store.enqueue_outbox('),
   "API must always store messages in VPS encrypted outbox");
 assert.ok(!python.includes('if store.offline_queue_enabled(uid)'),

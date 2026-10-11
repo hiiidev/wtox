@@ -181,3 +181,17 @@ assert.match(app,/record\.delivery_status\)\)return "正在发送"/);
 assert.match(app,/title="VPS Tox 网络与消息队列"/);
 assert.match(app,/networkDiagnostics\?\.queued/);
 assert.match(app,/await refreshOutbox\(h\);\s*for\(const row of data\.pending/);
+
+assert.match(app,/const migrateLegacyBrowserQueue=useCallback/);
+assert.match(app,/if\(!pending\.length\)return/);
+assert.match(app,/await migrateLegacyBrowserQueue\(h\)/);
+assert.doesNotMatch(app,/flushBrowserQueue|浏览器待发队列检查失败/);
+assert.doesNotMatch(app,/<Tooltip title=\{ownStatusLabel\}>/);
+assert.doesNotMatch(app,/<Tooltip title="好友请求">/);
+assert.doesNotMatch(app,/<Tooltip title="添加好友">/);
+assert.doesNotMatch(app,/<Tooltip title=\{selectedFriend\?"查看好友资料":""\}>/);
+assert.doesNotMatch(app,/<Tooltip title=\{selectedFriend\?"更多操作":""\}>/);
+assert.doesNotMatch(app,/aria-label="设置与备份" title="设置"/);
+assert.match(refined,/button\.active \.wt-nav-chat-badge\.ant-badge/);
+assert.match(refined,/height:calc\(74px \+ env\(safe-area-inset-bottom\)\)!important/);
+assert.match(refined,/\.wechat-mobile-tabs button svg\{[\s\S]*?width:28px!important/);

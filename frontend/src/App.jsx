@@ -151,7 +151,6 @@ export default function App(){
   // Native Tox status: 0 available, 1 away, 2 busy. When the Tox network
   // connection is down, show a neutral offline dot instead of false green.
   const ownStatus=ownProfile.user_status;
-  const ownStatusLabel=network>0?["在线","离开","忙碌"][ownStatus]||"在线":"离线";
   const ownBadgeColor=network>0?["#52c41a","#faad14","#ff4d4f"][ownStatus]||"#52c41a":"#8c8c8c";
 
   const [visualStyle,setVisualStyle]=useState(()=>{
@@ -428,42 +427,48 @@ export default function App(){
     const result=await getJson("/api/outbox");
     if(await h.applyOutboxStatuses(result.messages||[]))await refreshHistory(h);
   },[refreshHistory]);
-  const browserFlushBusy=useRef(false);
-  const flushBrowserQueue=useCallback(async(list=null,h=history.current)=>{
-    if(browserFlushBusy.current||!h?.ready())return;
-    browserFlushBusy.current=true;
+  // Legacy-only migration for old, browser-owned messages. New messages are
+  // always encrypted into the VPS outbox by POST /api/messages.
+  // Run this once when the local identity history unlocks, not in timers.
+  const migrateLegacyBrowserQueue=useCallback(async(h=history.current)=>{
+    if(!h?.ready())return;
     try{
-      const peers=list||(await getJson("/api/friends")).friends||[];
-      const pending=(await h.read()).filter(m=>m.type==="message"&&
-        m.direction==="outgoing"&&m.delivery_status==="queued_local");
-      for(const item of pending.slice(0,30)){
-        // Migrate historical browser-only queued records into the mandatory
-        // encrypted VPS queue, even if the recipient is still offline.
-        // Claim locally before an HTTP request. After an uncertain network
-        // failure we must NOT resend silently (could duplicate a Tox message).
+      const pending=(await h.read()).filter(item=>item.type==="message" &&
+        item.direction==="outgoing" && item.delivery_status==="queued_local");
+      if(!pending.length)return; // Most accounts never need this migration.
+      let blocked=0;
+      for(const item of pending){
+        if(history.current!==h)break;
+        // An interrupted request may have been submitted already; mark it
+        // uncertain rather than silently retrying and duplicating Tox messages.
         await h.patchEvent(item.id,{delivery_status:"dispatching_local"});
         try{
           const result=await postJson("/api/messages",{
             public_key:item.public_key,text:item.text,client_id:item.id
           });
           await h.patchEvent(item.id,{
-            delivery_status:result.status==="queued"?"queued":"sent",
-            outbox_id:result.id||undefined,
+            delivery_status:["queued","sent","failed","uncertain"].includes(result.status)
+              ?result.status:"uncertain",
+            outbox_id:result.id||item.id,
             session_id:result.session_id,
             message_id:result.message_id
           });
         }catch(error){
-          // A definite server-side status code means no native send occurred.
-          // Network loss or 5xx can be ambiguous and require user action.
+          const definiteRejection=error.status>=400 && error.status<500;
           await h.patchEvent(item.id,{
-            delivery_status:(error.status>=400&&error.status<500)?"queued_local":"uncertain",
+            delivery_status:definiteRejection?"queued_local":"uncertain",
             delivery_error:error.message
           });
+          blocked++;
         }
       }
-      await refreshHistory(h);
-    }catch(error){alert("浏览器待发队列检查失败："+error.message)}
-    finally{browserFlushBusy.current=false}
+      if(history.current===h){
+        await refreshHistory(h);
+        if(blocked)alert(`有 ${blocked} 条旧版待发消息未能迁移，请检查好友关系；不会自动重复发送`,"warning");
+      }
+    }catch(error){
+      if(history.current===h)alert("旧版本地待发消息迁移失败："+error.message,"error");
+    }
   },[alert,refreshHistory]);
   const recoverPending=useCallback(async(h=history.current)=>{
     if(!h?.ready())return;
@@ -596,12 +601,12 @@ export default function App(){
           // Native Toxcore could receive attachments while this browser was
           // closed. Completed encrypted files are listed persistently by VPS.
           await refreshTransfers();
-          await flushBrowserQueue(null,h);
+          await migrateLegacyBrowserQueue(h);
         }
       }catch(error){if(!dead)alert("无法打开本地加密历史："+error.message)}
     })();
     return()=>{dead=true;history.current?.close();history.current=null};
-  },[user?.public_key,recoverPending,refreshTransfers,alert]);
+  },[user?.public_key,recoverPending,refreshTransfers,migrateLegacyBrowserQueue,alert]);
 
   // Encrypted image previews are temporary browser data too; remove after
   // seven days even when the user leaves the application open.
@@ -625,7 +630,7 @@ export default function App(){
       ws.onopen=()=>{
         lastMessage.current=Date.now();
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
-          refreshTransfers(),flushBrowserQueue()]);
+          refreshTransfers()]);
       };
       ws.onmessage=msg=>{
         lastMessage.current=Date.now();
@@ -635,10 +640,10 @@ export default function App(){
     };
     connect();
     const friendTimer=setInterval(()=>{
-      if(!dead){refreshFriends().catch(()=>{});refreshNetwork().catch(()=>{});flushBrowserQueue().catch(()=>{})}
+      if(!dead){refreshFriends().catch(()=>{});refreshNetwork().catch(()=>{})}
     },12000);
     const pendingTimer=setInterval(()=>{
-      if(!dead){recoverPending().catch(()=>{});flushBrowserQueue().catch(()=>{})}
+      if(!dead)recoverPending().catch(()=>{});
     },8000);
     // Recover missed file events after disconnects, even without text events.
     const transferTimer=setInterval(()=>{
@@ -667,7 +672,7 @@ export default function App(){
       if(ws){ws.onclose=null;ws.close()}
       socket.current=null;
     };
-  },[user?.public_key,onRealtime,recoverPending,flushBrowserQueue,refreshFriends,
+  },[user?.public_key,onRealtime,recoverPending,refreshFriends,
     refreshNetwork,refreshTransfers,alert]);
 
   useEffect(()=>{
@@ -1185,34 +1190,32 @@ export default function App(){
     <div className="wtox-workspace ant-workspace wechat-layout">
       <nav className="wechat-rail" aria-label="主导航">
         <AntButton type="text" className="wechat-rail-avatar" aria-label="我的 Tox 资料"
-          title="我的 Tox 资料" onClick={()=>setModal("profile")}>
-          <Tooltip title={ownStatusLabel}>
-            <Badge dot color={ownBadgeColor} offset={[-2,35]}>
+          onClick={()=>setModal("profile")}>
+          <Badge dot color={ownBadgeColor} offset={[-2,35]}>
               <Avatar size={44} shape="square" gap={3} className="wechat-self-avatar"
                 style={{backgroundColor:avatarColor(user.public_key)}}
                 >
                 {selfAvatarText}
               </Avatar>
             </Badge>
-          </Tooltip>
         </AntButton>
         <div className="wechat-rail-primary">
           <button type="button" className={"wechat-rail-button "+(section==="chats"?"is-active":"")}
             aria-label={chatNavLabel} aria-current={section==="chats"?"page":undefined}
-            title="聊天" onClick={()=>{setSection("chats");setMobileChat(false)}}>
+            onClick={()=>{setSection("chats");setMobileChat(false)}}>
             <Badge count={totalUnread} overflowCount={99} size="small" className="wt-nav-chat-badge">
               <RailIcon kind="chats"/>
             </Badge>
           </button>
           <button type="button" className={"wechat-rail-button "+(section==="contacts"?"is-active":"")}
             aria-label="通讯录" aria-current={section==="contacts"?"page":undefined}
-            title="通讯录" onClick={()=>{setSection("contacts");setMobileChat(false)}}>
+            onClick={()=>{setSection("contacts");setMobileChat(false)}}>
             <RailIcon kind="contacts"/>
           </button>
         </div>
         <div className="wechat-rail-bottom">
           <button type="button" className="wechat-rail-button"
-            aria-label="设置与备份" title="设置" onClick={()=>setModal("settings")}>
+            aria-label="设置与备份" onClick={()=>setModal("settings")}>
             <RailIcon kind="settings"/>
           </button>
         </div>
@@ -1222,29 +1225,23 @@ export default function App(){
           <div className="wechat-mobile-heading">
             <AntButton type="text" className="wechat-mobile-avatar" aria-label="我的 Tox 资料"
               onClick={()=>setModal("profile")}>
-              <Tooltip title={ownStatusLabel}>
-                <Badge dot color={ownBadgeColor} offset={[-3,35]}>
+              <Badge dot color={ownBadgeColor} offset={[-3,35]}>
                   <Avatar size={40} shape="square" gap={3} style={{backgroundColor:avatarColor(user.public_key)}}
                     >
                     {selfAvatarText}
                   </Avatar>
                 </Badge>
-              </Tooltip>
             </AntButton>
             <strong>{section==="contacts"?"通讯录":"聊天"}</strong>
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
           <div className="wt-list-actions">
-            <Tooltip title="好友请求">
-              <Badge count={friendRequests.length} size="small" color="#ef4444">
+            <Badge count={friendRequests.length} size="small" color="#ef4444">
                 <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
                   onClick={()=>setModal("requests")}/>
               </Badge>
-            </Tooltip>
-            <Tooltip title="添加好友">
               <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
                 onClick={()=>setModal("add")}/>
-            </Tooltip>
           </div>
         </div>
         <div className="wechat-search">
@@ -1323,7 +1320,8 @@ export default function App(){
           {settingsContent}
         </div>
         <nav className="wechat-mobile-tabs" aria-label="手机导航">
-          <button type="button" aria-label={chatNavLabel} onClick={()=>setSection("chats")}>
+          <button type="button" aria-label={chatNavLabel}
+            onClick={()=>{setSection("chats");setMobileChat(false)}}>
             <Badge count={totalUnread} overflowCount={99} size="small" className="wt-nav-chat-badge">
               <RailIcon kind="chats"/>
             </Badge>
@@ -1342,8 +1340,7 @@ export default function App(){
           <div className="ant-chat-identity">
             <AntButton className="ant-mobile-back" aria-label="返回联系人"
               icon={<ArrowLeftOutlined/>} onClick={()=>setMobileChat(false)}/>
-            <Tooltip title={selectedFriend?"查看好友资料":""}>
-              <AntButton type="text" className="wt-peer-avatar-button"
+            <AntButton type="text" className="wt-peer-avatar-button"
                 aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
                 onClick={()=>setPeerDetailsOpen(true)}>
                 <Avatar size={40} gap={4} className="ant-chat-avatar"
@@ -1351,7 +1348,6 @@ export default function App(){
                   {selectedFriend?avatarLabel(selectedFriend.name,selectedFriend.public_key):"✦"}
                 </Avatar>
               </AntButton>
-            </Tooltip>
             <div className="ant-peer-title">
               <div className="wt-peer-name-row">
                 <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
@@ -1362,8 +1358,7 @@ export default function App(){
               </small>
             </div>
           </div>
-          <Tooltip title={selectedFriend?"更多操作":""}>
-            <Dropdown trigger={["click"]} disabled={!selectedFriend}
+          <Dropdown trigger={["click"]} disabled={!selectedFriend}
               menu={{
                 items:[
                   {key:"profile",icon:<UserOutlined/>,label:"查看好友资料"},
@@ -1381,7 +1376,6 @@ export default function App(){
                   <circle cx="19" cy="12" r="2.25"/>
                 </svg>} aria-label="更多操作" disabled={!selectedFriend}/>
             </Dropdown>
-          </Tooltip>
         </div>
         <div className="wt-thread-shell">
           {selectedMessageIds.size>0&&<div className="wt-batch-toolbar" role="toolbar" aria-label="批量删除聊天记录">
