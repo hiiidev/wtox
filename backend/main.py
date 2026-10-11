@@ -114,7 +114,7 @@ def export_legacy_profile(request: Request):
     Cannot sign in to the new site with a username/password; this endpoint
     only downloads an existing profile before the legacy cookie expires.
     """
-    legacy_uid = store.session_user(request.cookies.get("wtox_session"))
+    legacy_uid = store.legacy_session_user(request.cookies.get("wtox_session"))
     if not legacy_uid:
         raise HTTPException(401, "旧会话已过期，请使用之前备份的 .tox 文件")
     saved = store.read_profile(legacy_uid)
