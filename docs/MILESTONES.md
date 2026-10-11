@@ -4,7 +4,7 @@
 
 - [x] Private GitHub repository, Docker Compose skeleton
 - [x] Caddy included for automatic HTTPS/WSS reverse proxy
-- [x] Shared website entrance password and signed HttpOnly cookie
+- [x] Remove shared site password; use Tox identity session for private endpoints and WebSocket
 - [x] Tox Savedata is the personal login credential (create/download or upload/import)
 - [x] Remove public username/password authentication routes, retain safe legacy recovery export
 - [x] Match raw Tox private-key proof rather than trust public Tox ID
