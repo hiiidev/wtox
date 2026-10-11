@@ -1,0 +1,9 @@
+# Local testing only: no TLS; never expose port 8000 to the public internet.
+services:
+  web:
+    build: .
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data
