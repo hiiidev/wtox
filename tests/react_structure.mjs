@@ -125,9 +125,9 @@ assert.ok(app.includes('peerProfileContent') &&
   "Peer details must use responsive Ant Design components");
 assert.ok(app.includes('onPointerDown={event=>startLongPress(item,event)}'),
   "Pointer long press must support mouse and touch in message timeline");
-assert.ok(app.includes('selectedFriend?.status_message?.trim()')&&
+assert.ok(app.includes('chatPresenceText(selectedFriend)')&&
   app.includes('<Badge status={peerStatusColor} text={peerStatus}/>'),
-  "Peer state should be an Ant Badge by the nickname and status message below");
+  "Peer details retain the status badge; chat subtitle formats the native online/offline presence");
 assert.ok(app.includes('threadEl')&&app.includes('onScroll={onThreadScroll}')&&
   app.includes('newBelowCount>0')&&app.includes('scrollToLatest'),
   "Chat history should auto-follow bottom and announce messages when browsing old history");
