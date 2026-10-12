@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import {chatTime} from "../frontend/src/chat_time.js";
+const current=new Date(2026,9,12,21,5).getTime();
+const today=new Date(2026,9,12,20,59).getTime();
+const yesterday=new Date(2026,9,11,21,10).getTime();
+const lastMonth=new Date(2026,8,25,18,30).getTime();
+const lastYear=new Date(2025,11,31,23,12).getTime();
+assert.match(chatTime(today,current),/^20:59$/);
+assert.match(chatTime(yesterday,current),/^昨天 21:10$/);
+assert.match(chatTime(lastMonth,current),/^09月25日 18:30$/);
+assert.match(chatTime(lastYear,current),/^2025年12月31日 23:12$/);
+assert.equal(chatTime("not-a-date",current),"");
+console.log("Chat timestamp date boundaries and formats OK");
