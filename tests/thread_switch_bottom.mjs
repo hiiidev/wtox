@@ -37,6 +37,6 @@ assert.ok(app.includes("onTouchMove={event=>{"));
 assert.ok(app.includes("dy>10&&dy>Math.abs(dx)"),
   "Horizontal touch gestures must not pause following");
 assert.ok(app.includes('onWheel={event=>{if(event.deltaY<0)noteManualUpIntent()}'));
-assert.ok(app.includes("didUserScrollUp(lastThreadScrollTop.current,element.scrollTop"),
+assert.ok(app.includes("didUserScrollUp(previousTop,element.scrollTop"),
   "Following pauses only after measured upward scroll");
 console.log("Peer switch aligns at bottom before paint and only real scrolling cancels follow");
