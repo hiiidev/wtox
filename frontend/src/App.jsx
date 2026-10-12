@@ -27,6 +27,7 @@ import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_pr
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
 import {translationAction,showQuickTranslate} from "./translation_action.js";
 import {sanitizePhoto,isPhotoAttachment,MAX_SOURCE_PHOTO_BYTES} from "./photo_sanitize.js";
+import {PreparedAttachmentPreview} from "./PreparedAttachmentPreview.jsx";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {activeConversationPeer,unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
@@ -2502,7 +2503,7 @@ export default function App(){
       </Space>}>
       {uploadFile&&<Space orientation="vertical" size="small"
         className="wt-send-file-preview">
-        <FileCard name={uploadFile.name} size="small"/>
+        <PreparedAttachmentPreview file={uploadFile}/>
         <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
         <Typography.Text type="secondary">
           {/^photo-[0-9a-f]{12}\.(?:jpg|png|webp)$/i.test(uploadFile.name)
