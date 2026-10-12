@@ -21,7 +21,7 @@ import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
-const transferText={uploading:"正在上传",offered:"等待接受",waiting:"等待对方接受",receiving:"接收中",sending:"发送中",
+const transferText={uploading:"正在上传",uncertain:"发送已受理，状态待确认",offered:"等待接受",waiting:"等待对方接受",receiving:"接收中",sending:"发送中",
   completed:"已完成",failed:"失败",cancelled:"已取消"};
 function stateText(record){
   if(record.delivery_status==="delivered"||record.delivery_status==="read")return "已送达";
@@ -1038,14 +1038,27 @@ export default function App(){
   }
   async function sendFile(){
     const file=uploadFile;
-    if(!selected||!online(selectedFriend)){alert("附件要求双方在线");return}
+    const peer=selectedRef.current;
+    if(!peer||!online(friends.find(friend=>friend.public_key===peer))){
+      alert("附件要求双方在线");return;
+    }
     if(!file||file.size<1||file.size>5*1024*1024){
       alert("附件大小需为 1 字节至 5 MiB");return;
     }
+    if(busy)return;
+    const localId="pending-file-"+crypto.randomUUID();
+    const optimistic={
+      id:localId,type:"file",direction:"outgoing",public_key:peer,
+      file_id:null,file_name:file.name,file_size:file.size,file_progress:0,
+      file_state:"uploading",at:Date.now(),previewBlob:file
+    };
+    setPendingFiles(previous=>[...previous,optimistic]);
+    setUploadFile(null);
+    // File size can take seconds to upload: show bubble before the request.
     setBusy(true);
     let transfer;
     try{
-      const url="/api/files/send?peer="+encodeURIComponent(selected)+
+      const url="/api/files/send?peer="+encodeURIComponent(peer)+
         "&name="+encodeURIComponent(file.name);
       const response=await api(url,{
         method:"POST",raw:true,
@@ -1054,32 +1067,45 @@ export default function App(){
       });
       transfer=await response.json();
     }catch(error){
+      setPendingFiles(previous=>previous.map(entry=>entry.id===localId
+        ? {...entry,file_state:"failed"}:entry));
       alert("提交附件失败："+error.message);
-      setBusy(false);
-      return;
+      setBusy(false);return;
     }
-    // The native API already accepted the send. Never suggest resending
-    // merely because a local image thumbnail or history write failed.
-    setUploadFile(null);
+    // The native API already accepted the send. Never imply retry just
+    // because local encrypted history/caching fails after acceptance.
     if(attachmentInput.current)attachmentInput.current.value="";
+    const h=history.current;
+    let stored=false;
     try{
-      const h=history.current;
-      if(h?.ready()){
-        await h.persistFile(transfer);
-        if(/\.(png|jpe?g|webp|gif)$/i.test(file.name)&&file.size<=5*1024*1024){
-          const mime=file.type.startsWith("image/")?file.type:
-            /\.png$/i.test(file.name)?"image/png":
-            /\.webp$/i.test(file.name)?"image/webp":
-            /\.gif$/i.test(file.name)?"image/gif":"image/jpeg";
-          try{
-            await h.cacheImage(transfer.id,new Blob([file],{type:mime}));
-          }catch(error){alert("附件已提交，但图片本地缓存失败："+error.message)}
+      if(!h?.ready())throw new Error("本地加密历史尚未就绪");
+      await h.persistFile(transfer);
+      if(/\\.(png|jpe?g|webp|gif)$/i.test(file.name)){
+        const mime=file.type.startsWith("image/")?file.type:
+          /\\.png$/i.test(file.name)?"image/png":
+          /\\.webp$/i.test(file.name)?"image/webp":
+          /\\.gif$/i.test(file.name)?"image/gif":"image/jpeg";
+        const blob=new Blob([file],{type:mime});
+        if(await decodedImage(blob)){
+          await h.cacheImage(transfer.id,blob);
+          setImageCacheRevision(n=>n+1);
         }
-        await refreshHistory(h);
       }
-    }catch(error){alert("附件已提交，但本地历史保存失败："+error.message)}
+      await refreshHistory(h);
+      stored=true;
+    }catch(error){
+      alert("附件已被 Toxcore 接受，但本地记录或图片缓存失败："+error.message);
+    }
+    if(stored){
+      setPendingFiles(previous=>previous.filter(entry=>entry.id!==localId));
+    }else{
+      // Keep the user-visible bubble instead of silently losing an accepted
+      // attachment; do not recommend resending to avoid duplicate files.
+      setPendingFiles(previous=>previous.map(entry=>entry.id===localId
+        ? {...entry,file_state:"uncertain"}:entry));
+    }
     try{await refreshTransfers()}catch(error){
-      alert("附件已提交，但传输列表同步失败："+error.message)
+      console.warn("附件列表同步失败",error);
     }
     setBusy(false);
   }
