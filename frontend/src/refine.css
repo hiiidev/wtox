@@ -1436,3 +1436,18 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     -webkit-touch-callout:none;touch-action:pan-y;
   }
 }
+
+/* Separate site-entry password gate. Reuse identity login's consistent
+   neutral surfaces without exposing environment password requirements. */
+.wt-site-gate-card .wtox-auth-subtitle.ant-typography{
+  margin-bottom:24px!important;
+}
+.wt-site-gate-card .wtox-auth-form .ant-form-item{
+  margin-bottom:18px;
+}
+.wt-site-gate-card .wt-site-gate-error.ant-typography{
+  margin:0 0 16px!important;font-size:13px;line-height:1.5;
+}
+.wt-site-gate-card .ant-btn-primary{
+  width:100%;height:46px!important;
+}
