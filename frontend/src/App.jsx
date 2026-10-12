@@ -343,10 +343,19 @@ export default function App(){
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
   const [preparingPhoto,setPreparingPhoto]=useState(false);
   const attachmentPreparationId=useRef(0);
+  const attachmentPreparedFor=useRef(null);
   const [pendingFiles,setPendingFiles]=useState([]);
   const [imageCacheRevision,setImageCacheRevision]=useState(0);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),lastMessage=useRef(0);
+  useEffect(()=>{
+    // Never leave a prepared file attached to a different peer when switching
+    // chats; invalidate any still-running image conversion first.
+    attachmentPreparationId.current++;
+    attachmentPreparedFor.current=null;
+    setUploadFile(null);
+    setPreparingPhoto(false);
+  },[selected,user?.public_key]);
   // Persist a random color for each self identity before the first visible
   // frame; returning to an identity reuses its saved color.
   useLayoutEffect(()=>{
@@ -1539,6 +1548,7 @@ export default function App(){
       if(op!==attachmentPreparationId.current || selectedRef.current!==peer)return;
       if(processed.size<1 || processed.size>MAX_ATTACHMENT_BYTES)
         throw new Error("压缩后附件超过 15 MB");
+      attachmentPreparedFor.current=peer;
       setUploadFile(processed);
     }catch(error){
       if(op===attachmentPreparationId.current)
@@ -1550,6 +1560,9 @@ export default function App(){
   async function sendFile(){
     const file=uploadFile;
     const peer=selectedRef.current;
+    if(!peer || attachmentPreparedFor.current!==peer){
+      alert("聊天对象已变化，请重新选择附件","error");return;
+    }
     if(!peer||!online(friends.find(friend=>friend.public_key===peer))){
       alert("附件要求双方在线");return;
     }
@@ -1564,6 +1577,7 @@ export default function App(){
       file_state:"uploading",at:Date.now(),previewBlob:file
     };
     setPendingFiles(previous=>[...previous,optimistic]);
+    attachmentPreparedFor.current=null;
     setUploadFile(null);
     // File size can take seconds to upload: show bubble before the request.
     setBusy(true);
@@ -2348,7 +2362,9 @@ export default function App(){
         <FileCard name={uploadFile.name} size="small"/>
         <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
         <Typography.Text type="secondary">
-          照片将以重新编码、已清理元数据的文件发送；GIF 动图保持原样。
+          {/^photo-[0-9a-f]{12}\.(?:jpg|png|webp)$/i.test(uploadFile.name)
+            ? "照片已在本地压缩，清除 EXIF/GPS 等信息并重命名。"
+            : "普通文件按原样发送；GIF 动图保持动画且不执行照片元数据清理。"}
         </Typography.Text>
       </Space>}
     </AntModal>
