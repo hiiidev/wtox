@@ -1611,12 +1611,13 @@ export default function App(){
       return;
     }
     setRemovingFriend(true);
-    let remoteDeleted=false;
+    let remoteDeleted=false,localDeleted=false;
     try{
       // Keep local records if the Tox friend removal request fails.
       await api("/api/friends/"+encodeURIComponent(publicKey),{method:"DELETE"});
       remoteDeleted=true;
       await h.deleteConversation(publicKey);
+      localDeleted=true;
       drafts.current.delete(publicKey);
       setSeen(previous=>{
         if(!(publicKey in previous))return previous;
@@ -1631,11 +1632,11 @@ export default function App(){
           window.history.replaceState({...window.history.state,wtoxChat:false},"",window.location.href);
         clearMobileConversation();
       }
-      await refreshHistory(h);
-      await refreshFriends();
+      await refreshHistory(h).catch(()=>{});
+      await refreshFriends().catch(()=>{});
       alert("已删除好友及此浏览器中的聊天记录","success");
     }catch(error){
-      if(remoteDeleted){
+      if(remoteDeleted&&!localDeleted){
         // There is no atomic transaction across Toxcore and IndexedDB. Keep
         // an explicit local cleanup action available instead of claiming all
         // data was removed when IndexedDB failed.
@@ -1643,6 +1644,10 @@ export default function App(){
         setConversationDeletePeer(publicKey);
         await refreshFriends().catch(()=>{});
         alert("好友已移除，但本地清理未完成。请使用弹出的聊天记录删除操作重试："+error.message,"error");
+      }else if(remoteDeleted){
+        // Storage deletion committed, but later local UI maintenance failed.
+        await refreshFriends().catch(()=>{});
+        alert("好友及聊天记录已删除，但界面刷新未完成："+error.message,"error");
       }else alert("删除好友失败："+error.message,"error");
     }finally{setRemovingFriend(false)}
   }
