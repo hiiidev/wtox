@@ -23,7 +23,7 @@ import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./att
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries,scrollThreadToBottom,alignFullThreadBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
-import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
+import {contactPresenceText,chatPresenceText,lastOnlineText} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
 import {translationAction,showQuickTranslate} from "./translation_action.js";
 import {sanitizePhoto,isPhotoAttachment,MAX_SOURCE_PHOTO_BYTES} from "./photo_sanitize.js";
@@ -1207,9 +1207,9 @@ export default function App(){
                   </span>
                 </div>
               </div>
-              {!online(selectedFriend)&&formatLastOnline(selectedFriend.last_online)&&
+              {!online(selectedFriend)&&lastOnlineText(selectedFriend.last_online)&&
                 <Typography.Text type="secondary" className="wt-peer-last-online">
-                  最后在线：{formatLastOnline(selectedFriend.last_online)}
+                  {lastOnlineText(selectedFriend.last_online)}
                 </Typography.Text>}
               <Divider/>
               <Typography.Text type="secondary">状态消息</Typography.Text>
