@@ -30,6 +30,7 @@ jobs:
         working-directory: frontend
       - run: node tests/check_static_assets.mjs
       - run: node tests/pwa_notifications.mjs
+      - run: node tests/pwa_experience.mjs
       - run: node tests/react_structure.mjs
       - run: node tests/chat_ui.mjs
       - run: node tests/chat_time.mjs
