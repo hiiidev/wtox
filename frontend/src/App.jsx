@@ -261,7 +261,7 @@ export default function App(){
   const [loginPassword,setLoginPassword]=useState("");
   const [backupPassword,setBackupPassword]=useState("");
   const [friendId,setFriendId]=useState("");
-  const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
+  const [requestText,setRequestText]=useState("");
   const [friendQrOpen,setFriendQrOpen]=useState(false);
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
@@ -430,7 +430,7 @@ export default function App(){
   const closeAddFriend=useCallback(()=>{
     setModal("");
     setFriendId("");
-    setRequestText("你好，我想添加你为 Tox 好友");
+    setRequestText("");
     setFriendQrOpen(false);
   },[]);
   const handleFriendQrScanned=useCallback(toxId=>{
@@ -1117,7 +1117,7 @@ export default function App(){
     }
     try{
       const data=await postJson("/api/friends",{address,
-        message:requestText.trim()});
+        message:requestText.trim()||"你好，我想添加你为 Tox 好友"});
       await refreshFriends();
       closeAddFriend();
       selectFriend(data.public_key);
@@ -1959,13 +1959,13 @@ export default function App(){
                 {friendId.trim().length} / 76 位
               </Typography.Text>
             </Form.Item>
-            <Form.Item label="好友申请附言">
+            <Form.Item label="好友申请附言（选填）">
               <Input value={requestText} maxLength={256}
                 onChange={e=>setRequestText(e.target.value)}
-                placeholder="向好友介绍自己"/>
+                placeholder="留空将使用默认好友申请问候"/>
             </Form.Item>
             <AntButton type="primary" htmlType="submit" block size="large"
-              disabled={!parseScannedToxId(friendId)||!requestText.trim()}>
+              disabled={!parseScannedToxId(friendId)}>
               发送好友请求
             </AntButton>
           </Form>
