@@ -21,7 +21,7 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
-import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
+import {isNearBottom,countNewEntries,scrollThreadToBottom,shouldFollowThreadScroll} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
 import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
@@ -1244,7 +1244,9 @@ export default function App(){
     const atBottom=isNearBottom(element);
     // React may dispatch the previous peer's programmatic scroll event after
     // the next peer mounted. Keep following until its layout is stable.
-    if(Date.now()>=autoScrollLockUntil.current)followLatest.current=atBottom;
+    if(autoScrollLockUntil.current>0)
+      followLatest.current=shouldFollowThreadScroll(element,autoScrollLockUntil.current);
+    else followLatest.current=atBottom;
     if(atBottom)setNewBelowCount(count=>count===0?count:0);
     setThreadScrolling(true);
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
