@@ -61,7 +61,7 @@ class SlidingToxSessionTests(unittest.TestCase):
     def test_active_get_renews_both_expiry_and_browser_cookie(self):
         self.assertEqual(self.client.get("/api/me").status_code, 200)
         # Fresh sessions should not write to SQLite or refresh cookies on every poll.
-        self.assertNotIn("set-cookie", self.client.get("/api/friends").headers)
+        self.assertNotIn("set-cookie", self.client.get("/api/me").headers)
         self._force_expiry(int(time.time()) + 2 * 86400)
         response = self.client.get("/api/me")
         self.assertEqual(response.status_code, 200)
