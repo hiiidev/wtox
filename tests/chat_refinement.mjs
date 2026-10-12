@@ -202,12 +202,24 @@ assert.doesNotMatch(app,/flushBrowserQueue|浏览器待发队列检查失败/);
 assert.doesNotMatch(app,/<Tooltip title=\{ownStatusLabel\}>/);
 assert.doesNotMatch(app,/<Tooltip title="好友请求">/);
 assert.doesNotMatch(app,/<Tooltip title="添加好友">/);
+assert.doesNotMatch(app,/<Tooltip title="添加附件">/);
+assert.match(app,/aria-label="添加附件"/);
+assert.match(app,/kind==="chats"\?MessageFilled/);
+assert.match(app,/kind==="contacts"\?ContactsFilled:SettingFilled/);
+assert.match(app,/title="新消息通知"[\s\S]*?extra=\{<Badge/);
+assert.match(app,/title="连接与消息队列"[\s\S]*?extra=\{<Badge/);
+assert.match(app,/downloadToxFile\(await response\.blob\(\)/);
+const pushSettings=readFileSync("frontend/src/PushSettings.jsx","utf8");
+assert.match(pushSettings,/title="离线推送（PWA）"[\s\S]*?extra=\{<Badge/);
+const toastCSS=readFileSync("frontend/src/ant-style.css","utf8");
+assert.match(toastCSS,/html\[data-wtox-theme="dark"\] \.ant-message \.ant-message-notice-content/);
+
 assert.doesNotMatch(app,/<Tooltip title=\{selectedFriend\?"查看好友资料":""\}>/);
 assert.doesNotMatch(app,/<Tooltip title=\{selectedFriend\?"更多操作":""\}>/);
 assert.doesNotMatch(app,/aria-label="设置与备份" title="设置"/);
 assert.match(refined,/button\.active \.wt-nav-chat-badge\.ant-badge/);
-assert.match(refined,/height:calc\(74px \+ env\(safe-area-inset-bottom\)\)!important/);
-assert.match(refined,/\.wechat-mobile-tabs button svg\{[\s\S]*?width:28px!important/);
+assert.match(refined,/height:calc\(64px \+ env\(safe-area-inset-bottom\)\)!important/);
+assert.match(refined,/\.wechat-mobile-tabs button svg\{[\s\S]*?width:24px!important/);
 
 assert.match(app,/<Drawer open={modal==="settings"} title="设置" placement="right"/);
 assert.match(app,/authMode==="create"/);
