@@ -91,9 +91,19 @@ def site_login_rate_check(request: Request):
 
 
 @app.get("/api/gate/status")
-def site_gate_status(request: Request):
-    return {"required":access.site_gate_enabled(),
-            "authorized":access.gate_authorized(request.cookies.get(access.COOKIE_NAME))}
+def site_gate_status(request: Request, response: Response):
+    required=access.site_gate_enabled()
+    authorized=access.gate_authorized(request.cookies.get(access.COOKIE_NAME))
+    if required and authorized:
+        # Refresh the persistent first-party cookie whenever the app opens;
+        # no fixed 30-day deadline. Browser storage policies still apply.
+        password=access.site_password()
+        response.set_cookie(
+            access.COOKIE_NAME,access.issue_access_cookie(password),
+            max_age=access.REMEMBER_SECONDS,path="/",httponly=True,
+            secure=access.secure_cookies(),samesite="strict",
+        )
+    return {"required":required,"authorized":authorized}
 
 
 @app.post("/api/gate/login")
@@ -112,6 +122,8 @@ def site_gate_login(body: SitePasswordBody, request: Request, response: Response
         secure=access.secure_cookies(),samesite="strict"
     )
     return {"ok":True}
+
+
 app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets"), check_dir=False), name="assets")
 app.mount("/icons", StaticFiles(directory=str(FRONTEND_DIR / "icons"), check_dir=False), name="icons")
 
