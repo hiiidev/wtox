@@ -4,12 +4,11 @@ self.addEventListener("push", event => {
     let data = {};
     try { data = event.data?.json() || {}; } catch {}
     const kind = data.kind === "friend_request" ? "friend_request" : "message";
+    // Show only the requested notification text. The OS can still display
+    // the installed app name/icon as system-generated notification metadata.
     await self.registration.showNotification(
-      kind === "friend_request" ? "wTox · 好友请求" : "wTox · 新消息",
+      kind === "friend_request" ? "你有好友请求。" : "你收到了一条新消息。",
       {
-        body: kind === "friend_request" ? "有人向你发送了好友请求" : "你收到了一条新消息",
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
         tag: "wtox-push-" + kind,
         data: {url: "/"}
       }
