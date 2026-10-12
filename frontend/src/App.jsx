@@ -284,7 +284,7 @@ export default function App(){
   const mobileChatRef=useRef(false);
   mobileChatRef.current=mobileChat;
   const followLatest=useRef(true);
-  const previousThread=useRef({peer:null,ids:[]});
+  const previousThread=useRef({peer:null,viewKey:null,ids:[]});
   const scrollIdleTimer=useRef(null);
   const autoScrollLockUntil=useRef(0);
   const threadTouchY=useRef(null);
@@ -1232,6 +1232,9 @@ export default function App(){
   ):null;
   // Realtime Tox transfer updates can persist while HTTP upload is still
   // resolving. Merge the optimistic upload with the canonical transfer ID.
+  const threadViewKey=selected
+    ?selected+":"+(isMobile?(mobileChat?"open":"list"):"desktop")
+    :"empty";
   const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
     .slice(-250),[selected,messages,pendingFiles]);
   const cancelFollowForManualScroll=useCallback(()=>{
@@ -1272,8 +1275,8 @@ export default function App(){
   useLayoutEffect(()=>{
     const ids=thread.map(item=>item.id);
     const previous=previousThread.current;
-    if(previous.peer!==selected){
-      previousThread.current={peer:selected,ids};
+    if(previous.peer!==selected||previous.viewKey!==threadViewKey){
+      previousThread.current={peer:selected,viewKey:threadViewKey,ids};
       followLatest.current=true;
       setNewBelowCount(0);
       // useLayoutEffect runs after the new peer's DOM commits and before
@@ -1283,7 +1286,7 @@ export default function App(){
       return;
     }
     const newlyAdded=countNewEntries(previous.ids,ids);
-    previousThread.current={peer:selected,ids};
+    previousThread.current={peer:selected,viewKey:threadViewKey,ids};
     if(followLatest.current){
       settleThreadBottom();
       setNewBelowCount(count=>count===0?count:0);
@@ -1291,7 +1294,7 @@ export default function App(){
       // Status-only changes do not create a new message or inflate the badge.
       setNewBelowCount(count=>count+newlyAdded);
     }
-  },[selected,thread,mobileChat,settleThreadBottom]);
+  },[selected,thread,threadViewKey,settleThreadBottom]);
   useLayoutEffect(()=>{
     const pending=translationBottomPending.current;
     if(!pending || pending.peer!==selected ||
@@ -2431,9 +2434,7 @@ export default function App(){
               <AntButton size="small" danger loading={deletingMessages}>删除</AntButton>
             </Popconfirm>
           </div>}
-          <div key={selected
-              ?selected+":"+(isMobile?(mobileChat?"open":"list"):"desktop")
-              :"empty"} ref={threadEl}
+          <div key={threadViewKey} ref={threadEl}
             style={{visibility:selected?"hidden":"visible"}}
             className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
             onScroll={onThreadScroll}
