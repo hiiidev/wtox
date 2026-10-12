@@ -87,3 +87,32 @@ jobs:
           docker run --rm -e SITE_DOMAIN=chat.example.test \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+  lockfile-bootstrap:
+    # One-time bootstrapping from this repository's own security PR only.
+    # Generates and commits a registry-resolved, integrity-hashed lockfile.
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 17 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'security/harden-uploads-auth-20261013'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Resolve registry dependency integrity and commit lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          cd ..
+          git add frontend/package-lock.json
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' \
+                -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                commit -m 'build: commit resolved npm integrity lockfile'
+            git push origin "HEAD:refs/heads/${{ github.head_ref }}"
+          fi
