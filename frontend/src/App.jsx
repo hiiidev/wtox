@@ -148,6 +148,7 @@ function RailIcon({kind}){
 
 export default function App(){
   const [user,setUser]=useState(null),[loading,setLoading]=useState(true);
+  const [bootstrapError,setBootstrapError]=useState("");
   const [friends,setFriends]=useState([]),[network,setNetwork]=useState(-1);
   const [networkDiagnostics,setNetworkDiagnostics]=useState(null);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
@@ -174,6 +175,7 @@ export default function App(){
   const [deletingMessages,setDeletingMessages]=useState(false);
   const [singleDeleteId,setSingleDeleteId]=useState(null);
   const threadEl=useRef(null);
+  const swipeStart=useRef(null);
   const followLatest=useRef(true);
   const previousThread=useRef({peer:null,ids:[]});
   const scrollIdleTimer=useRef(null);
@@ -607,10 +609,17 @@ export default function App(){
   },[alert,refreshHistory,refreshFriends,refreshNetwork,refreshTransfers,refreshFriendRequests,notifyIncoming]);
 
   const loadIdentity=useCallback(async()=>{
-    try{const info=await getJson("/api/me");setUser(info)}
-    catch(error){setUser(null);if(error.status!==401)alert(error.message)}
-    finally{setLoading(false)}
-  },[alert]);
+    setLoading(true);setBootstrapError("");
+    try{
+      const info=await getJson("/api/me",{signal:AbortSignal.timeout(12000)});
+      setUser(info);
+    }catch(error){
+      if(error.status===401){setUser(null);return}
+      setBootstrapError(error.name==="TimeoutError"
+        ?"连接超时，请检查网络后重试。"
+        :"无法连接服务："+error.message);
+    }finally{setLoading(false)}
+  },[]);
   useEffect(()=>{loadIdentity()},[loadIdentity]);
 
   // React reuses the existing wtox-local-<public-key> IndexedDB database and
@@ -873,12 +882,41 @@ export default function App(){
     [unreadByPeer,friends]);
   const chatNavLabel=totalUnread>0?`聊天，${totalUnread} 条未读消息`:"聊天";
 
+  // The extra in-app History entry allows native iOS back-swipe and the
+  // physical/software back button to return to the conversation list.
+  function returnFromMobileChat(){
+    if(window.history.state?.wtoxChat)window.history.back();
+    else setMobileChat(false);
+  }
+  useEffect(()=>{
+    const onPop=()=>setMobileChat(false);
+    window.addEventListener("popstate",onPop);
+    return()=>window.removeEventListener("popstate",onPop);
+  },[]);
+  function onChatTouchStart(event){
+    if(!isMobile||!mobileChat||!isStandalone()||
+       !/iPhone|iPad|iPod/.test(navigator.userAgent))return;
+    const touch=event.touches?.[0];
+    swipeStart.current=touch&&touch.clientX<32
+      ?{x:touch.clientX,y:touch.clientY}:null;
+  }
+  function onChatTouchEnd(event){
+    const origin=swipeStart.current;
+    swipeStart.current=null;
+    const touch=event.changedTouches?.[0];
+    if(origin&&touch&&touch.clientX-origin.x>90 &&
+       Math.abs(touch.clientY-origin.y)<70)returnFromMobileChat();
+  }
   function selectFriend(key){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
     selectedRef.current=key;setSelected(key);
     clearSelection();
     setPeerDetailsOpen(false);setDeleteFriendOpen(false);
-    setDraft(drafts.current.get(key)||"");setMobileChat(true);
+    setDraft(drafts.current.get(key)||"");
+    if(isMobile&&!mobileChat&&!(window.history.state?.wtoxChat)){
+      window.history.pushState({...window.history.state,wtoxChat:true},"",window.location.href);
+    }
+    setMobileChat(true);
     // Opening the same conversation again also restores bottom following.
     requestAnimationFrame(scrollToLatest);
     setSeen(previous=>({...previous,[key]:Date.now()}));
@@ -1276,6 +1314,9 @@ export default function App(){
   </div>;
 
   if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><Spin size="large"/></div>;
+  if(bootstrapError)return <div className="wtox-error-page" role="alert">
+    <p>{bootstrapError}</p><AntButton type="primary" onClick={loadIdentity}>重试</AntButton>
+  </div>;
   if(!user)return <ConfigProvider theme={{
     algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm,
     token:{colorPrimary:"#16ac71",borderRadius:12}
@@ -1524,11 +1565,13 @@ export default function App(){
           </button>
         </nav>
       </section>
-      <main className={"ant-chat-area"+(!selected?" is-empty-chat":"")}>
+      <main className={"ant-chat-area"+(!selected?" is-empty-chat":"")}
+        onTouchStart={onChatTouchStart} onTouchEnd={onChatTouchEnd}
+        onTouchCancel={()=>{swipeStart.current=null}}>
         {selected&&<div className="ant-chat-toolbar">
           <div className="ant-chat-identity">
             <AntButton className="ant-mobile-back" aria-label="返回联系人"
-              icon={<ArrowLeftOutlined/>} onClick={()=>setMobileChat(false)}/>
+              icon={<ArrowLeftOutlined/>} onClick={returnFromMobileChat}/>
             <AntButton type="text" className="wt-peer-avatar-button"
               aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
               onClick={()=>setPeerDetailsOpen(true)}>
