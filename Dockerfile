@@ -32,9 +32,9 @@ ENV PATH=/opt/venv/bin:$PATH
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ /app/backend/
 # Fail image builds if websocket support is missing (HTTP /health alone cannot detect it).
 RUN python -c "from uvicorn.config import Config; c=Config('backend.main:app',ws='wsproto'); c.load(); assert c.ws_protocol_class is not None"
-COPY backend/ /app/backend/
 COPY --from=frontendbuild /frontend/dist/ /app/frontend/
 # Fail loudly if the React JS/CSS or favicon is missing from the runtime image.
 RUN python3 -c "from pathlib import Path; p=Path('/app/frontend'); assert (p/'index.html').is_file(); assert (p/'logo.svg').is_file(); assert list((p/'assets').glob('*.js')); assert list((p/'assets').glob('*.css'))"
