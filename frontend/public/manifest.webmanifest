@@ -1,0 +1,14 @@
+{
+  "id": "/",
+  "name": "wTox",
+  "short_name": "wTox",
+  "description": "Tox 网络网页聊天客户端",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101927",
+  "theme_color": "#101927",
+  "icons": [
+    {"src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}
