@@ -25,7 +25,7 @@ check('setSocketState(realtimeConnectionState(failures))');
 check('realtimeRetryDelay(failures)');
 check('socketState==="polling"?"轮询中":"正在重连"');
 check('setTimeout(()=>setSlowReconnect(true),10000)');
-check('socketState!=="connected"&&<span className="wt-connection-indicator"');
+check('socketState!=="connected"&&<span className={"wt-connection-indicator"');
 check('socketState==="polling"?"轮询中":"正在重连"');
 check('<LoadingOutlined spin aria-hidden="true"/>');
 const markup=app.indexOf('className="wt-connection-indicator"');
