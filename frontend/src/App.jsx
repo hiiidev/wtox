@@ -7,7 +7,8 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
   ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled,
-  LoadingOutlined, EyeOutlined, EyeInvisibleOutlined, RedoOutlined
+  LoadingOutlined, EyeOutlined, EyeInvisibleOutlined, RedoOutlined,
+  DisconnectOutlined
   } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import PwaPushWelcome from "./PwaPushWelcome.jsx";
@@ -29,6 +30,7 @@ import {sanitizePhoto,isPhotoAttachment,MAX_SOURCE_PHOTO_BYTES} from "./photo_sa
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {activeConversationPeer,unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
+import {realtimeRetryDelay,realtimeConnectionState} from "./realtime_backoff.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
@@ -1024,17 +1026,27 @@ export default function App(){
   // triggers immediate catch-up after mobile browser background suspension.
   useEffect(()=>{
     if(!user?.public_key)return;
-    let dead=false,ws=null,retry=null,handshakeTimeout=null;
+    let dead=false,ws=null,retry=null,handshakeTimeout=null,failures=0;
+    const scheduleRetry=()=>{
+      if(dead)return;
+      failures++;
+      setSocketState(realtimeConnectionState(failures));
+      clearTimeout(retry);
+      // When websocket upgrades are blocked, HTTP polling keeps messages
+      // available. Back off instead of retrying every 3.5 seconds forever.
+      retry=setTimeout(connect,realtimeRetryDelay(failures));
+    };
     const connect=()=>{
       if(dead)return;
+      clearTimeout(retry);retry=null;
       setSocketState(previous=>previous==="connected"?"reconnecting":previous);
       try{
         ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws");
       }catch(error){
-        // A failed WebSocket constructor must not leave the UI frozen.
-        console.warn("WebSocket connection failed:",error);
-        setSocketState("reconnecting");
-        retry=setTimeout(connect,3500);
+        // Constructors may throw when the requested scheme/URL is invalid.
+        // Native browser console logs already capture handshake failures.
+        console.warn("WebSocket 建立失败（将在后台重试）",error);
+        scheduleRetry();
         return;
       }
       socket.current=ws;
@@ -1049,6 +1061,7 @@ export default function App(){
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         lastMessage.current=Date.now();
+        failures=0;
         setSocketState("connected");
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
           refreshTransfers()]);
@@ -1062,10 +1075,7 @@ export default function App(){
         if(dead||currentSocket!==ws)return;
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
-        if(!dead){
-          setSocketState("reconnecting");
-          retry=setTimeout(connect,3500);
-        }
+        if(!dead)scheduleRetry();
       };
     };
     connect();
@@ -1111,7 +1121,7 @@ export default function App(){
       window.removeEventListener("focus",wake);
       window.removeEventListener("pageshow",wake);
       if(ws){
-        ws.onopen=null;ws.onmessage=null;ws.onclose=null;
+        ws.onopen=null;ws.onmessage=null;ws.onerror=null;ws.onclose=null;
         ws.close();
       }
       socket.current=null;
@@ -2112,11 +2122,21 @@ export default function App(){
             <strong>{section==="contacts"?"通讯录":"聊天"}</strong>
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
-          {socketState!=="connected"&&<span className="wt-connection-indicator"
-            role="status" aria-label={slowReconnect?"正在重连":"正在连接"}
-            title={slowReconnect?"正在重连":"正在连接"}>
-            <LoadingOutlined spin aria-hidden="true"/>
-            {slowReconnect&&<span className="wt-reconnect-label">正在重连</span>}
+          {socketState!=="connected"&&<span className={"wt-connection-indicator"+
+              (socketState==="polling"?" is-polling":"")}
+            role="status"
+            aria-label={socketState==="polling"?"实时连接不可用，正在轮询同步":
+              slowReconnect?"正在重连":"正在连接"}
+            title={socketState==="polling"
+              ?"实时 WebSocket 暂不可用，消息和好友信息将继续通过 HTTP 轮询同步"
+              :slowReconnect?"正在重连":"正在连接"}>
+            {socketState==="polling"
+              ?<DisconnectOutlined aria-hidden="true"/>
+              :<LoadingOutlined spin aria-hidden="true"/>}
+            {(slowReconnect||socketState==="polling")&&
+              <span className="wt-reconnect-label">
+                {socketState==="polling"?"轮询中":"正在重连"}
+              </span>}
           </span>}
           <div className="wt-list-actions" role="group" aria-label="好友操作">
             <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
