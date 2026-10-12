@@ -40,12 +40,14 @@ jobs:
       - run: node tests/pwa_experience.mjs
       - run: node tests/ios_pwa_restore.mjs
       - run: node tests/websocket_fallback.mjs
+      - run: node tests/prepared_attachment_preview.mjs
       - run: node tests/pwa_startup.mjs
       - run: node tests/ios_splash.mjs
       - run: node tests/react_structure.mjs
       - run: node tests/chat_ui.mjs
       - run: node tests/chat_time.mjs
       - run: node tests/active_chat_scroll.mjs
+      - run: node tests/thread_switch_bottom.mjs
       - run: node tests/contact_actions_and_presence.mjs
       - run: node tests/translation_actions_and_attachment_modal.mjs
       - run: node tests/translation_quick_scroll.mjs
