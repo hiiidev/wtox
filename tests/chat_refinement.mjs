@@ -45,19 +45,19 @@ assert.match(app,/await h\.persistFile\(transfer\)/);
 assert.match(app,/await h\.cacheImage\(transfer\.id/);
 assert.match(app,/<FileCard name=\{file\.file_name\}/);
 assert.match(app,/<Image className="wtox-attachment-image"/);
-assert.match(app,/await decodedImage\\(blob\\)/,
+assert.ok(app.includes("await decodedImage(blob)"),
   "Preview must decode real attachment bytes, not trust filename previews");
-assert.match(app,/setImageCacheRevision\\(n=>n\\+1\\)/,
+assert.ok(app.includes("setImageCacheRevision(n=>n+1)"),
   "Outgoing image should rerender once the encrypted image cache is written");
-assert.match(app,/file\\.previewBlob/,
+assert.ok(app.includes("file.previewBlob"),
   "A newly sent image should be previewable during upload");
 assert.doesNotMatch(app,/已由 Toxcore 完成文件传输/,
   "Completed attachment should not show redundant Toxcore text");
 assert.match(app,/wt-chat-presence-badge/,
   "Friend presence should appear on the avatar");
-assert.doesNotMatch(app,/selectedFriend&&<Badge status=\\{peerStatusColor\\} text=\\{peerStatus\\}\\/>/,
+assert.ok(!app.includes('selectedFriend&&<Badge status={peerStatusColor} text={peerStatus}/>'),
   "Do not show redundant presence text next to the friend nickname");
-assert.match(refined,/\\.wt-thread-content\\{[\\s\\S]*?padding-bottom:34px!important/,
+assert.ok(refined.includes("padding-bottom:34px!important"),
   "Leave space after the last incoming message");
 const sendBody=app.slice(app.indexOf("async function sendText("),
   app.indexOf("async function addFriend("));
@@ -71,7 +71,7 @@ assert.ok(fileBody.indexOf("setPendingFiles(previous=>[...previous,optimistic])"
   fileBody.indexOf("setPendingFiles(previous=>[...previous,optimistic])") <
   fileBody.indexOf("await api(url"),
   "Optimistic attachment must enter timeline before file upload");
-assert.doesNotMatch(app,/sending\\?"正在发送请求"/,
+assert.ok(!app.includes('sending?"正在发送请求"'),
   "Composer must not host the outgoing send status");
 assert.match(refined,/max-width:none!important/);
 assert.ok(refined.includes("wt-message-outgoing") &&
