@@ -716,13 +716,24 @@ export default function App(){
   // triggers immediate catch-up after mobile browser background suspension.
   useEffect(()=>{
     if(!user?.public_key)return;
-    let dead=false,ws=null,retry=null;
+    let dead=false,ws=null,retry=null,connectedOnce=false;
+    const toastKey="wtox-server-connection";
+    const connecting=()=>{
+      if(dead)return;
+      uiMessageApi.open({
+        key:toastKey,type:"loading",duration:0,
+        content:connectedOnce?"连接中断，正在重新连接…":"正在连接服务器…"
+      });
+    };
     const connect=()=>{
       if(dead)return;
+      connecting();
       ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws");
       socket.current=ws;
       lastMessage.current=Date.now();
       ws.onopen=()=>{
+        connectedOnce=true;
+        uiMessageApi.destroy(toastKey);
         lastMessage.current=Date.now();
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
           refreshTransfers()]);
@@ -731,7 +742,12 @@ export default function App(){
         lastMessage.current=Date.now();
         try{onRealtime(JSON.parse(msg.data))}catch(error){alert("无法解析实时事件："+error.message)}
       };
-      ws.onclose=()=>{if(!dead)retry=setTimeout(connect,3500)};
+      ws.onclose=()=>{
+        if(!dead){
+          connecting();
+          retry=setTimeout(connect,3500);
+        }
+      };
     };
     connect();
     const friendTimer=setInterval(()=>{
@@ -760,7 +776,8 @@ export default function App(){
     document.addEventListener("visibilitychange",wake);
     window.addEventListener("focus",wake);
     return()=>{
-      dead=true;clearTimeout(retry);clearInterval(friendTimer);
+      dead=true;uiMessageApi.destroy(toastKey);
+      clearTimeout(retry);clearInterval(friendTimer);
       clearInterval(pendingTimer);clearInterval(transferTimer);clearInterval(pingTimer);
       document.removeEventListener("visibilitychange",wake);
       window.removeEventListener("focus",wake);
@@ -768,7 +785,7 @@ export default function App(){
       socket.current=null;
     };
   },[user?.public_key,onRealtime,recoverPending,refreshFriends,
-    refreshNetwork,refreshTransfers,alert]);
+    refreshNetwork,refreshTransfers,alert,uiMessageApi]);
 
   useEffect(()=>{
     if(!user?.public_key)return;
