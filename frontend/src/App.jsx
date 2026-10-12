@@ -24,7 +24,8 @@ import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll
 import {chatTime} from "./chat_time.js";
 import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
-import {translationAction} from "./translation_action.js";
+import {translationAction,showQuickTranslate} from "./translation_action.js";
+import {sanitizePhoto,isPhotoAttachment,MAX_SOURCE_PHOTO_BYTES} from "./photo_sanitize.js";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {activeConversationPeer,unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
@@ -326,6 +327,7 @@ export default function App(){
   });
   const [translations,setTranslations]=useState({});
   const translationRequests=useRef(new Map());
+  const translationBottomPending=useRef(null);
   const resolvedTranslationLanguage=translationTarget(
     translationLanguage,navigator.languages?.[0]||navigator.language);
   useEffect(()=>{
@@ -334,10 +336,13 @@ export default function App(){
   useEffect(()=>{
     for(const pending of translationRequests.current.values())pending.abort();
     translationRequests.current.clear();
+    translationBottomPending.current=null;
     setTranslations({});
   },[selected,user?.public_key,resolvedTranslationLanguage]);
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
+  const [preparingPhoto,setPreparingPhoto]=useState(false);
+  const attachmentPreparationId=useRef(0);
   const [pendingFiles,setPendingFiles]=useState([]);
   const [imageCacheRevision,setImageCacheRevision]=useState(0);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
@@ -428,12 +433,18 @@ export default function App(){
     if(!force&&old?.text===text&&old.target===resolvedTranslationLanguage){
       if(old.status==="loading")return;
       if(old.status==="ok"){
+        if(old.hidden && String(thread[thread.length-1]?.id)===String(item.id))
+          translationBottomPending.current={peer,id:String(item.id)};
         setTranslations(current=>({...current,[key]:{
           ...current[key],hidden:!current[key]?.hidden
         }}));
         return;
       }
     }
+    // A translation of the last message expands below its time/status.
+    // Follow the *container* end after both loading and final text are laid out.
+    if(String(thread[thread.length-1]?.id)===String(item.id))
+      translationBottomPending.current={peer,id:String(item.id)};
     translationRequests.current.get(key)?.abort();
     const controller=new AbortController();
     translationRequests.current.set(key,controller);
@@ -1123,6 +1134,18 @@ export default function App(){
       setNewBelowCount(count=>count+newlyAdded);
     }
   },[selected,thread,mobileChat,settleThreadBottom]);
+  useLayoutEffect(()=>{
+    const pending=translationBottomPending.current;
+    if(!pending || pending.peer!==selected ||
+       String(thread[thread.length-1]?.id)!==pending.id)return;
+    const result=translations[selected+":"+pending.id];
+    if(!result || result.hidden)return;
+    followLatest.current=true;
+    setNewBelowCount(count=>count===0?count:0);
+    settleThreadBottom();
+    if(result.status==="ok" || result.status==="error")
+      translationBottomPending.current=null;
+  },[translations,selected,thread,settleThreadBottom]);
   useEffect(()=>{
     const element=threadEl.current;
     const content=element?.firstElementChild;
@@ -1495,6 +1518,34 @@ export default function App(){
       await history.current.importMessages(rows);await refreshHistory();
       setHistoryFile(null);alert("聊天记录已导入；相同记录不会重复追加。");
     }catch(error){alert(error.message)}
+  }
+  async function prepareAttachment(file){
+    if(!file)return;
+    const peer=selectedRef.current;
+    if(!peer || !online(friends.find(friend=>friend.public_key===peer))){
+      alert("附件要求双方在线","error");return;
+    }
+    const op=++attachmentPreparationId.current;
+    const photo=isPhotoAttachment(file);
+    if(file.size<1 || (photo
+        ? file.size>MAX_SOURCE_PHOTO_BYTES
+        : file.size>MAX_ATTACHMENT_BYTES)){
+      alert(photo?"原照片不得超过 40 MB":"附件不能超过 15 MB","error");
+      return;
+    }
+    setPreparingPhoto(photo);
+    try{
+      const processed=await sanitizePhoto(file);
+      if(op!==attachmentPreparationId.current || selectedRef.current!==peer)return;
+      if(processed.size<1 || processed.size>MAX_ATTACHMENT_BYTES)
+        throw new Error("压缩后附件超过 15 MB");
+      setUploadFile(processed);
+    }catch(error){
+      if(op===attachmentPreparationId.current)
+        alert("照片处理失败："+error.message,"error");
+    }finally{
+      if(op===attachmentPreparationId.current)setPreparingPhoto(false);
+    }
   }
   async function sendFile(){
     const file=uploadFile;
@@ -2202,7 +2253,7 @@ export default function App(){
                         {chatTime(item.at)}
                         {item.direction==="outgoing"?" · "+stateText(item):""}
                       </span>
-                      {!selectedMessageIds.size&&(()=>{
+                      {!selectedMessageIds.size&&showQuickTranslate(item.text)&&(()=>{
                         const action=translationActionFor(item);
                         return <button type="button"
                           className={"wt-translate-button state-"+action.state}
@@ -2253,32 +2304,22 @@ export default function App(){
         {selected&&<div className="ant-compose-area">
           <div className="wt-compose-tools">
             <Upload showUploadList={false} maxCount={1} className="wt-chat-file-upload"
-              disabled={!selected||!online(selectedFriend)}
+              disabled={!selected||!online(selectedFriend)||preparingPhoto}
               beforeUpload={file=>{
-                if(file.size<1||file.size>MAX_ATTACHMENT_BYTES){
-                  alert("附件大小需要在 1 字节至 15 MB 之间","error");
-                  return Upload.LIST_IGNORE;
-                }
-                setUploadFile(file);
-                return false;
+                void prepareAttachment(file);
+                return Upload.LIST_IGNORE;
               }}>
               <AntButton type="text" className="wt-compose-attach-button"
                 icon={<PaperClipOutlined/>} aria-label="添加附件"
-                disabled={!selected||!online(selectedFriend)}/>
+                loading={preparingPhoto}
+                disabled={!selected||!online(selectedFriend)||preparingPhoto}/>
             </Upload>
           </div>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
             onPasteFile={files=>{
               const file=files?.[0];
-              if(file){
-                if(file.size<1||file.size>MAX_ATTACHMENT_BYTES){
-                  alert("附件大小需要在 1 字节至 15 MB 之间","error");
-                  return;
-                }
-                if(!online(selectedFriend)){alert("附件要求双方在线","error");return}
-                setUploadFile(file);
-              }
+              if(file)void prepareAttachment(file);
             }}
             onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
             suffix={(_,info)=>{
@@ -2306,6 +2347,9 @@ export default function App(){
         className="wt-send-file-preview">
         <FileCard name={uploadFile.name} size="small"/>
         <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
+        <Typography.Text type="secondary">
+          照片将以重新编码、已清理元数据的文件发送；GIF 动图保持原样。
+        </Typography.Text>
       </Space>}
     </AntModal>
 
