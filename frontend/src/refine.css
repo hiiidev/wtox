@@ -1156,7 +1156,7 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     html::before{
       content:"";position:fixed;top:0;left:0;right:0;
       height:env(safe-area-inset-top,0px);
-      background:#101927;pointer-events:none;z-index:15;
+      background:#1e1e1f;pointer-events:none;z-index:15;
     }
     .ant-messenger[data-theme] .ant-chat-area{
       overscroll-behavior-x:contain;
