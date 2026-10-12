@@ -131,6 +131,22 @@ sudo journalctl -u caddy -n 100 --no-pager
 - Caddy reload 报错：先修复配置，不要重启所有现有站点。
 - 好友长期离线：检查 `WTOX_BOOTSTRAP` 和 VPS 出站 UDP/TCP；Caddy 只代理浏览器连接，不代理原版 Tox UDP。
 
+## Uvicorn 缺少 WebSocket 协议库
+
+如 web 容器显示 `Unsupported upgrade request`、`No supported WebSocket library detected` 和 `GET /ws 404`，说明 Upgrade 已到达 Uvicorn，但容器缺少 WebSocket 协议实现；这是应用镜像依赖问题，不应关闭 Cloudflare/CDN、Caddy 转发或 wTox 鉴权。
+
+修复版在 `requirements.txt` 固定 `wsproto==1.2.0`，并以 `uvicorn --ws wsproto` 启动。CI 现在测试真实 HTTP 101 WebSocket 握手。将 VPS 仓库更新到包含修复的 main 分支后，**重新构建并替换 web 镜像**，仅重启旧容器不能安装依赖：
+
+```bash
+# Docker Caddy 部署：
+docker compose -f compose.yml build web
+docker compose -f compose.yml up -d --no-deps web
+docker compose -f compose.yml exec -T web python -c "import wsproto; print('wsproto ready')"
+# 宿主机 Caddy 则将命令中的 compose.yml 替换为 compose.host-caddy.yml
+```
+
+验证浏览器 Network → WS → `/ws` 是否为 HTTP `101 Switching Protocols`，容器日志应出现 `wTox /ws upgrade accepted`。不要执行 `docker compose down -v`、覆盖 `.env` 或重新生成 `WTOX_MASTER_KEY`。
+
 ## WebSocket 一直重连、但消息还能收发
 
 此时网页的 `GET /api/friends`、`GET /api/pending` 等 HTTP 轮询仍在工作，**不等于 `wss://域名/ws` 握手成功**。新版前端连续失败后会显示「轮询中」、逐步降低重连频率（最长约 60 秒），不会弹出反复的连接提示。实时事件可能比 WebSocket 正常时延迟。

@@ -19,3 +19,15 @@ export function scrollThreadToBottom(element) {
   if (!element) return;
   element.scrollTop = Math.max(0,element.scrollHeight - element.clientHeight);
 }
+
+/** The scrollable element is .ant-thread, NOT a bubble or its footer.
+ * Never report initial alignment while mobile CSS has display:none.
+ * Returns false when the element has no measured viewport yet, so the caller
+ * can keep the new thread visually hidden until ResizeObserver sees it.
+ */
+export function alignFullThreadBottom(element) {
+  if (!element || element.clientWidth<=0 || element.clientHeight<=0) return false;
+  scrollThreadToBottom(element);
+  const end=Math.max(0,element.scrollHeight-element.clientHeight);
+  return Math.abs(element.scrollTop-end)<=2;
+}

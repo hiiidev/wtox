@@ -21,9 +21,9 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
-import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
+import {isNearBottom,countNewEntries,scrollThreadToBottom,alignFullThreadBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
-import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
+import {contactPresenceText,chatPresenceText,lastOnlineText} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
 import {translationAction,showQuickTranslate} from "./translation_action.js";
 import {sanitizePhoto,isPhotoAttachment,MAX_SOURCE_PHOTO_BYTES} from "./photo_sanitize.js";
@@ -284,7 +284,7 @@ export default function App(){
   const mobileChatRef=useRef(false);
   mobileChatRef.current=mobileChat;
   const followLatest=useRef(true);
-  const previousThread=useRef({peer:null,ids:[]});
+  const previousThread=useRef({peer:null,viewKey:null,ids:[]});
   const scrollIdleTimer=useRef(null);
   const autoScrollLockUntil=useRef(0);
   const threadTouchY=useRef(null);
@@ -1207,9 +1207,9 @@ export default function App(){
                   </span>
                 </div>
               </div>
-              {!online(selectedFriend)&&formatLastOnline(selectedFriend.last_online)&&
+              {!online(selectedFriend)&&lastOnlineText(selectedFriend.last_online)&&
                 <Typography.Text type="secondary" className="wt-peer-last-online">
-                  最后在线：{formatLastOnline(selectedFriend.last_online)}
+                  {lastOnlineText(selectedFriend.last_online)}
                 </Typography.Text>}
               <Divider/>
               <Typography.Text type="secondary">状态消息</Typography.Text>
@@ -1232,6 +1232,9 @@ export default function App(){
   ):null;
   // Realtime Tox transfer updates can persist while HTTP upload is still
   // resolving. Merge the optimistic upload with the canonical transfer ID.
+  const threadViewKey=selected
+    ?selected+":"+(isMobile?(mobileChat?"open":"list"):"desktop")
+    :"empty";
   const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
     .slice(-250),[selected,messages,pendingFiles]);
   const cancelFollowForManualScroll=useCallback(()=>{
@@ -1241,7 +1244,13 @@ export default function App(){
     followLatest.current=false;
   },[]);
   const settleThreadBottom=useCallback(()=>{
-    if(followLatest.current)scrollThreadToBottom(threadEl.current);
+    const element=threadEl.current;
+    if(!followLatest.current||!element)return;
+    // The correct target is the complete .ant-thread scroll range:
+    // scrollHeight - clientHeight, INCLUDING its final padding/footer.
+    // Do not expose a newly mounted thread with a still-zero mobile size.
+    if(alignFullThreadBottom(element)&&element.style.visibility==="hidden")
+      element.style.visibility="visible";
   },[]);
   const scrollToLatest=useCallback(()=>{
     followLatest.current=true;
@@ -1266,8 +1275,8 @@ export default function App(){
   useLayoutEffect(()=>{
     const ids=thread.map(item=>item.id);
     const previous=previousThread.current;
-    if(previous.peer!==selected){
-      previousThread.current={peer:selected,ids};
+    if(previous.peer!==selected||previous.viewKey!==threadViewKey){
+      previousThread.current={peer:selected,viewKey:threadViewKey,ids};
       followLatest.current=true;
       setNewBelowCount(0);
       // useLayoutEffect runs after the new peer's DOM commits and before
@@ -1277,7 +1286,7 @@ export default function App(){
       return;
     }
     const newlyAdded=countNewEntries(previous.ids,ids);
-    previousThread.current={peer:selected,ids};
+    previousThread.current={peer:selected,viewKey:threadViewKey,ids};
     if(followLatest.current){
       settleThreadBottom();
       setNewBelowCount(count=>count===0?count:0);
@@ -1285,7 +1294,7 @@ export default function App(){
       // Status-only changes do not create a new message or inflate the badge.
       setNewBelowCount(count=>count+newlyAdded);
     }
-  },[selected,thread,mobileChat,settleThreadBottom]);
+  },[selected,thread,threadViewKey,settleThreadBottom]);
   useLayoutEffect(()=>{
     const pending=translationBottomPending.current;
     if(!pending || pending.peer!==selected ||
@@ -1298,25 +1307,38 @@ export default function App(){
     if(result.status==="ok" || result.status==="error")
       translationBottomPending.current=null;
   },[translations,selected,thread,settleThreadBottom]);
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     const element=threadEl.current;
     const content=element?.firstElementChild;
     if(!element||!content)return;
-    const ensureBottom=()=>{if(followLatest.current)settleThreadBottom()};
-    // Both text/footer growth and container resizing (mobile viewport,
-    // keyboard, toolbar) can change the real bottom after the first paint.
+    const ensureBottom=()=>{
+      if(followLatest.current)settleThreadBottom();
+    };
+    // Attach BEFORE first paint, not in useEffect after paint. On iOS a
+    // display:none chat becomes visible during the same React commit and its
+    // initial clientHeight can still be 0. ResizeObserver handles 0 -> size.
     let observer;
     if(typeof ResizeObserver!=="undefined"){
       observer=new ResizeObserver(ensureBottom);
       observer.observe(content);
       observer.observe(element);
+      if(element.parentElement)observer.observe(element.parentElement);
     }
     window.visualViewport?.addEventListener("resize",ensureBottom);
+    window.addEventListener("resize",ensureBottom);
+    window.addEventListener("pageshow",ensureBottom);
+    // requestAnimationFrame runs before painting and covers Safari's first
+    // visible layout without adding delayed visible bottom-jumps.
+    const frame=requestAnimationFrame(ensureBottom);
+    ensureBottom();
     return()=>{
+      cancelAnimationFrame(frame);
       observer?.disconnect();
       window.visualViewport?.removeEventListener("resize",ensureBottom);
+      window.removeEventListener("resize",ensureBottom);
+      window.removeEventListener("pageshow",ensureBottom);
     };
-  },[selected,mobileChat,settleThreadBottom]);
+  },[selected,mobileChat,isMobile,settleThreadBottom]);
 
   const latestByPeer=useMemo(()=>{
     const latest=new Map();
@@ -2412,7 +2434,8 @@ export default function App(){
               <AntButton size="small" danger loading={deletingMessages}>删除</AntButton>
             </Popconfirm>
           </div>}
-          <div ref={threadEl}
+          <div key={threadViewKey} ref={threadEl}
+            style={{visibility:selected?"hidden":"visible"}}
             className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
             onScroll={onThreadScroll}
             onWheel={event=>{if(event.deltaY<0)cancelFollowForManualScroll()}}

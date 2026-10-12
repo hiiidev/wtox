@@ -22,7 +22,8 @@ assert.equal(pane.scrollTop,2390);
 const app=readFileSync("frontend/src/App.jsx","utf8");
 assert.ok(app.includes('useLayoutEffect(()=>{\n    const ids=thread.map(item=>item.id)'));
 assert.ok(app.includes("previous.peer!==selected"));
-assert.ok(app.includes("scrollThreadToBottom(threadEl.current)"));
+assert.ok(app.includes("alignFullThreadBottom(element)"),
+  "The full scroll container must reach its maximum before the pane is revealed");
 assert.ok(app.includes("observer.observe(content)"));
 assert.ok(app.includes("observer.observe(element)"));
 assert.ok(app.includes('window.visualViewport?.addEventListener("resize",ensureBottom)'));

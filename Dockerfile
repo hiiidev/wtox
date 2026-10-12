@@ -33,6 +33,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ /app/backend/
+# Fail image builds if websocket support is missing (HTTP /health alone cannot detect it).
+RUN python -c "from uvicorn.config import Config; c=Config('backend.main:app',ws='wsproto'); c.load(); assert c.ws_protocol_class is not None"
 COPY --from=frontendbuild /frontend/dist/ /app/frontend/
 # Fail loudly if the React JS/CSS or favicon is missing from the runtime image.
 RUN python3 -c "from pathlib import Path; p=Path('/app/frontend'); assert (p/'index.html').is_file(); assert (p/'logo.svg').is_file(); assert list((p/'assets').glob('*.js')); assert list((p/'assets').glob('*.css'))"
@@ -42,4 +44,4 @@ RUN useradd --uid 10001 --create-home wtox && mkdir /data && chown -R wtox:wtox 
 USER wtox
 ENV PYTHONUNBUFFERED=1
 EXPOSE 6066
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "6066", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1,172.16.0.0/12"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "6066", "--workers", "1", "--ws", "wsproto", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1,172.16.0.0/12"]
