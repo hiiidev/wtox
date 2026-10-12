@@ -8,8 +8,8 @@ self.addEventListener("push", event => {
       kind === "friend_request" ? "wTox · 好友请求" : "wTox · 新消息",
       {
         body: kind === "friend_request" ? "有人向你发送了好友请求" : "你收到了一条新消息",
-        icon: "/logo.svg",
-        badge: "/logo.svg",
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
         tag: "wtox-push-" + kind,
         data: {url: "/"}
       }
