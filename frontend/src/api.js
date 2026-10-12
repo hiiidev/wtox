@@ -28,8 +28,8 @@ export function downloadBlob(blob,name){
  * @returns {"shared"|"downloaded"|"cancelled"}
  */
 export async function downloadToxFile(blob, name){
-  const filename=String(name||"wtox-profile.tox").replace(/[\\/\\\\]/g,"_");
-  const safeName=/\\.tox$/i.test(filename)?filename:filename+".tox";
+  const filename=String(name||"wtox-profile.tox").replace(/[\/\\]/g,"_");
+  const safeName=/\.tox$/i.test(filename)?filename:filename+".tox";
   const file=new File([blob],safeName,{type:"application/octet-stream"});
   const mobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
     navigator.userAgentData?.mobile===true;
