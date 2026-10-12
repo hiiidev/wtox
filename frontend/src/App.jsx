@@ -270,6 +270,8 @@ export default function App(){
   const previousThread=useRef({peer:null,ids:[]});
   const scrollIdleTimer=useRef(null);
   const scrollFrameIds=useRef([]);
+  const scrollSettleTimers=useRef([]);
+  const autoScrollLockUntil=useRef(0);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
   const [logoutOpen,setLogoutOpen]=useState(false);
@@ -1187,14 +1189,26 @@ export default function App(){
   // resolving. Merge the optimistic upload with the canonical transfer ID.
   const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
     .slice(-250),[selected,messages,pendingFiles]);
-  const settleThreadBottom=useCallback(()=>{
+  const cancelThreadSettle=useCallback(()=>{
     for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
     scrollFrameIds.current=[];
+    for(const timer of scrollSettleTimers.current)clearTimeout(timer);
+    scrollSettleTimers.current=[];
+  },[]);
+  const cancelFollowForManualScroll=useCallback(()=>{
+    // Only explicit touch/wheel/key input cancels a pending automatic jump.
+    autoScrollLockUntil.current=0;
+    followLatest.current=false;
+    cancelThreadSettle();
+  },[cancelThreadSettle]);
+  const settleThreadBottom=useCallback((lockMs=0)=>{
+    cancelThreadSettle();
+    if(lockMs>0)autoScrollLockUntil.current=Date.now()+lockMs;
     const scroll=()=>{
       if(followLatest.current)scrollThreadToBottom(threadEl.current);
     };
-    // The initial layout can precede the mobile chat panel becoming visible.
-    // Scroll now, after the next paint, and after the following layout pass.
+    // Newly opened chat layout, image footers and iOS viewport metrics can
+    // settle after React's first two frames; wait for final layout too.
     scroll();
     const first=requestAnimationFrame(()=>{
       scroll();
@@ -1205,17 +1219,25 @@ export default function App(){
       scrollFrameIds.current=[second];
     });
     scrollFrameIds.current=[first];
-  },[]);
+    if(lockMs>0){
+      scrollSettleTimers.current=[
+        setTimeout(scroll,240),setTimeout(scroll,650),
+        setTimeout(()=>{scroll();autoScrollLockUntil.current=0},lockMs)
+      ];
+    }
+  },[cancelThreadSettle]);
   const scrollToLatest=useCallback(()=>{
     followLatest.current=true;
     setNewBelowCount(0);
-    settleThreadBottom();
+    settleThreadBottom(1000);
   },[settleThreadBottom]);
   const onThreadScroll=useCallback(()=>{
     const element=threadEl.current;
     if(!element)return;
     const atBottom=isNearBottom(element);
-    followLatest.current=atBottom;
+    // React may dispatch the previous peer's programmatic scroll event after
+    // the next peer mounted. Keep following until its layout is stable.
+    if(Date.now()>=autoScrollLockUntil.current)followLatest.current=atBottom;
     if(atBottom)setNewBelowCount(count=>count===0?count:0);
     setThreadScrolling(true);
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
@@ -1223,8 +1245,8 @@ export default function App(){
   },[]);
   useEffect(()=>()=> {
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
-    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
-  },[]);
+    cancelThreadSettle();
+  },[cancelThreadSettle]);
   useLayoutEffect(()=>{
     const ids=thread.map(item=>item.id);
     const previous=previousThread.current;
@@ -1232,7 +1254,7 @@ export default function App(){
       previousThread.current={peer:selected,ids};
       followLatest.current=true;
       setNewBelowCount(0);
-      settleThreadBottom();
+      settleThreadBottom(1000);
       return;
     }
     const newlyAdded=countNewEntries(previous.ids,ids);
@@ -2348,7 +2370,14 @@ export default function App(){
           </div>}
           <div ref={threadEl}
             className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
-            onScroll={onThreadScroll} role="log" aria-label="聊天记录">
+            onScroll={onThreadScroll}
+            onWheel={event=>{if(event.deltaY<0)cancelFollowForManualScroll()}}
+            onTouchStart={cancelFollowForManualScroll}
+            onKeyDown={event=>{
+              if(["ArrowUp","PageUp","Home"].includes(event.key))
+                cancelFollowForManualScroll();
+            }}
+            role="log" aria-label="聊天记录">
             <div className="wt-thread-content">
           {!selected&&<div className="ant-empty-chat">
             <img src={LOGO_URL} alt="" width="74" height="74"/>
