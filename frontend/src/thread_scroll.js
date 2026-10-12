@@ -19,3 +19,9 @@ export function scrollThreadToBottom(element) {
   if (!element) return;
   element.scrollTop = Math.max(0,element.scrollHeight - element.clientHeight);
 }
+
+/** Ignore scroll events caused by React swapping thread height mid-transition.
+ * Explicit wheel/touch/key navigation cancels this lock in the component. */
+export function shouldFollowThreadScroll(element, lockUntil, now=Date.now()) {
+  return now<lockUntil || isNearBottom(element);
+}

@@ -131,6 +131,30 @@ sudo journalctl -u caddy -n 100 --no-pager
 - Caddy reload 报错：先修复配置，不要重启所有现有站点。
 - 好友长期离线：检查 `WTOX_BOOTSTRAP` 和 VPS 出站 UDP/TCP；Caddy 只代理浏览器连接，不代理原版 Tox UDP。
 
+## WebSocket 一直重连、但消息还能收发
+
+此时网页的 `GET /api/friends`、`GET /api/pending` 等 HTTP 轮询仍在工作，**不等于 `wss://域名/ws` 握手成功**。新版前端连续失败后会显示「轮询中」、逐步降低重连频率（最长约 60 秒），不会弹出反复的连接提示。实时事件可能比 WebSocket 正常时延迟。
+
+按顺序检查，不需要清理 Cookie、IndexedDB 或 Tox 身份：
+
+1. 浏览器开发者工具 → Network → WS → `/ws`。正常状态是 **HTTP 101 Switching Protocols**；如果是 403，检查鉴权和 Origin；404/400 常见于代理路径或升级头，502/503 则先查上游。浏览器 WebSocket JavaScript API 本身不能读取失败握手的详细 HTTP 响应。
+2. 登录后请求 `/api/me` 能返回 200 说明普通 HTTP 的 Tox 身份 Cookie 有效，但**不能据此证明 WebSocket 的 Origin/Host 或反向代理 Upgrade 已配置正确**。
+3. 在 VPS 上检查（不要将密码、Cookie 或完整令牌发到聊天中）：
+
+```bash
+docker compose -f compose.host-caddy.yml logs --tail=200 web | grep -E 'wTox /ws upgrade denied|WebSocket| /ws'
+sudo journalctl -u caddy -n 120 --no-pager
+sudo caddy validate --config /etc/caddy/Caddyfile
+```
+
+后端拒绝握手时只记录原因类别：
+- `site_access_required`：网站入口 Cookie 未通过检查；
+- `tox_session_missing_or_expired`：Tox 会话不存在或已过期；
+- `origin_host_mismatch`：浏览器发来的 Origin 与应用收到的 Host 不一致，需要检查代理是否保留**公网域名 Host**、URL 的 HTTPS、以及是否存在多层代理。
+- **没有上述日志且 Network 返回非 101**：重点检查请求是否实际到达了 wTox 的 `/ws` 路由，尤其是 Caddy、CDN、WAF 对 WebSocket Upgrade 的处理。
+
+宿主机 Caddy 一般只需 `reverse_proxy 127.0.0.1:6066`，本身会自动处理 WebSocket。不要将 `/ws` 改写到其他路径，也不要为了排除错误关闭 WebSocket 的网站门禁、Tox 会话验证或 Origin 检查。若使用 CDN，确认该服务允许 WebSocket 并正确转发 Host/Upgrade。
+
 ## 安全与数据
 
 wtox 首页无需网站入口密码；个人资料、好友、消息和附件 API 均需要 Tox 身份会话。不要通过公网 `http://VPS-IP:6066` 暴露应用。VPS 中的 Toxcore 仍能访问身份私钥和收发明文，不是零知识服务器。

@@ -1,6 +1,8 @@
 """Authenticated friend, message and websocket APIs for native Tox sessions."""
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -12,6 +14,7 @@ from .tox_runtime import ToxActionError, FriendOfflineError
 from .file_transfer import MAX_FILE, safe_filename
 
 router = APIRouter()
+_ws_log = logging.getLogger("uvicorn.error")
 
 def require_user(request: Request) -> str:
     uid = store.tox_session_user(request.cookies.get(TOX_SESSION_COOKIE))
@@ -302,16 +305,22 @@ async def websocket_endpoint(ws: WebSocket):
     # WebSocket bypasses HTTP middleware: check the independent site gate
     # BEFORE authenticating or attaching any Tox identity.
     if not access.gate_authorized(ws.cookies.get(access.COOKIE_NAME)):
+        # Never log cookie tokens, passwords, identity keys or message text.
+        _ws_log.warning("wTox /ws upgrade denied: site_access_required")
         await ws.close(code=1008)
         return
     uid = store.tox_session_user(ws.cookies.get(TOX_SESSION_COOKIE))
     if not uid:
+        _ws_log.warning("wTox /ws upgrade denied: tox_session_missing_or_expired")
         await ws.close(code=1008)
         return
     origin = ws.headers.get("origin")
     scheme = "http" if not access.secure_cookies() else "https"
     expected = f"{scheme}://{ws.headers.get('host', '')}"
     if not origin or origin.rstrip("/") != expected:
+        # The proxy must preserve the PUBLIC Host header for origin checks.
+        # Log only the reason, not attacker-controlled header values.
+        _ws_log.warning("wTox /ws upgrade denied: origin_host_mismatch")
         await ws.close(code=1008)
         return
     await ws.accept()

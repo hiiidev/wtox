@@ -7,7 +7,8 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
   ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled,
-  LoadingOutlined, EyeOutlined, EyeInvisibleOutlined, RedoOutlined
+  LoadingOutlined, EyeOutlined, EyeInvisibleOutlined, RedoOutlined,
+  DisconnectOutlined
   } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import PwaPushWelcome from "./PwaPushWelcome.jsx";
@@ -20,15 +21,17 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
-import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
+import {isNearBottom,countNewEntries,scrollThreadToBottom,shouldFollowThreadScroll} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
 import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
 import {translationAction,showQuickTranslate} from "./translation_action.js";
 import {sanitizePhoto,isPhotoAttachment,MAX_SOURCE_PHOTO_BYTES} from "./photo_sanitize.js";
+import {PreparedAttachmentPreview} from "./PreparedAttachmentPreview.jsx";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {activeConversationPeer,unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
+import {realtimeRetryDelay,realtimeConnectionState} from "./realtime_backoff.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
@@ -175,6 +178,23 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
   </div>;
 }
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
+function RealtimeConnectionIndicator({socketState,slowReconnect}){
+  if(socketState==="connected")return null;
+  const polling=socketState==="polling";
+  return <span className={"wt-connection-indicator"+(polling?" is-polling":"")}
+    role="status"
+    aria-label={polling?"实时连接不可用，正在轮询同步":
+      slowReconnect?"正在重连":"正在连接"}
+    title={polling
+      ?"实时 WebSocket 暂不可用，消息和好友信息将继续通过 HTTP 轮询同步"
+      :slowReconnect?"正在重连":"正在连接"}>
+    {polling?<DisconnectOutlined aria-hidden="true"/>:
+      <LoadingOutlined spin aria-hidden="true"/>}
+    {(slowReconnect||polling)&&<span className="wt-reconnect-label">
+      {polling?"轮询中":"正在重连"}
+    </span>}
+  </span>;
+}
 /* Embedded SVGs: no external Iconify requests. Align optical sizes with
  * SettingFilled's 25px glyph using type-specific icon boxes.
  */
@@ -267,6 +287,8 @@ export default function App(){
   const previousThread=useRef({peer:null,ids:[]});
   const scrollIdleTimer=useRef(null);
   const scrollFrameIds=useRef([]);
+  const scrollSettleTimers=useRef([]);
+  const autoScrollLockUntil=useRef(0);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
   const [logoutOpen,setLogoutOpen]=useState(false);
@@ -1024,17 +1046,27 @@ export default function App(){
   // triggers immediate catch-up after mobile browser background suspension.
   useEffect(()=>{
     if(!user?.public_key)return;
-    let dead=false,ws=null,retry=null,handshakeTimeout=null;
+    let dead=false,ws=null,retry=null,handshakeTimeout=null,failures=0;
+    const scheduleRetry=()=>{
+      if(dead)return;
+      failures++;
+      setSocketState(realtimeConnectionState(failures));
+      clearTimeout(retry);
+      // When websocket upgrades are blocked, HTTP polling keeps messages
+      // available. Back off instead of retrying every 3.5 seconds forever.
+      retry=setTimeout(connect,realtimeRetryDelay(failures));
+    };
     const connect=()=>{
       if(dead)return;
+      clearTimeout(retry);retry=null;
       setSocketState(previous=>previous==="connected"?"reconnecting":previous);
       try{
         ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws");
       }catch(error){
-        // A failed WebSocket constructor must not leave the UI frozen.
-        console.warn("WebSocket connection failed:",error);
-        setSocketState("reconnecting");
-        retry=setTimeout(connect,3500);
+        // Constructors may throw when the requested scheme/URL is invalid.
+        // Native browser console logs already capture handshake failures.
+        console.warn("WebSocket 建立失败（将在后台重试）",error);
+        scheduleRetry();
         return;
       }
       socket.current=ws;
@@ -1049,6 +1081,7 @@ export default function App(){
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         lastMessage.current=Date.now();
+        failures=0;
         setSocketState("connected");
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
           refreshTransfers()]);
@@ -1062,10 +1095,7 @@ export default function App(){
         if(dead||currentSocket!==ws)return;
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
-        if(!dead){
-          setSocketState("reconnecting");
-          retry=setTimeout(connect,3500);
-        }
+        if(!dead)scheduleRetry();
       };
     };
     connect();
@@ -1111,7 +1141,7 @@ export default function App(){
       window.removeEventListener("focus",wake);
       window.removeEventListener("pageshow",wake);
       if(ws){
-        ws.onopen=null;ws.onmessage=null;ws.onclose=null;
+        ws.onopen=null;ws.onmessage=null;ws.onerror=null;ws.onclose=null;
         ws.close();
       }
       socket.current=null;
@@ -1151,7 +1181,7 @@ export default function App(){
               </div>
               {!online(selectedFriend)&&formatLastOnline(selectedFriend.last_online)&&
                 <Typography.Text type="secondary" className="wt-peer-last-online">
-                  最近在线时间：{formatLastOnline(selectedFriend.last_online)}
+                  最后在线：{formatLastOnline(selectedFriend.last_online)}
                 </Typography.Text>}
               <Divider/>
               <Typography.Text type="secondary">状态消息</Typography.Text>
@@ -1176,14 +1206,33 @@ export default function App(){
   // resolving. Merge the optimistic upload with the canonical transfer ID.
   const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
     .slice(-250),[selected,messages,pendingFiles]);
-  const settleThreadBottom=useCallback(()=>{
+  const cancelThreadSettle=useCallback(()=>{
     for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
     scrollFrameIds.current=[];
+    for(const timer of scrollSettleTimers.current)clearTimeout(timer);
+    scrollSettleTimers.current=[];
+  },[]);
+  const cancelFollowForManualScroll=useCallback(()=>{
+    // Only explicit touch/wheel/key input cancels a pending automatic jump.
+    autoScrollLockUntil.current=0;
+    followLatest.current=false;
+    cancelThreadSettle();
+  },[cancelThreadSettle]);
+  const settleThreadBottom=useCallback((lockMs=0)=>{
+    // A ResizeObserver notification during the transition must not cancel
+    // the later stabilization attempts scheduled for the newly selected peer.
+    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
+    scrollFrameIds.current=[];
+    if(lockMs>0){
+      for(const timer of scrollSettleTimers.current)clearTimeout(timer);
+      scrollSettleTimers.current=[];
+      autoScrollLockUntil.current=Date.now()+lockMs;
+    }
     const scroll=()=>{
       if(followLatest.current)scrollThreadToBottom(threadEl.current);
     };
-    // The initial layout can precede the mobile chat panel becoming visible.
-    // Scroll now, after the next paint, and after the following layout pass.
+    // Newly opened chat layout, image footers and iOS viewport metrics can
+    // settle after React's first two frames; wait for final layout too.
     scroll();
     const first=requestAnimationFrame(()=>{
       scroll();
@@ -1194,17 +1243,27 @@ export default function App(){
       scrollFrameIds.current=[second];
     });
     scrollFrameIds.current=[first];
-  },[]);
+    if(lockMs>0){
+      scrollSettleTimers.current=[
+        setTimeout(scroll,240),setTimeout(scroll,650),
+        setTimeout(()=>{scroll();autoScrollLockUntil.current=0},lockMs)
+      ];
+    }
+  },[cancelThreadSettle]);
   const scrollToLatest=useCallback(()=>{
     followLatest.current=true;
     setNewBelowCount(0);
-    settleThreadBottom();
+    settleThreadBottom(1000);
   },[settleThreadBottom]);
   const onThreadScroll=useCallback(()=>{
     const element=threadEl.current;
     if(!element)return;
     const atBottom=isNearBottom(element);
-    followLatest.current=atBottom;
+    // React may dispatch the previous peer's programmatic scroll event after
+    // the next peer mounted. Keep following until its layout is stable.
+    if(autoScrollLockUntil.current>0)
+      followLatest.current=shouldFollowThreadScroll(element,autoScrollLockUntil.current);
+    else followLatest.current=atBottom;
     if(atBottom)setNewBelowCount(count=>count===0?count:0);
     setThreadScrolling(true);
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
@@ -1212,8 +1271,8 @@ export default function App(){
   },[]);
   useEffect(()=>()=> {
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
-    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
-  },[]);
+    cancelThreadSettle();
+  },[cancelThreadSettle]);
   useLayoutEffect(()=>{
     const ids=thread.map(item=>item.id);
     const previous=previousThread.current;
@@ -1221,7 +1280,7 @@ export default function App(){
       previousThread.current={peer:selected,ids};
       followLatest.current=true;
       setNewBelowCount(0);
-      settleThreadBottom();
+      settleThreadBottom(1000);
       return;
     }
     const newlyAdded=countNewEntries(previous.ids,ids);
@@ -2110,14 +2169,14 @@ export default function App(){
               </Badge>
             </AntButton>
             <strong>{section==="contacts"?"通讯录":"聊天"}</strong>
+            <RealtimeConnectionIndicator socketState={socketState}
+              slowReconnect={slowReconnect}/>
           </div>
-          <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
-          {socketState!=="connected"&&<span className="wt-connection-indicator"
-            role="status" aria-label={slowReconnect?"正在重连":"正在连接"}
-            title={slowReconnect?"正在重连":"正在连接"}>
-            <LoadingOutlined spin aria-hidden="true"/>
-            {slowReconnect&&<span className="wt-reconnect-label">正在重连</span>}
-          </span>}
+          <h2 className="wechat-desktop-heading">
+            {section==="contacts"?"通讯录":"聊天"}
+            <RealtimeConnectionIndicator socketState={socketState}
+              slowReconnect={slowReconnect}/>
+          </h2>
           <div className="wt-list-actions" role="group" aria-label="好友操作">
             <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
               <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
@@ -2327,7 +2386,14 @@ export default function App(){
           </div>}
           <div ref={threadEl}
             className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
-            onScroll={onThreadScroll} role="log" aria-label="聊天记录">
+            onScroll={onThreadScroll}
+            onWheel={event=>{if(event.deltaY<0)cancelFollowForManualScroll()}}
+            onTouchStart={cancelFollowForManualScroll}
+            onKeyDown={event=>{
+              if(["ArrowUp","PageUp","Home"].includes(event.key))
+                cancelFollowForManualScroll();
+            }}
+            role="log" aria-label="聊天记录">
             <div className="wt-thread-content">
           {!selected&&<div className="ant-empty-chat">
             <img src={LOGO_URL} alt="" width="74" height="74"/>
@@ -2482,7 +2548,7 @@ export default function App(){
       </Space>}>
       {uploadFile&&<Space orientation="vertical" size="small"
         className="wt-send-file-preview">
-        <FileCard name={uploadFile.name} size="small"/>
+        <PreparedAttachmentPreview file={uploadFile}/>
         <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
         <Typography.Text type="secondary">
           {/^photo-[0-9a-f]{12}\.(?:jpg|png|webp)$/i.test(uploadFile.name)
