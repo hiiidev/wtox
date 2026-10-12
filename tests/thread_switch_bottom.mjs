@@ -34,6 +34,9 @@ assert.ok(!app.includes("const second=requestAnimationFrame("));
 assert.ok(!app.includes("scrollToLatest();\n    setSeen("),
   "Selection must not scroll the old thread before React commits the new one");
 assert.ok(app.includes("onTouchMove={event=>{"));
-assert.ok(app.includes("nextY>threadTouchY.current+10"));
-assert.ok(app.includes('onWheel={event=>{if(event.deltaY<0)cancelFollowForManualScroll()}'));
+assert.ok(app.includes("dy>10&&dy>Math.abs(dx)"),
+  "Horizontal touch gestures must not pause following");
+assert.ok(app.includes('onWheel={event=>{if(event.deltaY<0)noteManualUpIntent()}'));
+assert.ok(app.includes("didUserScrollUp(lastThreadScrollTop.current,element.scrollTop"),
+  "Following pauses only after measured upward scroll");
 console.log("Peer switch aligns at bottom before paint and only real scrolling cancels follow");
