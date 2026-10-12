@@ -118,6 +118,12 @@ assert.ok(app.includes('void prepareAttachment(file);'));
 assert.ok(app.includes('const processed=await sanitizePhoto(file);'));
 assert.ok(app.includes('setUploadFile(processed)'));
 assert.ok(app.includes('processed.size>MAX_ATTACHMENT_BYTES'));
+assert.ok(app.includes("attachmentPreparedFor.current=peer"),
+  "Prepared photo must be tied to the selected recipient");
+assert.ok(app.includes("attachmentPreparedFor.current!==peer"),
+  "Sending must abort if the recipient changed");
+assert.ok(app.includes("attachmentPreparationId.current++"),
+  "Switching conversations must invalidate in-flight photo processing");
 assert.ok(app.includes('selectedRef.current!==peer'),
   "Async photo processing must not select a file for a different chat");
 assert.ok(app.includes('loading={preparingPhoto}'));
