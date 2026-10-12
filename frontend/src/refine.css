@@ -990,3 +990,87 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
 .ant-messenger[data-theme] .wt-compose-tools .wt-chat-file-upload .ant-upload{
   display:inline-flex;align-items:center;justify-content:center;
 }
+
+/* Desktop list header: larger glyphs and subtle feedback, without the harsh
+   always-on gray pill treatment used by the mobile toolbar. */
+@media(min-width:768px){
+  .ant-messenger[data-theme] .wechat-list-head .wt-list-actions{
+    display:flex;align-items:center;gap:10px;
+  }
+  .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn{
+    width:46px!important;height:46px!important;min-width:46px!important;
+    padding:0!important;border-radius:14px!important;
+    border:1px solid transparent!important;
+    background:transparent!important;
+    color:var(--wt-muted)!important;
+    box-shadow:none!important;
+    font-size:24px!important;
+    transition:background-color .18s ease,color .18s ease,
+      border-color .18s ease,transform .18s ease!important;
+  }
+  .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn .anticon{
+    font-size:24px!important;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn:hover:not(:disabled){
+    background:color-mix(in srgb,var(--wt-primary) 12%,var(--wt-panel))!important;
+    border-color:color-mix(in srgb,var(--wt-primary) 22%,transparent)!important;
+    color:var(--wt-primary)!important;transform:translateY(-1px);
+  }
+  .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn:active:not(:disabled){
+    transform:translateY(0);
+    background:color-mix(in srgb,var(--wt-primary) 20%,var(--wt-panel))!important;
+  }
+  .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn:focus-visible{
+    outline:2px solid var(--wt-primary)!important;
+    outline-offset:2px!important;
+  }
+
+  /* Stable gutters and compact, contrast-aware thumbs for both list and chat.
+     Keeping the gutter avoids moving message bubbles on hover. */
+  .ant-messenger[data-theme] .wechat-list,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread.wt-thread-scrolling{
+    overflow-y:auto;
+    scrollbar-width:thin!important;
+    scrollbar-gutter:stable;
+    scrollbar-color:var(--wt-scroll-thumb) transparent!important;
+  }
+  .ant-messenger[data-theme] .wechat-list:hover,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread:hover,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread.wt-thread-scrolling:hover{
+    scrollbar-color:var(--wt-scroll-hover) transparent!important;
+  }
+  .ant-messenger[data-theme] .wechat-list::-webkit-scrollbar,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread::-webkit-scrollbar{
+    width:8px!important;height:8px!important;
+  }
+  .ant-messenger[data-theme] .wechat-list::-webkit-scrollbar-track,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread::-webkit-scrollbar-track{
+    background:transparent!important;
+  }
+  .ant-messenger[data-theme] .wechat-list::-webkit-scrollbar-thumb,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread::-webkit-scrollbar-thumb,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread.wt-thread-scrolling::-webkit-scrollbar-thumb{
+    border:2px solid transparent!important;background-clip:padding-box!important;
+    background-color:var(--wt-scroll-thumb)!important;
+    border-radius:99px!important;
+    min-height:36px;
+  }
+  .ant-messenger[data-theme] .wechat-list:hover::-webkit-scrollbar-thumb,
+  .ant-messenger[data-theme] .wt-thread-shell>.ant-thread:hover::-webkit-scrollbar-thumb{
+    background-color:var(--wt-scroll-hover)!important;
+  }
+}
+/* Right-hand welcome state occupies the whole content canvas. */
+.ant-messenger[data-theme] .ant-chat-area.is-empty-chat .wt-thread-shell{
+  flex:1;
+}
+.ant-messenger[data-theme] .ant-chat-area.is-empty-chat .wt-thread-content{
+  min-height:100%;
+}
+@media(prefers-reduced-motion:reduce){
+  .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn{
+    transition:none!important;transform:none!important;
+  }
+}
