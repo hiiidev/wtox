@@ -1,6 +1,11 @@
 /** Conversation-scoped scroll rules; kept independent from React for tests. */
 export const BOTTOM_THRESHOLD = 72;
 
+/** Ignore gestures that did not actually move the scroll viewport upward. */
+export function didUserScrollUp(previousTop, currentTop, hasUpwardIntent) {
+  return Boolean(hasUpwardIntent) && previousTop - currentTop > 2;
+}
+
 /** A little tolerance avoids turning auto-follow off on fractional/mobile layouts. */
 export function isNearBottom(element, threshold = BOTTOM_THRESHOLD) {
   if (!element) return true;
