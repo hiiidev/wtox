@@ -13,6 +13,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements.txt httpx==0.28.1
+      - name: Audit Python dependencies (including resolved transitive packages)
+        run: |
+          python -m pip install pip-audit==2.10.1
+          python -m pip_audit -r requirements.txt --strict
       - name: Check Python source syntax
         run: python -m compileall -q backend tests
       - uses: actions/setup-node@v4
@@ -21,14 +25,11 @@ jobs:
       - name: Verify Ant Design peer versions before install
         run: node tests/check_npm_peers.mjs
       - name: Install exact frontend dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
         working-directory: frontend
-      - name: Archive npm lockfile for reproducible builds
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-lockfile
-          path: frontend/package-lock.json
-          if-no-files-found: error
+      - name: Audit production npm dependency graph
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend
       - name: Verify npm dependency tree
         run: npm ls antd @ant-design/x @ant-design/icons --depth=0
         working-directory: frontend
@@ -87,32 +88,3 @@ jobs:
           docker run --rm -e SITE_DOMAIN=chat.example.test \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-  lockfile-bootstrap:
-    # One-time bootstrapping from this repository's own security PR only.
-    # Generates and commits a registry-resolved, integrity-hashed lockfile.
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 17 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'security/harden-uploads-auth-20261013'
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Resolve registry dependency integrity and commit lock
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd frontend
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          cd ..
-          git add frontend/package-lock.json
-          if ! git diff --cached --quiet; then
-            git -c user.name='github-actions[bot]' \
-                -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-                commit -m 'build: commit resolved npm integrity lockfile'
-            git push origin "HEAD:refs/heads/${{ github.head_ref }}"
-          fi

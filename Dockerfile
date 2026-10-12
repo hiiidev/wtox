@@ -1,10 +1,10 @@
 # Build the React/Ant Design X UI. Only compiled static assets reach runtime.
 FROM node:22-bookworm-slim AS frontendbuild
 WORKDIR /frontend
-COPY frontend/package.json ./
+COPY frontend/package.json frontend/package-lock.json ./
 COPY tests/check_npm_peers.mjs /checks/check_npm_peers.mjs
 RUN node /checks/check_npm_peers.mjs \
- && npm install --no-audit --no-fund \
+ && npm ci --no-audit --no-fund \
  && npm ls antd @ant-design/x @ant-design/icons --depth=0
 COPY frontend/ ./
 RUN npm run build
