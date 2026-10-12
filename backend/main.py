@@ -56,6 +56,29 @@ class NoStoreMiddleware(BaseHTTPMiddleware):
 app.add_middleware(NoStoreMiddleware)
 app.add_middleware(RequestBodyLimitMiddleware)
 
+class ToxSessionRenewalMiddleware(BaseHTTPMiddleware):
+    """Refresh both browser and server expiry for an active Tox identity.
+
+    Only successful authenticated API reads can renew. Excluding mutations
+    prevents logout/delete responses from accidentally resurrecting a cookie.
+    """
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if (request.method == "GET" and path.startswith("/api/")
+                and not path.startswith("/api/gate/")
+                and 200 <= response.status_code < 400):
+            token = request.cookies.get(TOX_SESSION_COOKIE)
+            if token and await asyncio.to_thread(store.renew_tox_session_if_needed, token):
+                response.set_cookie(
+                    TOX_SESSION_COOKIE, token, max_age=store.TOX_SESSION_IDLE_SECONDS,
+                    path="/", httponly=True, secure=access.secure_cookies(),
+                    samesite="strict",
+                )
+        return response
+
+app.add_middleware(ToxSessionRenewalMiddleware)
+
 # Do not expose identity, file, push or translation endpoints before the
 # optional site password has been entered. JS/CSS/manifest remain public so
 # the password form can load normally in Safari and installed PWAs.
