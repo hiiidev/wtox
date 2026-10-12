@@ -1,6 +1,6 @@
 import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input,
-  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Spin, Modal as AntModal,
+  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Spin, Modal as AntModal, notification,
   Dropdown, Badge, List, Typography, Form, Select, Drawer, Grid, Card, Image, Upload, QRCode, message } from "antd";
 import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
@@ -9,6 +9,8 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled
   } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
+import PwaPushWelcome from "./PwaPushWelcome.jsx";
+import {isStandalone} from "./push_client.js";
 import {LOGO_URL} from "./versioned_assets.js";
 import {disablePushBeforeLogout} from "./push_client.js";
 import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.js";
@@ -152,6 +154,9 @@ export default function App(){
   const [section,setSection]=useState("chats");
   const [friendRequests,setFriendRequests]=useState([]);
   const [friendMessageApi,friendMessageContext]=message.useMessage({top:24,maxCount:2});
+  const [friendNotificationApi,friendNotificationContext]=notification.useNotification({
+    placement:"topRight",top:22,maxCount:2
+  });
   const [uiMessageApi,uiMessageContext]=message.useMessage({top:76,maxCount:4});
   const dismissedFriendIds=useRef(null);
   const notificationPromptShown=useRef(false);
@@ -185,6 +190,7 @@ export default function App(){
   const [notificationPermission,setNotificationPermission]=useState(()=>
     typeof Notification==="undefined"?"unsupported":Notification.permission);
   const notificationsEnabledRef=useRef(notificationsEnabled);
+  const installedPwa=isStandalone();
   const notifiedMessageIds=useRef(new Set());
   const friendsRef=useRef([]);
   useEffect(()=>{friendsRef.current=friends},[friends]);
@@ -342,6 +348,8 @@ export default function App(){
     finally{setDeletingMessages(false)}
   }
   const notifyIncoming=useCallback((event,recovered=false)=>{
+    // Installed PWAs use only service-worker Web Push; avoid double alerts.
+    if(isStandalone())return;
     if(!notificationsEnabledRef.current||typeof Notification==="undefined"||
        Notification.permission!=="granted")return;
     const isViewing=document.visibilityState==="visible"&&document.hasFocus?.()&&
@@ -372,6 +380,7 @@ export default function App(){
     }
   },[]);
   async function toggleBrowserNotifications(){
+    if(isStandalone())return;
     uiMessageApi.destroy("notification-permission-invite");
     if(notificationsEnabled){
       notificationsEnabledRef.current=false;
@@ -407,7 +416,7 @@ export default function App(){
 
   useEffect(()=>{
     // Browsers require a user gesture to show the native permission dialog.
-    if(!user?.public_key || notificationPromptShown.current ||
+    if(isStandalone() || !user?.public_key || notificationPromptShown.current ||
        notificationPermission!=="default" || !window.isSecureContext ||
        typeof Notification==="undefined")return;
     notificationPromptShown.current=true;
@@ -433,23 +442,40 @@ export default function App(){
   useEffect(()=>{
     if(!user?.public_key||!friendRequests.length){
       friendMessageApi.destroy("friend-request-notice");
+      friendNotificationApi.destroy("friend-request-notice");
       dismissedFriendIds.current=null;
       return;
     }
     const signature=user.public_key+":"+friendRequests.map(item=>item.id).sort().join(",");
     if(dismissedFriendIds.current===signature)return;
-    friendMessageApi.open({
-      key:"friend-request-notice",type:"info",duration:0,
-      className:"wt-friend-request-message",
-      content:<span className="wt-request-message-content">
-        <span>收到 {friendRequests.length} 条好友请求</span>
-        <AntButton type="link" size="small" onClick={()=>setModal("requests")}>查看</AntButton>
-        <AntButton type="text" size="small" aria-label="关闭好友请求提示"
-          onClick={()=>{dismissedFriendIds.current=signature;
-            friendMessageApi.destroy("friend-request-notice")}}>关闭</AntButton>
-      </span>
-    });
-  },[user?.public_key,friendRequests,friendMessageApi]);
+    const view=()=>{
+      dismissedFriendIds.current=signature;
+      friendNotificationApi.destroy("friend-request-notice");
+      friendMessageApi.destroy("friend-request-notice");
+      setModal("requests");
+    };
+    if(window.matchMedia("(min-width:768px)").matches){
+      friendNotificationApi.open({
+        key:"friend-request-notice",message:"好友请求",
+        description:`你有 ${friendRequests.length} 条待处理的好友请求。`,
+        duration:0,placement:"topRight",
+        btn:<AntButton type="primary" size="small" onClick={view}>查看</AntButton>,
+        onClose:()=>{dismissedFriendIds.current=signature;}
+      });
+    }else{
+      friendMessageApi.open({
+        key:"friend-request-notice",type:"info",duration:0,
+        className:"wt-friend-request-message",
+        content:<span className="wt-request-message-content">
+          <span>收到 {friendRequests.length} 条好友请求</span>
+          <AntButton type="link" size="small" onClick={view}>查看</AntButton>
+          <AntButton type="text" size="small" aria-label="关闭好友请求提示"
+            onClick={()=>{dismissedFriendIds.current=signature;
+              friendMessageApi.destroy("friend-request-notice")}}>关闭</AntButton>
+        </span>
+      });
+    }
+  },[user?.public_key,friendRequests,friendMessageApi,friendNotificationApi]);
   const refreshNetwork=useCallback(async()=>{
     const data=await getJson("/api/network");
     setNetwork(data.status??-1);
@@ -1184,7 +1210,7 @@ export default function App(){
         options={[{label:"跟随系统",value:"system"},{label:"浅色",value:"light"},
           {label:"深色",value:"dark"}]}/>
     </Card>
-    <Card size="small" title="新消息通知" className="wt-settings-card"
+    {!installedPwa&&<Card size="small" title="新消息通知" className="wt-settings-card"
       extra={<Badge
         status={notificationPermission==="denied"?"error":
           notificationsEnabled&&notificationPermission==="granted"?"success":"default"}
@@ -1202,7 +1228,7 @@ export default function App(){
           {notificationsEnabled&&notificationPermission==="granted"?"关闭新消息通知":"开启新消息通知"}
         </AntButton>
       </Space>
-    </Card>
+    </Card>}
     <PushSettings userId={user?.public_key}/>
     <Card size="small" title="Tox 身份备份" className="wt-settings-card">
       <Typography.Paragraph type="secondary">
@@ -1326,7 +1352,9 @@ export default function App(){
     algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
   }}>
   {friendMessageContext}
+  {friendNotificationContext}
   {uiMessageContext}
+  <PwaPushWelcome userId={user?.public_key}/>
   <div className={"wtox-shell ant-messenger "+(mobileChat?"show-chat ":"")+(section==="me"?"show-me":"")}
     data-theme={effectiveTheme}
     style={{
