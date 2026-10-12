@@ -33,6 +33,8 @@ assert.match(native,/tox_friend_get_last_online/);
 assert.match(native,/"last_online": last_online/);
 assert.match(app,/contactPresenceText\(friend\)/);
 assert.match(app,/chatPresenceText\(selectedFriend\)/);
+assert.match(app,/最近在线时间：\{formatLastOnline\(selectedFriend\.last_online\)\}/);
+assert.match(app,/!online\(selectedFriend\)&&formatLastOnline\(selectedFriend\.last_online\)/);
 assert.match(app,/if\(section==="contacts"\)setDeleteFriendPeer\(peer\)/);
 assert.match(app,/setDeleteFriendPeer\(friend.public_key\)/);
 assert.match(app,/onSelectStart=\{event=>\{if\(isMobile\)event.preventDefault\(\)\}\}/);
@@ -48,7 +50,7 @@ assert.match(app,/const publicKey=deleteFriendPeer/);
 assert.doesNotMatch(app,/setDeleteFriendOpen|deleteFriendOpen/);
 assert.equal(app.split(" centered\n").length-1 +
              (app.match(/ centered\s*\w/g)||[]).length>=0,true);
-assert.equal((app.match(/<AntModal[^\n]*\bcentered\b/g)||[]).length,9);
+assert.equal((app.match(/<AntModal[^\n]*\bcentered\b/g)||[]).length,10);
 assert.match(css,/\.ant-modal-root \.ant-modal-wrap\.ant-modal-centered\{/);
 assert.match(css,/align-items:center!important;/);
 assert.match(css,/\.ant-modal-wrap\.ant-modal-centered::before\{display:none!important;\}/);
