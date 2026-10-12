@@ -1,0 +1,45 @@
+# iPhone PWA / Web Push
+
+wTox now ships a web app manifest and a service worker. On iOS 16.4+, use **Safari → Share → Add to Home Screen**, open wTox from its icon, sign in with your Tox identity, then open **设置 → 离线推送（iPhone PWA）** and select **开启离线推送**.
+
+The existing browser-only notification switch is independent: it works only while the page is open. The new Web Push subscription can deliver generic new-message and friend-request notifications while the phone is locked or the web app is closed, provided the VPS, toxcore, and push service remain reachable.
+
+## Server configuration
+
+The Python backend uses `pywebpush`. VAPID private key is generated once at `WTOX_DATA_DIR/vapid-private.pem` and is kept on the existing persistent volume; **do not commit this private key**. Back up that file together with the rest of the data volume. Losing the key invalidates existing device subscriptions.
+
+Set `WTOX_VAPID_SUBJECT=mailto:your-real-email@example.com` in the existing server .env if desired, before rebuilding. Keep `WTOX_MASTER_KEY` unchanged. No new ports are needed: HTTPS routes run behind the existing Caddy proxy. The container must be able to reach Apple/Firefox/Google push services over HTTPS.
+
+For a host-Caddy deployment, after backing up the environment and data volume:
+
+```bash
+docker compose -f compose.host-caddy.yml up -d --build
+curl -fsS https://YOUR-DOMAIN/manifest.webmanifest
+curl -fsS https://YOUR-DOMAIN/sw.js
+```
+
+**Never run `docker compose down -v`.**
+
+## Important privacy and security behavior
+
+- A Push subscription is associated with the currently authenticated Tox identity, not a publicly submitted user ID.
+- Subscriptions are persisted in encrypted SQLite data using the existing `WTOX_MASTER_KEY`.
+- Payloads only contain the type of alert; no message body, peer name, Tox public key or Tox private key.
+- The settings include a test push. A successful HTTP submission is not an Apple delivery receipt.
+- Disabling the subscription removes its server mapping. Signing out tries to unregister the current device before removing the Tox session; if offline, revoke the notification permission or clear the PWA data on that device.
+- iOS cannot keep JavaScript running continuously in the background. Push delivery depends on the VPS's existing persistent Toxcore session.
+- The PWA does not cache private chats, identity responses, or authentication APIs.
+- Do not expose the database, VAPID key, or Tox identity backups.
+- Push is best-effort and does not guarantee that every message will generate a delivered notification.
+
+## Validation checklist
+
+1. Confirm the app icon appears when added to the home screen.
+2. Sign in from the installed icon and enable push using the direct button.
+3. Use **发送测试通知** and lock the screen. The phone must permit wTox notifications.
+4. Send a message from another Tox client with the wTox page closed.
+5. Tap a notification to reopen the app and check the normal encrypted message sync.
+6. Disable push or sign out, then verify the old Tox identity receives no more push on that device.
+7. Test upgrading with a backed-up volume and ensure existing Tox identities and chats remain intact.
+
+Note: this PR uses the existing vector logo for its manifest and Apple touch icon. For maximum compatibility across older iOS versions, add 180×180 and 192×192/512×512 PNG raster logos in a follow-up.
