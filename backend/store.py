@@ -225,10 +225,27 @@ def get_pending(uid: str):
         rows = c.execute("SELECT id,data,created FROM pending WHERE account_id=? ORDER BY created",(uid,)).fetchall()
     return [{"id":eid,"event":json.loads(decrypt(data)),"created":created} for eid,data,created in rows]
 
-def ack_pending(uid: str, ids: list[str]):
+def ack_pending(uid: str, ids: list[str], *, resolve_friend_requests: bool = False):
+    """Generic receipt/ack must not consume unhandled friend requests.
+
+    Cached older PWAs used to ack friend requests on websocket delivery.
+    Only explicit accept/reject handlers may resolve those inbox records.
+    """
+    import json
     with db() as c:
-        c.executemany("DELETE FROM pending WHERE account_id=? AND id=?",
-                      [(uid,eid) for eid in ids[:100]])
+        for eid in ids[:100]:
+            row = c.execute("SELECT data FROM pending WHERE account_id=? AND id=?",
+                            (uid,eid)).fetchone()
+            if row is None:
+                continue
+            if not resolve_friend_requests:
+                try:
+                    event = json.loads(decrypt(row[0]))
+                except (ValueError, TypeError, UnicodeError):
+                    continue
+                if not isinstance(event, dict) or event.get("type") == "friend_request":
+                    continue
+            c.execute("DELETE FROM pending WHERE account_id=? AND id=?", (uid,eid))
 
 
 # Tox identity is the only login credential for new installations.
