@@ -43,12 +43,17 @@ assert.ok(app.includes('setFriendId(toxId)')&&app.includes('setFriendQrOpen(fals
   "A successful scan should populate the form, not submit a request");
 assert.match(app,/onCancel=\{closeAddFriend\}/,
   "Closing add-friend modal must reset the form");
-assert.match(app,/const closeAddFriend=useCallback\(\(\)=>\{[\s\S]*?setFriendId\(""\);[\s\S]*?setRequestText\("你好，我想添加你为 Tox 好友"\);[\s\S]*?setFriendQrOpen\(false\);/,
-  "Reset both user-entered fields and camera state on dismiss");
+const reset=app.slice(app.indexOf("const closeAddFriend=useCallback"),
+  app.indexOf("const handleFriendQrScanned"));
+assert.ok(reset.includes('setFriendId("")')&&reset.includes('setRequestText("")')&&
+  reset.includes('setFriendQrOpen(false)'),
+  "Closing add-friend must clear both fields and scanner state");
 assert.ok(app.includes("closeAddFriend();"),
   "Success should clear the form too");
-assert.ok(app.includes('disabled={!parseScannedToxId(friendId)||!requestText.trim()}'),
+assert.ok(app.includes('disabled={!parseScannedToxId(friendId)}'),
   "Prevent sending incomplete or invalid Tox IDs");
+assert.ok(app.includes('message:requestText.trim()||"你好，我想添加你为 Tox 好友"'),
+  "Use default greeting only on submit when the optional input is blank");
 
 assert.ok(refine.includes(".wt-add-friend-modal .wt-qr-video-frame"),
   "Camera preview should be styled");
