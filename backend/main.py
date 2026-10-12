@@ -46,6 +46,7 @@ class NoStoreMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(NoStoreMiddleware)
 app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets"), check_dir=False), name="assets")
+app.mount("/icons", StaticFiles(directory=str(FRONTEND_DIR / "icons"), check_dir=False), name="icons")
 
 @app.get("/health")
 def health():
@@ -55,7 +56,10 @@ def health():
 def frontend_health():
     """Detect incomplete React builds and missing static files before users see a white page."""
     assets=FRONTEND_DIR/"assets"
-    good=(FRONTEND_DIR/"index.html").is_file() and (FRONTEND_DIR/"logo.svg").is_file()
+    icons=FRONTEND_DIR/"icons"
+    required_icons=("icon-180.png", "icon-192.png", "icon-512.png")
+    icons_ok=all((icons/name).is_file() for name in required_icons)
+    good=(FRONTEND_DIR/"index.html").is_file() and (FRONTEND_DIR/"logo.svg").is_file() and icons_ok
     scripts=list(assets.glob("*.js")) if assets.is_dir() else []
     styles=list(assets.glob("*.css")) if assets.is_dir() else []
     # Checking disk files alone previously returned 200 even though the
@@ -64,11 +68,16 @@ def frontend_health():
                       if getattr(route,"path",None)=="/assets"),None)
     mounted=Path(asset_route.app.directory).resolve() if asset_route else None
     route_ok=mounted==assets.resolve()
+    icons_route=next((route for route in app.routes
+                      if getattr(route,"path",None)=="/icons"),None)
+    icons_mounted=Path(icons_route.app.directory).resolve() if icons_route else None
+    route_ok=route_ok and icons_mounted==icons.resolve()
     if not good or not scripts or not styles or not route_ok:
         return JSONResponse(
             {"ok":False,"detail":"React 静态资源不完整，请重新构建 Docker 镜像"},
             status_code=503)
-    return {"ok":True,"js":len(scripts),"css":len(styles),"logo":True,"asset_route":"/assets"}
+    return {"ok":True,"js":len(scripts),"css":len(styles),"logo":True,
+            "icons":list(required_icons),"asset_route":"/assets","icons_route":"/icons"}
 
 @app.post("/api/logout")
 def logout(request: Request, response: Response):
@@ -105,7 +114,8 @@ def export_legacy_profile(request: Request):
 
 @app.get("/favicon.ico")
 def favicon():
-    return FileResponse(str(FRONTEND_DIR / "logo.svg"), media_type="image/svg+xml")
+    return FileResponse(str(FRONTEND_DIR / "logo.svg"), media_type="image/svg+xml",
+                        headers={"Cache-Control": "no-cache, max-age=0, must-revalidate"})
 
 @app.get("/logo.svg")
 def logo():
