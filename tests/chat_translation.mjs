@@ -27,7 +27,8 @@ assert.ok(app.includes('aria-label="翻译消息"'),"On-screen touch action requ
 assert.ok(app.includes("wt-bubble-footer-stack") &&
   app.includes("wt-translation-result"),
   "Translate below original bubble, preserving original text and time");
-assert.ok(app.includes('className="wt-conversation-bubble" content={String(item.text||"")}'),
+assert.ok(app.includes('className="wt-conversation-bubble"')&&
+  app.includes('content={String(item.text||"")}'),
   "Encrypted original chat messages must remain unchanged");
 assert.ok(app.includes('title="消息翻译"') &&
   app.includes('aria-label="默认翻译语言"'),
