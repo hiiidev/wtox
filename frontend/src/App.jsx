@@ -343,14 +343,14 @@ export default function App(){
       alert(item.type==="file"?"已复制文件名":"已复制消息","success");
     }catch{alert("复制失败，请检查浏览器剪贴板权限","error")}
   }
-  async function translateMessage(item){
+  async function translateMessage(item,force=false){
     // The currently authenticated identity and the selected chat are required.
     const text=String(item?.text||"").trim();
     const peer=selectedRef.current;
     if(!user?.public_key||!peer||item.type==="file"||!text||selectedMessageIds.size)return;
     const key=peer+":"+String(item.id);
     const old=translations[key];
-    if(old?.text===text&&old.target===resolvedTranslationLanguage){
+    if(!force&&old?.text===text&&old.target===resolvedTranslationLanguage){
       if(old.status==="loading")return;
       if(old.status==="ok"){
         setTranslations(current=>({...current,[key]:{
@@ -368,7 +368,10 @@ export default function App(){
     try{
       // Only this manually chosen message is sent as plaintext; never sync
       // translations into Tox or persistent encrypted chat history.
-      const response=await postTranslate(text,resolvedTranslationLanguage,controller.signal);
+      const response=await(await api("/api/translate",{
+        method:"POST",body:JSON.stringify({text,target:resolvedTranslationLanguage}),
+        signal:controller.signal
+      })).json();
       if(controller.signal.aborted)return;
       setTranslations(current=>({...current,[key]:{
         text,target:resolvedTranslationLanguage,status:"ok",
@@ -1426,7 +1429,7 @@ export default function App(){
       <Typography.Text type="secondary" className="wt-translation-setting-label">
         默认翻译语言
       </Typography.Text>
-      <Select value={translationLanguage} block style={{width:"100%"}}
+      <Select value={translationLanguage} style={{width:"100%"}}
         aria-label="默认翻译语言" options={TRANSLATION_LANGUAGES}
         onChange={setTranslationLanguage}/>
       <Typography.Paragraph type="secondary" className="wt-settings-footnote">
