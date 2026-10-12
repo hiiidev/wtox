@@ -299,7 +299,11 @@ def acknowledge(body: Acknowledge, request: Request, uid: str = Depends(require_
 
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
-    # WebSocket must validate the personal Tox session explicitly.
+    # WebSocket bypasses HTTP middleware: check the independent site gate
+    # BEFORE authenticating or attaching any Tox identity.
+    if not access.gate_authorized(ws.cookies.get(access.COOKIE_NAME)):
+        await ws.close(code=1008)
+        return
     uid = store.tox_session_user(ws.cookies.get(TOX_SESSION_COOKIE))
     if not uid:
         await ws.close(code=1008)

@@ -1,9 +1,13 @@
 """Tox-profile-only authentication and the public web application."""
 import asyncio
+import time
+from collections import defaultdict, deque
+from threading import Lock
 from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -18,6 +22,7 @@ from .translate_api import router as translate_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    access.site_password()  # Reject a configured password shorter than six characters on boot.
     store.init()
     web_push.init()
     if store.needs_legacy_migration():
@@ -46,6 +51,79 @@ class NoStoreMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(NoStoreMiddleware)
+
+# Do not expose identity, file, push or translation endpoints before the
+# optional site password has been entered. JS/CSS/manifest remain public so
+# the password form can load normally in Safari and installed PWAs.
+class SiteGateMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if (path.startswith("/api/") and path not in
+                ("/api/gate/status", "/api/gate/login") and
+                not access.gate_authorized(request.cookies.get(access.COOKIE_NAME))):
+            return JSONResponse(
+                {"detail":"需要先输入网站访问密码","access_required":True},
+                status_code=403,
+                headers={"Cache-Control":"no-store"},
+            )
+        return await call_next(request)
+
+app.add_middleware(SiteGateMiddleware)
+
+_SITE_LOGIN_LOCK=Lock()
+_SITE_LOGIN_ATTEMPTS=defaultdict(deque)
+
+
+class SitePasswordBody(BaseModel):
+    password: str = Field(min_length=1,max_length=512)
+
+
+def site_login_rate_check(request: Request):
+    ip=request.client.host if request.client else "unknown"
+    now=time.monotonic()
+    with _SITE_LOGIN_LOCK:
+        entries=_SITE_LOGIN_ATTEMPTS[ip]
+        while entries and now-entries[0]>=900:
+            entries.popleft()
+        if len(entries)>=12:
+            raise HTTPException(429,"尝试次数过多，请稍后再试")
+        entries.append(now)
+
+
+@app.get("/api/gate/status")
+def site_gate_status(request: Request, response: Response):
+    required=access.site_gate_enabled()
+    authorized=access.gate_authorized(request.cookies.get(access.COOKIE_NAME))
+    if required and authorized:
+        # Refresh the persistent first-party cookie whenever the app opens;
+        # no fixed 30-day deadline. Browser storage policies still apply.
+        password=access.site_password()
+        response.set_cookie(
+            access.COOKIE_NAME,access.issue_access_cookie(password),
+            max_age=access.REMEMBER_SECONDS,path="/",httponly=True,
+            secure=access.secure_cookies(),samesite="strict",
+        )
+    return {"required":required,"authorized":authorized}
+
+
+@app.post("/api/gate/login")
+def site_gate_login(body: SitePasswordBody, request: Request, response: Response):
+    from .profile_api import require_same_origin
+    require_same_origin(request)
+    if not access.site_gate_enabled():
+        return {"ok":True}
+    site_login_rate_check(request)
+    if not access.password_matches(body.password):
+        raise HTTPException(401,"访问密码不正确")
+    password=access.site_password()
+    response.set_cookie(
+        access.COOKIE_NAME,access.issue_access_cookie(password),
+        max_age=access.REMEMBER_SECONDS,path="/",httponly=True,
+        secure=access.secure_cookies(),samesite="strict"
+    )
+    return {"ok":True}
+
+
 app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets"), check_dir=False), name="assets")
 app.mount("/icons", StaticFiles(directory=str(FRONTEND_DIR / "icons"), check_dir=False), name="icons")
 
