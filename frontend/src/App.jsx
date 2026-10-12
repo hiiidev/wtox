@@ -1,6 +1,6 @@
 import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input,
-  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal,
+  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Spin, Modal as AntModal,
   Dropdown, Badge, List, Typography, Form, Select, Drawer, Grid, Card, Image, Upload, QRCode, message } from "antd";
 import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
@@ -1128,7 +1128,7 @@ export default function App(){
     <AntButton danger block onClick={logout}>退出当前身份</AntButton>
   </div>;
 
-  if(loading)return <div className="wtox-loading">正在加载 wTox…</div>;
+  if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><Spin size="large"/></div>;
   if(!user)return <ConfigProvider theme={{
     algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm,
     token:{colorPrimary:"#16ac71",borderRadius:12}
