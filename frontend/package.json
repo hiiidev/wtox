@@ -14,7 +14,8 @@
     "react-dom": "19.2.0",
     "antd": "6.6.5",
     "@ant-design/x": "2.9.0",
-    "@ant-design/icons": "6.3.4"
+    "@ant-design/icons": "6.3.4",
+    "@zxing/browser": "0.2.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "5.1.0",
