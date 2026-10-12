@@ -6,6 +6,7 @@ import "./ant-style.css";
 import "./wechat-style.css";
 import "./refine.css";
 import App from "./App.jsx";
+import {LOGO_URL} from "./versioned_assets.js";
 
 class ErrorBoundary extends React.Component {
   constructor(props){super(props);this.state={broken:false}}
@@ -14,7 +15,7 @@ class ErrorBoundary extends React.Component {
   render(){
     if(!this.state.broken)return this.props.children;
     return <div className="wtox-error-page" role="alert">
-      <img src="/logo.svg" alt="wtox logo" width="88" height="88"/>
+      <img src={LOGO_URL} alt="wtox logo" width="88" height="88"/>
       <h1>聊天界面加载失败</h1>
       <p>React 组件出现异常，现有 Tox 身份和本地聊天记录不会因此被清除。</p>
       <button onClick={()=>location.reload()}>重新载入</button>
