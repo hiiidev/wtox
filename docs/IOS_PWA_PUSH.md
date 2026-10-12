@@ -42,4 +42,4 @@ curl -fsS https://YOUR-DOMAIN/sw.js
 6. Disable push or sign out, then verify the old Tox identity receives no more push on that device.
 7. Test upgrading with a backed-up volume and ensure existing Tox identities and chats remain intact.
 
-Note: this PR uses the existing vector logo for its manifest and Apple touch icon. For maximum compatibility across older iOS versions, add 180×180 and 192×192/512×512 PNG raster logos in a follow-up.
+PWA icons are generated from the original SVG by `npm run build`: PNG 180×180, 192×192, 512×512 and 1024×1024 are written into the built site. Do not manually modify the PNG artifacts; change `frontend/public/logo.svg` and regenerate.
