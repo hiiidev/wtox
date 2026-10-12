@@ -72,8 +72,8 @@ assert.ok(app.includes('document.addEventListener("visibilitychange",refresh)'))
 assert.ok(app.includes("observer.observe(content)")&&app.includes("observer.observe(element)"));
 assert.ok(app.includes('window.visualViewport?.addEventListener("resize",ensureBottom)'));
 assert.ok(app.includes("scrollThreadToBottom(threadEl.current)"));
-assert.ok(app.includes("const second=requestAnimationFrame("),
-  "A delayed layout correction must run after the second paint");
+assert.ok(!app.includes("setTimeout(scroll,650)") && !app.includes("const second=requestAnimationFrame("),
+  "Initial bottom alignment must happen synchronously before first paint");
 assert.ok(!app.includes("requestAnimationFrame(scrollToLatest)"),
   "Do not scroll the previous conversation before React renders the new one");
 console.log("Desktop/mobile read state, contacts dates, real bottom and late layout verified");
