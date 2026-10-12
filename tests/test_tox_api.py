@@ -144,7 +144,10 @@ class ChatApiTests(unittest.TestCase):
         self.client.cookies.delete("wtox_tox_session")
         self.assertEqual(self.client.get("/api/network").status_code, 401)
         self.assertEqual(self.client.get("/api/friends").status_code, 401)
-        self.assertEqual(self.client.post("/api/gate/login",json={"password":"x"}).status_code,404)
+        # The optional entrance endpoint is present and is a no-op when
+        # WTOX_ACCESS_PASSWORD is not configured; personal Tox APIs remain private.
+        self.assertEqual(self.client.post("/api/gate/login",
+            json={"password":"x"}).status_code,200)
 
     def test_pending_ack_and_websocket_origin(self):
         eid = store.append_pending(self.uid, {
