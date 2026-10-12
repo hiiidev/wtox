@@ -43,7 +43,7 @@ assert.match(app,/refreshOutbox/);
 assert.match(app,/正在发送/);
 assert.match(app,/已送达/);
 assert.doesNotMatch(app,/changeOfflineQueue|setOfflineQueue/,
-  "The optional VPS queue toggle must no longer exist");
+  "The optional server queue toggle must no longer exist");
 assert.match(history,/indexedDB\.open\("wtox-local-"/);
 assert.match(history,/device-key-v2/);
 assert.match(history,/applyOutboxStatuses/);
@@ -51,14 +51,14 @@ assert.match(python,/@router\.get\("\/api\/outbox"\)/);
 assert.match(python,/@router\.put\("\/api\/profile\/self"\)/);
 assert.match(store,/encrypt\(text\.encode\("utf-8"\)\)/);
 assert.match(mgr,/await asyncio\.sleep\(3\)/);
-assert.ok(app.includes('Every send enters the encrypted VPS outbox'),
-  "Client must submit all text through VPS queue");
+assert.ok(app.includes('Every send enters the encrypted server outbox'),
+  "Client must submit all text through the encrypted service queue");
 assert.ok(app.includes('migrateLegacyBrowserQueue') &&
   app.includes('await migrateLegacyBrowserQueue(h)') &&
   !app.includes('flushBrowserQueue'),
   "Legacy messages must migrate once without browser polling");
 assert.ok(python.includes('entry=store.enqueue_outbox('),
-  "API must always store messages in VPS encrypted outbox");
+  "API must always store messages in encrypted service outbox");
 assert.ok(!python.includes('if store.offline_queue_enabled(uid)'),
   "No per-account queue mode is allowed");
 assert.ok(!python.includes('@router.put("/api/settings")'),
@@ -90,7 +90,7 @@ assert.ok(history.includes("cacheImage")&&history.includes("expireImages"),
   "Encrypted image cache expiry is required");
 assert.ok(existsSync("frontend/public/logo.svg"),"Generated wtox logo missing");
 assert.ok(html.includes('href="/logo.svg"'),"Generated logo not registered as favicon");
-console.log("wTox Ant Design chat, mandatory VPS queue and native profile structural checks OK");
+console.log("wTox Ant Design chat, encrypted offline queue and native profile structural checks OK");
 
 assert.ok(app.includes("wTox")&&html.includes("<title>wTox</title>"),"wTox branding must be uniform");
 assert.ok(!app.includes("exportQtox")&&!app.includes("toQtoxTsv"),"qTox history export must be removed");

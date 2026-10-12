@@ -34,7 +34,7 @@ def _buffer(data: bytes):
 
 def encrypt_savedata(savedata: bytes, password: str) -> bytes:
     if not isinstance(password, str) or not password:
-        raise ToxIdentityError("请设置备份密码")
+        raise ToxIdentityError("请设置密码")
     if not savedata or len(savedata) > MAX_SAVEDATA:
         raise ToxIdentityError("无效 Tox 配置大小")
     plain = _buffer(savedata)
@@ -52,7 +52,7 @@ def decrypt_savedata(savedata: bytes, password: str | None) -> bytes:
     if not is_encrypted(savedata):
         return savedata
     if not password:
-        raise ToxIdentityError("这个 .tox 文件已加密，请填写备份密码")
+        raise ToxIdentityError("这个 .tox 文件已加密，请输入密码")
     if len(savedata) <= OVERHEAD or len(savedata) > MAX_SAVEDATA + OVERHEAD:
         raise ToxIdentityError("加密 Tox 配置大小无效")
     ciphertext = _buffer(savedata)

@@ -85,7 +85,7 @@ def create_identity(body: BackupPassword, request: Request):
     require_same_origin(request)
     rate_check(request)
     if not body.password:
-        raise HTTPException(422, "请设置备份密码")
+        raise HTTPException(422, "请设置密码")
     # Only newly created identities receive the default; never overwrite
     # an imported Tox profile or an existing user's custom status message.
     identity = core().identity(status_message="Chatting on wTox")
@@ -119,7 +119,7 @@ async def login_with_savedata(request: Request, response: Response):
     # Passwords never go in URLs, cookies, or HTTP headers themselves.
     prefix = request.headers.get("x-tox-password-bytes", "0")
     if not prefix.isascii() or not prefix.isdecimal() or len(prefix) > 12:
-        raise HTTPException(400, "备份密码长度无效")
+        raise HTTPException(400, "密码长度无效")
     password_size = int(prefix)
     parts = []
     size = 0
@@ -137,7 +137,7 @@ async def login_with_savedata(request: Request, response: Response):
     try:
         password = data[:password_size].decode("utf-8") if password_size else None
     except UnicodeDecodeError as exc:
-        raise HTTPException(400, "备份密码编码无效") from exc
+        raise HTTPException(400, "密码编码无效") from exc
     try:
         native = core()
         plaintext = decrypt_savedata(backup, password)
@@ -161,7 +161,7 @@ def export_encrypted_profile(body: BackupPassword, request: Request,
     require_same_origin(request)
     rate_check(request)
     if not body.password:
-        raise HTTPException(400, "请设置备份密码")
+        raise HTTPException(400, "请设置密码")
     savedata = store.read_profile(uid)
     if savedata is None:
         raise HTTPException(404, "没有此 Tox 身份")
