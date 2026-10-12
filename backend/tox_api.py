@@ -302,6 +302,9 @@ def acknowledge(body: Acknowledge, request: Request, uid: str = Depends(require_
 
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    # A missing log here means Cloudflare/proxy blocked before this app.
+    # Log only fixed markers: no Host, Origin, cookie or message payload.
+    _ws_log.info("wTox /ws upgrade reached application")
     # WebSocket bypasses HTTP middleware: check the independent site gate
     # BEFORE authenticating or attaching any Tox identity.
     if not access.gate_authorized(ws.cookies.get(access.COOKIE_NAME)):
@@ -324,6 +327,7 @@ async def websocket_endpoint(ws: WebSocket):
         await ws.close(code=1008)
         return
     await ws.accept()
+    _ws_log.info("wTox /ws upgrade accepted")
     manager.attach(uid, ws)
     try:
         for record in store.get_pending(uid):
