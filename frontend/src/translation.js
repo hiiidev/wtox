@@ -34,8 +34,10 @@ export function browserTranslateLanguage(language){
   if(root==="zh"){
     return /^(TW|HK|MO|Hant)$/i.test(region)?"zh-TW":"zh-CN";
   }
-  if(root==="fil"||root==="tl")return "en"; // fallback until explicitly supported
-  return supported.has(root)?root:"en";
+  if(root==="tl")return "fil";
+  // An otherwise valid browser locale should not silently become English
+  // simply because we do not show it as a predefined menu choice.
+  return /^[a-z]{2,3}$/.test(root)?root:"en";
 }
 export function translationTarget(preference,language){
   return supported.has(preference)&&preference!=="auto"
