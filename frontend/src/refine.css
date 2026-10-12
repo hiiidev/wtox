@@ -1287,3 +1287,87 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     overflow-y:auto;
   }
 }
+
+/* Optional, on-demand translation appears directly beneath the message
+   timestamp. It never modifies the original encrypted Tox bubble. */
+.ant-messenger[data-theme] .wt-bubble-footer-stack{
+  display:flex;flex-direction:column;gap:7px;
+  max-width:min(84vw,540px);min-width:0;
+  align-items:flex-start;
+}
+.ant-messenger[data-theme] .wt-bubble-footer-stack.out{align-items:flex-end;}
+.ant-messenger[data-theme] .wt-bubble-meta-row{
+  display:flex;align-items:center;gap:7px;min-height:23px;
+}
+.ant-messenger[data-theme] .wt-bubble-meta-row .ant-message-status{
+  font-size:12px;color:var(--wt-muted)!important;
+  white-space:nowrap;line-height:1.5;
+}
+.ant-messenger[data-theme] .wt-translate-button{
+  appearance:none;background:transparent;border:0;
+  width:25px;height:25px;min-width:25px;
+  padding:3px;display:inline-flex;justify-content:center;align-items:center;
+  border-radius:7px;color:var(--wt-muted);cursor:pointer;
+  transition:color .15s ease,background .15s ease;
+}
+.ant-messenger[data-theme] .wt-translate-button:hover,
+.ant-messenger[data-theme] .wt-translate-button:focus-visible{
+  color:var(--wt-primary);
+  background:var(--wt-hover);
+}
+.ant-messenger[data-theme] .wt-translate-button:focus-visible{
+  outline:2px solid var(--wt-primary);outline-offset:2px;
+}
+.ant-messenger[data-theme] .wt-translation-result{
+  align-self:stretch;box-sizing:border-box;
+  width:fit-content;max-width:100%;
+  min-width:min(170px,65vw);
+  color:var(--wt-text);background:var(--wt-panel);
+  border:1px solid var(--wt-border);
+  border-inline-start:3px solid var(--wt-primary);
+  border-radius:9px;padding:10px 12px;
+  box-shadow:0 3px 10px rgba(0,0,0,.06);
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.ant-messenger[data-theme="dark"] .wt-translation-result{
+  background:linear-gradient(180deg,#313135,#29292c);
+  border-color:#444448;border-inline-start-color:var(--wt-primary);
+  box-shadow:0 5px 18px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.035);
+}
+.ant-messenger[data-theme] .wt-translation-heading{
+  display:flex;align-items:center;gap:5px;
+  font-size:11px;font-weight:650;color:var(--wt-primary);
+  margin-bottom:6px;
+}
+.ant-messenger[data-theme] .wt-translation-text{
+  font-size:13px;font-weight:400;line-height:1.65;
+  color:var(--wt-text);user-select:text;
+}
+.ant-messenger[data-theme] .wt-translation-result.error{
+  border-inline-start-color:#f87171;
+}
+.ant-messenger[data-theme] .wt-translation-result.error .wt-translation-heading{
+  color:#f87171;
+}
+.ant-messenger[data-theme] .wt-translation-retry{
+  appearance:none;cursor:pointer;margin-top:6px;
+  background:transparent;color:var(--wt-primary);
+  border:0;padding:4px 0;font-size:12px;
+}
+.wt-settings-card .wt-translation-setting-label.ant-typography{
+  display:block;margin-bottom:9px;
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wt-bubble-footer-stack{
+    max-width:min(89vw,430px);
+  }
+  .ant-messenger[data-theme] .wt-translate-button{
+    width:30px;height:30px;min-width:30px;
+  }
+  .ant-messenger[data-theme] .wt-translation-result{
+    max-width:calc(100vw - 60px);
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .ant-messenger[data-theme] .wt-translate-button{transition:none}
+}
