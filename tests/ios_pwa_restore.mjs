@@ -38,8 +38,12 @@ assert.ok(!app.includes('message.open({content:"连接成功"'),
 // chat history while local AES-GCM history is already available.
 const load=app.slice(app.indexOf('const previous=history.current'),
   app.indexOf('// Encrypted image previews are temporary browser data too'));
-assert.ok(!load.includes('setMessages([])'),
-  "Do not clear visible messages on transient identity restoration");
+assert.ok(load.includes("if(restoredIdentity.current&&restoredIdentity.current!==owner){"),
+  "An actual identity switch must explicitly clear the previous identity");
+assert.ok(load.includes("setFriends([])")&&load.includes("setMessages([])"),
+  "Do not expose previous account data when switching identities");
+assert.ok(!load.includes("setHistoryReady(false);setMigrateRequired(false);setMessages([])"),
+  "Do not unconditionally clear the same account during a reconnect");
 assert.ok(load.indexOf("const cached=await h.read()")>=0);
 assert.ok(load.indexOf("setMessages(cached)")>=0);
 assert.ok(load.indexOf("setMessages(cached)") <
