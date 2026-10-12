@@ -909,26 +909,48 @@ export default function App(){
     const h=history.current;
     if(!h?.ready()){setModal("settings");alert("请先完成旧聊天历史迁移");return}
     const client_id=crypto.randomUUID().replaceAll("-","");
+    const optimistic={
+      id:client_id,type:"message",direction:"outgoing",public_key:peer,
+      text,at:Date.now(),outbox_id:client_id,delivery_status:"queued_local"
+    };
     sendBusy.current=true;setSending(true);
+    drafts.current.set(peer,"");
+    if(selectedRef.current===peer)setDraft("");
+    // Render immediately: neither HTTPS latency nor IndexedDB encryption
+    // should delay the outgoing message bubble.
+    setMessages(previous=>[...previous,optimistic]);
     try{
-      // Every send enters the encrypted server outbox, even if the peer is
-      // already online. The native worker sends asynchronously.
-      const res=await postJson("/api/messages",{public_key:peer,text,client_id});
-      drafts.current.set(peer,"");
-      if(selectedRef.current===peer)setDraft("");
-      try{
-        await h.persist({
-          id:client_id,type:"message",direction:"outgoing",
-          public_key:peer,text,at:Date.now(),outbox_id:res.id||client_id,
-          session_id:res.session_id,message_id:res.message_id,
-          delivery_status:res.status==="sent"?"sent":"queued"
-        });
-        await recoverPending(h);
-      }catch(error){alert("消息已加入待发队列，但本地历史保存失败："+error.message)}
+      // Always store the client ID before submitting, so an ambiguous network
+      // failure cannot silently duplicate an already-accepted server message.
+      await h.persist(optimistic);
     }catch(error){
+      setMessages(previous=>previous.filter(item=>item.id!==client_id));
       drafts.current.set(peer,text);
       if(selectedRef.current===peer)setDraft(text);
-      alert(error.message);
+      sendBusy.current=false;setSending(false);
+      alert("无法保存本地加密消息："+error.message);return;
+    }
+    try{
+      // The native worker sends asynchronously from the encrypted VPS outbox.
+      const res=await postJson("/api/messages",{public_key:peer,text,client_id});
+      await h.patchEvent(client_id,{
+        outbox_id:res.id||client_id,
+        session_id:res.session_id,message_id:res.message_id,
+        delivery_status:res.status==="sent"?"sent":"queued"
+      });
+      await refreshHistory(h);
+      recoverPending(h).catch(error=>console.warn("消息状态同步失败",error));
+    }catch(error){
+      // Network errors may occur AFTER the server accepted the request:
+      // retain the same client ID and do not auto-retry or ask for a resend.
+      const definitive=error.status>=400&&error.status<500;
+      const state=definitive?"failed":"uncertain";
+      try{
+        await h.patchEvent(client_id,{delivery_status:state,delivery_error:error.message});
+        await refreshHistory(h);
+      }catch{setMessages(previous=>previous.map(item=>item.id===client_id
+        ? {...item,delivery_status:state}:item))}
+      if(definitive)alert("消息发送失败："+error.message);
     }finally{sendBusy.current=false;setSending(false)}
   }
   async function addFriend(){
