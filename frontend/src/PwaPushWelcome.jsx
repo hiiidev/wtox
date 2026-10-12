@@ -38,6 +38,7 @@ export default function PwaPushWelcome({userId}){
       }).finally(()=>{busy=false});
     };
     function onFirstGesture(event){
+      if(!event.isTrusted)return;
       if(event.type==="keydown"&&(event.key==="Tab"||event.key==="Shift"))return;
       subscribe();
     }
