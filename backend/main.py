@@ -12,10 +12,13 @@ from . import access, store
 from .profile_api import router as profile_router, COOKIE_NAME as TOX_SESSION_COOKIE
 from .tox_api import router as tox_router
 from .session_manager import manager
+from . import web_push
+from .push_api import router as push_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     store.init()
+    web_push.init()
     if store.needs_legacy_migration():
         from .tox_identity import ToxCore
         store.migrate_legacy_identities(ToxCore())
@@ -112,5 +115,15 @@ def logo():
 def index():
     return FileResponse(str(FRONTEND_DIR / "index.html"),headers={"Cache-Control":"no-store"})
 
+@app.get("/manifest.webmanifest")
+def pwa_manifest():
+    return FileResponse(str(FRONTEND_DIR / "manifest.webmanifest"), media_type="application/manifest+json")
+
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(str(FRONTEND_DIR / "sw.js"), media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+app.include_router(push_router)
 app.include_router(profile_router)
 app.include_router(tox_router)

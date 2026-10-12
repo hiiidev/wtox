@@ -1,20 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
-  <title id="title">wTox</title>
-  <desc id="desc">两枚交叠的消息气泡与连接节点组成的绿色聊天图标</desc>
-  <defs>
-    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#39d99f"/>
-      <stop offset="1" stop-color="#118d68"/>
-    </linearGradient>
-    <linearGradient id="inset" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#173d35"/>
-      <stop offset="1" stop-color="#103329"/>
-    </linearGradient>
-  </defs>
-  <rect width="128" height="128" rx="29" fill="url(#inset)"/>
-  <path d="M29 34c0-12 10-22 22-22h26c18 0 32 14 32 32v13c0 18-14 32-32 32H57L35 104l4-24C33 74 29 65 29 57Z"
-        fill="url(#surface)"/>
-  <path d="M54 42h31M54 57h24" stroke="#0e3d2d" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="92" cy="85" r="20" fill="#f7fff9" stroke="#0e3d2d" stroke-width="6"/>
-  <path d="M83 85l6 6 13-15" fill="none" stroke="#14865e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1024" height="1024" rx="150" fill="#07C160"/>
+<path d="M511.5 224.875C260.078 224.875 191.917 353.649 191.917 512.5C191.917 578.692 203.752 639.665 235.751 688.271C276.057 752.187 255.595 810.777 223.875 832.083C275.503 832.083 310.23 815.65 332.29 799.377C347.954 787.821 367.907 782.113 386.811 786.75C422.237 795.437 463.534 800.125 511.5 800.125C723.953 800.125 819.275 688.271 831.083 544.458" stroke="white" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M515.488 512.5H511.494M387.661 512.5H383.667M519.483 512.5C519.483 516.913 515.907 520.49 511.494 520.49C507.083 520.49 503.504 516.913 503.504 512.5C503.504 508.087 507.083 504.51 511.494 504.51C515.907 504.51 519.483 508.087 519.483 512.5ZM391.656 512.5C391.656 516.913 388.079 520.49 383.667 520.49C379.254 520.49 375.677 516.913 375.677 512.5C375.677 508.087 379.254 504.51 383.667 504.51C388.079 504.51 391.656 508.087 391.656 512.5Z" stroke="white" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M655.313 304.771H783.146M655.313 304.771V256.833C655.313 221.533 683.928 192.917 719.229 192.917C754.53 192.917 783.146 221.533 783.146 256.833V304.771M655.313 304.771C628.838 304.771 607.375 326.233 607.375 352.708V400.646C607.375 427.121 628.838 448.583 655.313 448.583H783.146C809.62 448.583 831.083 427.121 831.083 400.646V352.708C831.083 326.233 809.62 304.771 783.146 304.771" stroke="white" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
