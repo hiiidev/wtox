@@ -1164,9 +1164,6 @@ export default function App(){
                 loading={busy} disabled={busy||!createPassword}>
                 创建身份并下载 .tox 文件
               </AntButton>
-              <Typography.Text type="secondary" className="wtox-auth-hint">
-                密码只用于加密 .tox 身份文件；丢失文件或密码将无法通过该备份恢复。
-              </Typography.Text>
             </Form>:
             <Form layout="vertical" className="wtox-auth-form" onFinish={loginIdentity}>
               <Typography.Paragraph type="secondary" className="wtox-auth-step-note">

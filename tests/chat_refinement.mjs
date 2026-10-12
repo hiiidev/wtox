@@ -220,3 +220,9 @@ assert.match(refined,/background:#f5f5f5;color:#222326;color-scheme:light/);
 assert.match(refined,/background:#1e1e1f;color:#f3f3f3;color-scheme:dark/);
 assert.match(refined,/\[data-theme="dark"\] \.wtox-auth-card/);
 assert.doesNotMatch(refined,/linear-gradient\(143deg|\.wtox-auth-intro\{/);
+
+assert.doesNotMatch(app,/密码只用于加密 \.tox 身份文件/);
+assert.doesNotMatch(app,/wtox-auth-hint/);
+assert.match(refined,/\.wtox-auth-switch \.ant-segmented-item-label\{/);
+assert.match(refined,/display:flex;align-items:center;justify-content:center;[\s\S]*?width:100%;height:100%;min-height:0/);
+assert.doesNotMatch(refined,/\.wtox-auth-hint\{/);

@@ -925,8 +925,15 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
 .wtox-auth-switch.ant-segmented{
   margin-bottom:21px;padding:4px;border-radius:10px;
 }
+.wtox-auth-switch .ant-segmented-group{align-items:stretch}
 .wtox-auth-switch .ant-segmented-item{
-  min-height:40px;line-height:40px;border-radius:8px;
+  display:flex;align-items:stretch;justify-content:center;
+  height:44px;min-height:44px;line-height:normal;border-radius:8px;
+}
+.wtox-auth-switch .ant-segmented-item-label{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;height:100%;min-height:0;
+  padding:0 12px;line-height:1.4;text-align:center;
 }
 .wtox-auth-form{display:flex;flex-direction:column}
 .wtox-auth-step-note.ant-typography{
@@ -942,10 +949,6 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
   border:0!important;box-shadow:none!important;
 }
 .wtox-auth-form .ant-btn-primary{height:46px;font-size:14px;font-weight:600}
-.wtox-auth-hint{
-  display:block;text-align:center;
-  margin-top:15px;font-size:12px;line-height:1.65;
-}
 .wtox-auth-upload .ant-upload-drag{border-radius:10px!important;padding:10px 7px}
 .wtox-auth-upload-symbol{font-size:25px;color:var(--auth-green);margin-bottom:7px}
 .wtox-auth-upload p{font-size:13px;font-weight:600;margin:0 0 6px}
