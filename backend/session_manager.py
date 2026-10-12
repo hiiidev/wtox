@@ -131,7 +131,9 @@ class SessionManager:
                 print("Tox pending event not stored:", type(exc).__name__, flush=True)
                 payload["id"] = None
         loop = self.loop
-        if loop and loop.is_running() and event.get("type") in ("message", "friend_request"):\n            loop.call_soon_threadsafe(lambda: asyncio.create_task(\n                asyncio.to_thread(web_push.send_to_user, uid, event["type"])))
+        if loop and loop.is_running() and event.get("type") in ("message", "friend_request"):
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(
+                asyncio.to_thread(web_push.send_to_user, uid, event["type"])))
         if loop and loop.is_running():
             loop.call_soon_threadsafe(lambda: asyncio.create_task(self.broadcast(uid, payload)))
 
