@@ -32,6 +32,8 @@ assert.match(app,/\{selected&&<div className="ant-compose-area">/);
 assert.doesNotMatch(app,/wt-settings-overview|WTOX \/ PREFERENCES|你的聊天，由你掌控/);
 assert.doesNotMatch(app,/<AntModal[^>]*\bcentered\b/);
 assert.doesNotMatch(app,/<Tooltip title="好友请求"|<Tooltip title="添加好友"/);
+assert.ok(refined.includes("width:40px!important;height:40px!important;min-width:40px!important;"),
+  "Desktop chat header buttons should use the compact 40px control size");
 assert.match(app,/useLayoutEffect\(\(\)=>\{\s*if\(!user\?\.public_key\)/);
 assert.match(app,/className="wt-compose-attach-button"/);
 assert.match(app,/<Sender\.Header title="准备发送附件"/);
