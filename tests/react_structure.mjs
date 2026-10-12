@@ -51,8 +51,9 @@ assert.match(python,/@router\.get\("\/api\/outbox"\)/);
 assert.match(python,/@router\.put\("\/api\/profile\/self"\)/);
 assert.match(store,/encrypt\(text\.encode\("utf-8"\)\)/);
 assert.match(mgr,/await asyncio\.sleep\(3\)/);
-assert.ok(app.includes('Every send enters the encrypted server outbox'),
-  "Client must submit all text through the encrypted service queue");
+assert.ok(app.includes('postJson("/api/messages",{public_key:peer,text,client_id})') &&
+  app.includes('await h.persist(optimistic)'),
+  "Client must persist optimistic messages and submit them through encrypted server outbox");
 assert.ok(app.includes('migrateLegacyBrowserQueue') &&
   app.includes('await migrateLegacyBrowserQueue(h)') &&
   !app.includes('flushBrowserQueue'),
