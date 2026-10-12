@@ -16,7 +16,7 @@ from pathlib import Path
 from . import store
 
 BLOCK = 64 * 1024
-MAX_FILE = 5 * 1024 * 1024
+MAX_FILE = 15_000_000  # 15 MB (decimal), not MiB
 TTL = 7 * 86400
 MAX_ACCOUNT_BYTES = 200 * 1024 * 1024
 MAX_TOTAL_BYTES = 1024 * 1024 * 1024
@@ -79,7 +79,7 @@ class DiskAttachment:
             return
         if self.size + len(data) > MAX_FILE or (
                 self.expected is not None and self.size + len(data) > self.expected):
-            raise ValueError("附件超过 5 MiB 或声明大小")
+            raise ValueError("附件超过 15 MB 或声明大小")
         offset = 0
         while offset < len(data):
             count = min(len(data) - offset, BLOCK - len(self._buffer))

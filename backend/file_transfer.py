@@ -16,7 +16,7 @@ U32=C.c_uint32
 PTR=C.c_void_p
 BUF=C.POINTER(U8)
 ERR=C.POINTER(C.c_int)
-MAX_FILE=5*1024*1024
+from .attachment_disk import MAX_FILE
 MAX_ACTIVE=4
 TTL=15*60
 RecvCB=C.CFUNCTYPE(None,PTR,U32,U32,U32,C.c_uint64,BUF,C.c_size_t,PTR)
