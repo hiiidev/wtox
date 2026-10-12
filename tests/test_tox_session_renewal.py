@@ -53,10 +53,10 @@ class SlidingToxSessionTests(unittest.TestCase):
     def test_new_cookie_and_database_expire_after_idle_window(self):
         response = Response()
         profile_api.issue_session(response, self.uid)
-        self.assertIn("Max-Age=2592000", response.headers["set-cookie"])
+        self.assertIn("Max-Age=15552000", response.headers["set-cookie"])
         self.assertIn("httponly", response.headers["set-cookie"].lower())
         self.assertIn("samesite=strict", response.headers["set-cookie"].lower())
-        self.assertGreaterEqual(self._expires(), int(time.time()) + 29 * 86400)
+        self.assertGreaterEqual(self._expires(), int(time.time()) + 179 * 86400)
 
     def test_active_get_renews_both_expiry_and_browser_cookie(self):
         self.assertEqual(self.client.get("/api/me").status_code, 200)
@@ -65,21 +65,24 @@ class SlidingToxSessionTests(unittest.TestCase):
         self._force_expiry(int(time.time()) + 2 * 86400)
         response = self.client.get("/api/me")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Max-Age=2592000", response.headers["set-cookie"])
+        self.assertIn("Max-Age=15552000", response.headers["set-cookie"])
         self.assertIn("httponly", response.headers["set-cookie"].lower())
         self.assertEqual(self.client.cookies.get(profile_api.COOKIE_NAME), self.token)
-        self.assertGreaterEqual(self._expires(), int(time.time()) + 29 * 86400)
+        self.assertGreaterEqual(self._expires(), int(time.time()) + 179 * 86400)
         self.assertNotIn("set-cookie", self.client.get("/api/me").headers)
 
     def test_many_renewals_have_no_absolute_lifetime_limit(self):
         start = int(time.time())
-        for period in range(1, 30):
-            # Every 20 days the session is used; even after ~580 days it is valid.
-            now = start + period * 20 * 86400
+        self.assertEqual(store.TOX_SESSION_IDLE_SECONDS, 180 * 86400)
+        self.assertEqual(store.TOX_SESSION_RENEW_BEFORE_SECONDS, 90 * 86400)
+        for period in range(1, 31):
+            # A request every 100 days keeps the same session valid for >8 years.
+            # This tests the server clock directly without changing TestClient's
+            # browser cookie expiration handling.
+            now = start + period * 100 * 86400
             with patch("backend.store.time.time", return_value=now):
-                response = self.client.get("/api/me")
-                self.assertEqual(response.status_code, 200, period)
-                self.assertIn("Max-Age=2592000", response.headers["set-cookie"])
+                self.assertEqual(store.tox_session_user(self.token), self.uid)
+                self.assertTrue(store.renew_tox_session_if_needed(self.token))
                 self.assertEqual(self._expires(), now + store.TOX_SESSION_IDLE_SECONDS)
 
     def test_expired_session_is_not_resurrected(self):
