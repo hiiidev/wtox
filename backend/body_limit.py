@@ -25,7 +25,7 @@ class RequestBodyLimitMiddleware:
         headers = dict(scope.get("headers", []))
         length = headers.get(b"content-length")
         if length is not None:
-            if not length.isascii() or not length.isdecimal():
+            if not length.isascii() or not length.isdigit():
                 return await JSONResponse({"detail": "Content-Length 无效"}, status_code=400)(scope, receive, send)
             if int(length) > limit:
                 return await JSONResponse({"detail": "请求体超过大小限制"}, status_code=413)(scope, receive, send)
