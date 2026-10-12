@@ -1,6 +1,12 @@
-# iPhone PWA / Web Push
+# iPhone / Android PWA · Web Push
 
-wTox now ships a web app manifest and a service worker. On iOS 16.4+, use **Safari → Share → Add to Home Screen**, open wTox from its icon, sign in with your Tox identity, then open **设置 → 离线推送（iPhone PWA）** and select **开启离线推送**.
+wTox provides an installable PWA on iOS and Android, using a shared Service Worker and Web Push backend.
+
+- **iPhone (iOS 16.4+)**: in Safari, choose **Share → Add to Home Screen**, open wTox from its Home Screen icon, sign in and open **设置 → 离线推送（PWA） → 开启离线推送**.
+- **Android (Chrome and compatible browsers)**: choose **Install app** (or **Add to Home screen**, depending on the browser) from the browser menu, launch wTox as the installed app, sign in and open **设置 → 离线推送（PWA） → 开启离线推送**.
+- The offline-push settings card is deliberately **hidden in regular browser tabs**. Launch the installed standalone PWA to access it. Grant notification permission when the browser requests it after tapping the enable button; allow notifications in device settings if needed.
+
+Desktop browsers can support Web Push, but wTox currently only surfaces the subscription control in standalone-installed PWAs for a consistent experience.
 
 The existing browser-only notification switch is independent: it works only while the page is open. The new Web Push subscription can deliver generic new-message and friend-request notifications while the phone is locked or the web app is closed, provided the VPS, toxcore, and push service remain reachable.
 
@@ -10,10 +16,10 @@ The Python backend uses `pywebpush`. VAPID private key is generated once at `WTO
 
 Set `WTOX_VAPID_SUBJECT=mailto:your-real-email@example.com` in the existing server .env if desired, before rebuilding. Keep `WTOX_MASTER_KEY` unchanged. No new ports are needed: HTTPS routes run behind the existing Caddy proxy. The container must be able to reach Apple/Firefox/Google push services over HTTPS.
 
-For a host-Caddy deployment, after backing up the environment and data volume:
+For the current **Docker Caddy** deployment (the repository default `compose.yml`), back up `.env` and the persistent volumes before rebuilding:
 
 ```bash
-docker compose -f compose.host-caddy.yml up -d --build
+docker compose -f compose.yml up -d --build
 curl -fsS https://YOUR-DOMAIN/manifest.webmanifest
 curl -fsS https://YOUR-DOMAIN/sw.js
 ```
@@ -36,7 +42,7 @@ curl -fsS https://YOUR-DOMAIN/sw.js
 
 1. Confirm the app icon appears when added to the home screen.
 2. Sign in from the installed icon and enable push using the direct button.
-3. Use **发送测试通知** and lock the screen. The phone must permit wTox notifications.
+3. Use **发送测试通知** and lock the screen on both an iPhone and an Android device. Allow wTox notifications in system settings.
 4. Send a message from another Tox client with the wTox page closed.
 5. Tap a notification to reopen the app and check the normal encrypted message sync.
 6. Disable push or sign out, then verify the old Tox identity receives no more push on that device.
