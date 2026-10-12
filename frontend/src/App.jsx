@@ -1289,12 +1289,16 @@ export default function App(){
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
           <div className="wt-list-actions" role="group" aria-label="好友操作">
-            <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
-              <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
-                onClick={()=>setModal("requests")}/>
-            </Badge>
-            <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
-              onClick={()=>setModal("add")}/>
+            <Tooltip title="好友请求" placement="bottom">
+              <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
+                <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
+                  onClick={()=>setModal("requests")}/>
+              </Badge>
+            </Tooltip>
+            <Tooltip title="添加好友" placement="bottom">
+              <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
+                onClick={()=>setModal("add")}/>
+            </Tooltip>
           </div>
         </div>
         <div className="wechat-search">
@@ -1581,12 +1585,12 @@ export default function App(){
     </AntModal>
 
     {isMobile
-        ? <Drawer open={peerDetailsOpen} title="好友资料" placement="bottom"
+        ? <Drawer open={peerDetailsOpen&&!!selectedFriend} title="好友资料" placement="bottom"
             height="auto" styles={{body:{maxHeight:"68dvh",overflowY:"auto"}}}
             onClose={()=>setPeerDetailsOpen(false)} destroyOnHidden>
             {peerProfileContent}
           </Drawer>
-        : <AntModal open={peerDetailsOpen} title="好友资料"
+        : <AntModal open={peerDetailsOpen&&!!selectedFriend} title="好友资料"
             onCancel={()=>setPeerDetailsOpen(false)} footer={null}
             centered destroyOnHidden width={500}>
             {peerProfileContent}
