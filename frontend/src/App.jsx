@@ -30,6 +30,7 @@ import {sanitizePhoto,isPhotoAttachment,MAX_SOURCE_PHOTO_BYTES} from "./photo_sa
 import {PreparedAttachmentPreview} from "./PreparedAttachmentPreview.jsx";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
+import {recoverableFriendRequests} from "./friend_requests.js";
 import {activeConversationPeer,unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
 import {realtimeRetryDelay,realtimeConnectionState} from "./realtime_backoff.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
@@ -718,8 +719,10 @@ export default function App(){
     }
   },[]);
   const refreshFriendRequests=useCallback(async()=>{
+    const owner=activeIdentity.current;
+    if(!owner)return;
     const data=await getJson("/api/friend-requests");
-    setFriendRequests(data.requests||[]);
+    if(activeIdentity.current===owner)setFriendRequests(data.requests||[]);
   },[]);
   useEffect(()=>{
     if(!user?.public_key||!friendRequests.length){
@@ -851,10 +854,17 @@ export default function App(){
 
   const onRealtime=useCallback(async e=>{
     const h=history.current;
-    if(["message","friend_request"].includes(e.type)){
-      if(e.type==="friend_request"){
-        refreshFriendRequests().catch(()=>{});
+    if(e.type==="friend_request"){
+      // Save a per-device encrypted recovery copy, but NEVER acknowledge here.
+      // Only /api/friend-requests/:id/accept or DELETE can resolve a request.
+      if(h?.ready()){
+        try{
+          await h.persist(e);
+          await refreshHistory(h);
+        }catch(error){alert("好友请求本地备份失败："+error.message)}
       }
+      refreshFriendRequests().catch(()=>{});
+    }else if(e.type==="message"){
       if(h?.ready()){
         try{
           await h.persist(e);
@@ -1098,7 +1108,7 @@ export default function App(){
         failures=0;
         setSocketState("connected");
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
-          refreshTransfers()]);
+          refreshFriendRequests(),refreshTransfers()]);
       };
       currentSocket.onmessage=msg=>{
         if(dead||currentSocket!==ws)return;
@@ -1162,7 +1172,8 @@ export default function App(){
           connect();
         }else if(ws.readyState===WebSocket.OPEN&&
                  Date.now()-lastMessage.current>60000)ws.close();
-        Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),refreshTransfers()]);
+        Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
+          refreshFriendRequests(),refreshTransfers()]);
       }
     };
     document.addEventListener("visibilitychange",wake);
@@ -1183,7 +1194,7 @@ export default function App(){
       socket.current=null;
     };
   },[user?.public_key,onRealtime,recoverPending,refreshFriends,
-    refreshNetwork,refreshTransfers,alert]);
+    refreshNetwork,refreshTransfers,refreshFriendRequests,alert]);
 
   useEffect(()=>{
     if(!user?.public_key)return;
@@ -1240,6 +1251,12 @@ export default function App(){
   ):null;
   // Realtime Tox transfer updates can persist while HTTP upload is still
   // resolving. Merge the optimistic upload with the canonical transfer ID.
+  // Old PWA versions acknowledged requests on WebSocket delivery.
+  // Their encrypted local copies can still be explicitly reviewed/accepted.
+  const recoverableRequests=useMemo(()=>
+    recoverableFriendRequests(messages,friendRequests,friends),
+    [messages,friendRequests,friends]);
+  const requestCount=friendRequests.length+recoverableRequests.length;
   const threadViewKey=selected
     ?selected+":"+(isMobile?(mobileChat?"open":"list"):"desktop")
     :"empty";
@@ -1677,16 +1694,23 @@ export default function App(){
   }
   async function acceptRequest(item){
     try{
-      const result=await postJson("/api/friend-requests/"+encodeURIComponent(item.id)+"/accept");
-      await Promise.all([refreshFriendRequests(),refreshFriends()]);
+      // A recovered local record has already been incorrectly acked by a
+      // previous app version. Native Tox can still accept its public key.
+      const result=item.recovered
+        ? await postJson("/api/friends/accept",{public_key:item.public_key})
+        : await postJson("/api/friend-requests/"+encodeURIComponent(item.id)+"/accept");
+      await history.current?.deleteEvent(item.id).catch(()=>{});
+      await Promise.all([refreshHistory(),refreshFriendRequests(),refreshFriends()]);
       selectFriend(result.public_key);setModal("");
       alert("已接受好友请求");
     }catch(error){alert(error.message)}
   }
   async function rejectRequest(item){
     try{
-      await api("/api/friend-requests/"+encodeURIComponent(item.id),{method:"DELETE"});
-      await refreshFriendRequests();
+      if(!item.recovered)
+        await api("/api/friend-requests/"+encodeURIComponent(item.id),{method:"DELETE"});
+      await history.current?.deleteEvent(item.id).catch(()=>{});
+      await Promise.all([refreshHistory(),refreshFriendRequests()]);
     }catch(error){alert(error.message)}
   }
   async function removeFriend(){
@@ -2266,7 +2290,7 @@ export default function App(){
               slowReconnect={slowReconnect}/>
           </h2>
           <div className="wt-list-actions" role="group" aria-label="好友操作">
-            <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
+            <Badge count={requestCount} size="small" color="#ef4444" title="">
               <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
                 onClick={()=>setModal("requests")}/>
             </Badge>
@@ -2274,10 +2298,10 @@ export default function App(){
               onClick={()=>setModal("add")}/>
           </div>
         </div>
-        {friendRequests.length>0&&<button type="button"
+        {requestCount>0&&<button type="button"
           className="wt-mobile-request-banner" onClick={()=>setModal("requests")}
-          aria-label={`查看 ${friendRequests.length} 条好友请求`}>
-          <UserAddOutlined/> 收到 {friendRequests.length} 条好友请求，点击查看
+          aria-label={`查看 ${requestCount} 条好友请求`}>
+          <UserAddOutlined/> {requestCount} 条好友请求待处理或核实，点击查看
         </button>}
         <div className="wechat-search">
           <Input allowClear value={filter} placeholder="搜索"
@@ -2431,11 +2455,11 @@ export default function App(){
               </small>
             </div>
           </div>
-          {friendRequests.length>0&&<AntButton type="text"
+          {requestCount>0&&<AntButton type="text"
               className="wt-mobile-chat-requests"
-              aria-label={`查看 ${friendRequests.length} 条好友请求`}
+              aria-label={`查看 ${requestCount} 条好友请求`}
               onClick={()=>setModal("requests")}>
-              <Badge count={friendRequests.length} overflowCount={99} size="small">
+              <Badge count={requestCount} overflowCount={99} size="small">
                 <UserAddOutlined/>
               </Badge>
             </AntButton>}
@@ -2842,9 +2866,13 @@ export default function App(){
           </Form>
         </div>}
     </AntModal>
-    <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`} centered
+    <AntModal open={modal==="requests"} title={`好友请求（${requestCount}）`} centered
       onCancel={closeModal} footer={null} destroyOnHidden>
-      <List dataSource={friendRequests} locale={{emptyText:"暂无待处理的好友请求"}}
+      {recoverableRequests.length>0&&<Typography.Paragraph type="secondary">
+        检测到旧版本保存在本机加密历史中的好友请求；这些记录可能已过期或曾被处理，请核实后再操作。
+      </Typography.Paragraph>}
+      <List dataSource={[...friendRequests,...recoverableRequests]}
+        locale={{emptyText:"暂无待处理的好友请求"}}
         renderItem={item=><List.Item actions={[
           <AntButton key="accept" type="primary" size="small" onClick={()=>acceptRequest(item)}>接受</AntButton>,
           <AntButton key="reject" size="small" danger onClick={()=>rejectRequest(item)}>拒绝</AntButton>
@@ -2852,6 +2880,9 @@ export default function App(){
           <List.Item.Meta title={<Typography.Text copyable={{text:item.public_key}}>
             {shortKey(item.public_key)}</Typography.Text>}
             description={<><div>{item.text||"希望添加你为好友"}</div>
+              {item.recovered&&<Typography.Text type="warning">
+                本机旧记录 · 需确认是否仍要接受
+              </Typography.Text>}
               <Typography.Text type="secondary">
                 {new Date(item.created*1000).toLocaleString("zh-CN")}
               </Typography.Text></>}/>
