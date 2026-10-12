@@ -214,6 +214,7 @@ export default function App(){
   const [socketState,setSocketState]=useState("connecting");
   const [slowReconnect,setSlowReconnect]=useState(false);
   const activeIdentity=useRef(null),friendsSyncedIdentity=useRef(null);
+  const friendSnapshotWrite=useRef({owner:null,signature:null,at:0});
   activeIdentity.current=user?.public_key||null;
   useEffect(()=>{
     if(socketState==="connected"){setSlowReconnect(false);return}
@@ -669,8 +670,22 @@ export default function App(){
     friendsSyncedIdentity.current=owner;
     setFriends(result);
     const h=history.current;
-    if(h?.ready()&&h.owner===owner)
-      await h.saveFriendsSnapshot(result).catch(()=>{});
+    if(h?.ready()&&h.owner===owner){
+      // A 12-second presence poll must not rewrite encrypted IndexedDB data
+      // on every tick. Cache only stable profile fields, not live status.
+      const signature=JSON.stringify(result.map(friend=>[
+        friend.public_key,friend.name,friend.status_message,
+        friend.user_status,friend.last_online,friend.tox_id
+      ]));
+      const cache=friendSnapshotWrite.current;
+      if(cache.owner!==owner||cache.signature!==signature||
+         Date.now()-cache.at>5*60*1000){
+        friendSnapshotWrite.current={owner,signature,at:Date.now()};
+        await h.saveFriendsSnapshot(result).catch(()=>{
+          friendSnapshotWrite.current={owner:null,signature:null,at:0};
+        });
+      }
+    }
   },[]);
   const refreshFriendRequests=useCallback(async()=>{
     const data=await getJson("/api/friend-requests");
