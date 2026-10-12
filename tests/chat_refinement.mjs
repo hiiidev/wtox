@@ -39,7 +39,7 @@ assert.match(app,/useLayoutEffect\(\(\)=>\{\s*if\(!user\?\.public_key\)/);
 assert.match(app,/className="wt-compose-attach-button"/);
 assert.match(app,/<AntModal open=\{!!uploadFile\} title="准备发送附件" centered/);
 assert.doesNotMatch(app,/<Sender\.Header/);
-assert.match(app,/<FileCard name=\{uploadFile\.name\}/);
+assert.match(app,/<PreparedAttachmentPreview file=\{uploadFile\}\/>/);
 assert.match(app,/onPasteFile=\{files=>/);
 assert.match(app,/<Upload showUploadList=\{false\} maxCount=\{1\} className="wt-chat-file-upload"/);
 assert.doesNotMatch(app,/<input type="file" hidden ref=/);
