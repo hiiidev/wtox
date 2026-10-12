@@ -21,7 +21,7 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
-import {isNearBottom,countNewEntries,scrollThreadToBottom,alignFullThreadBottom} from "./thread_scroll.js";
+import {isNearBottom,countNewEntries,didUserScrollUp,alignFullThreadBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
 import {contactPresenceText,chatPresenceText,lastOnlineText} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
@@ -90,7 +90,7 @@ async function decodedImage(blob){
 
 function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheRevision,
   contextMenu,contextOpen,onContextOpenChange,onBubblePointerDown,onBubblePointerUp,
-  onBubblePointerMove,onBubbleContextMenu,onBubbleClickCapture}){
+  onBubblePointerMove,onBubbleContextMenu,onBubbleClickCapture,onImageLayoutChange}){
   const [preview,setPreview]=useState("");
   const [previewMissing,setPreviewMissing]=useState(false);
   const isPicture=/\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
@@ -147,8 +147,13 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
     <Card size="small" className="wtox-attachment-bubble">
       {isPicture
         ? <>
-            {preview&&<Image className="wtox-attachment-image" src={preview}
-              alt={file.file_name} width={220} preview={{mask:"查看图片"}}/>}
+            <div className="wt-attachment-image-slot">
+              {preview
+                ? <Image className="wtox-attachment-image" src={preview}
+                    alt={file.file_name} width={220} preview={{mask:"查看图片"}}
+                    onLoad={()=>onImageLayoutChange?.()}/>
+                : <div className="wt-attachment-image-placeholder" aria-hidden="true"/>}
+            </div>
             <Typography.Text className="wt-attachment-filename" title={file.file_name}>
               {file.file_name}
             </Typography.Text>
@@ -272,6 +277,7 @@ export default function App(){
   const [messages,setMessages]=useState([]),[historyReady,setHistoryReady]=useState(false);
   const [avatarColors,setAvatarColors]=useState({});
   const [newBelowCount,setNewBelowCount]=useState(0);
+  const [showJumpToLatest,setShowJumpToLatest]=useState(false);
   const [threadScrolling,setThreadScrolling]=useState(false);
   const [selectedMessageIds,setSelectedMessageIds]=useState(()=>new Set());
   const [mobileMessageMenuId,setMobileMessageMenuId]=useState(null);
@@ -287,6 +293,8 @@ export default function App(){
   const previousThread=useRef({peer:null,viewKey:null,ids:[]});
   const scrollIdleTimer=useRef(null);
   const autoScrollLockUntil=useRef(0);
+  const manualUpIntentUntil=useRef(0);
+  const lastThreadScrollTop=useRef(0);
   const threadTouchY=useRef(null);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
@@ -1238,10 +1246,12 @@ export default function App(){
   const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
     .slice(-250),[selected,messages,pendingFiles]);
   const cancelFollowForManualScroll=useCallback(()=>{
-    // Explicit input means the reader has taken control. Programmatic scroll
-    // events from React/layout do not count as user intent.
+    // Only invoked after actual upward scrolling; gestures alone do not count.
     autoScrollLockUntil.current=0;
     followLatest.current=false;
+  },[]);
+  const noteManualUpIntent=useCallback(()=>{
+    manualUpIntentUntil.current=Date.now()+750;
   },[]);
   const settleThreadBottom=useCallback(()=>{
     const element=threadEl.current;
@@ -1249,28 +1259,46 @@ export default function App(){
     // The correct target is the complete .ant-thread scroll range:
     // scrollHeight - clientHeight, INCLUDING its final padding/footer.
     // Do not expose a newly mounted thread with a still-zero mobile size.
-    if(alignFullThreadBottom(element)&&element.style.visibility==="hidden")
-      element.style.visibility="visible";
+    if(alignFullThreadBottom(element)){
+      lastThreadScrollTop.current=element.scrollTop;
+      if(element.style.visibility==="hidden")element.style.visibility="visible";
+    }
   },[]);
   const scrollToLatest=useCallback(()=>{
+    manualUpIntentUntil.current=0;
     followLatest.current=true;
     setNewBelowCount(0);
+    setShowJumpToLatest(false);
     settleThreadBottom();
   },[settleThreadBottom]);
   const onThreadScroll=useCallback(()=>{
     const element=threadEl.current;
     if(!element)return;
     const atBottom=isNearBottom(element);
-    if(Date.now()>=autoScrollLockUntil.current){
-      // A DOM/layout-driven event may happen before a ResizeObserver fixes
-      // the scroll position; only upward user input disables auto-follow.
-      if(atBottom)followLatest.current=true;
+    const now=Date.now();
+    const previousTop=lastThreadScrollTop.current;
+    const movedUp=didUserScrollUp(previousTop,element.scrollTop,
+      now<=manualUpIntentUntil.current);
+    const movedDown=element.scrollTop>previousTop+2;
+    lastThreadScrollTop.current=element.scrollTop;
+    if(now>=autoScrollLockUntil.current){
+      if(movedUp&&!atBottom){
+        cancelFollowForManualScroll();
+        setShowJumpToLatest(true);
+      }else if(atBottom&&!movedUp&&
+               (movedDown||now>manualUpIntentUntil.current)){
+        // A user may scroll upward in small increments while still within
+        // the near-bottom threshold; don't erase their intent prematurely.
+        manualUpIntentUntil.current=0;
+        followLatest.current=true;
+        setShowJumpToLatest(false);
+      }
     }
     if(atBottom)setNewBelowCount(count=>count===0?count:0);
     setThreadScrolling(true);
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
     scrollIdleTimer.current=setTimeout(()=>setThreadScrolling(false),950);
-  },[]);
+  },[cancelFollowForManualScroll]);
   useEffect(()=>()=>{if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current)},[]);
   useLayoutEffect(()=>{
     const ids=thread.map(item=>item.id);
@@ -1278,7 +1306,10 @@ export default function App(){
     if(previous.peer!==selected||previous.viewKey!==threadViewKey){
       previousThread.current={peer:selected,viewKey:threadViewKey,ids};
       followLatest.current=true;
+      manualUpIntentUntil.current=0;
+      lastThreadScrollTop.current=0;
       setNewBelowCount(0);
+      setShowJumpToLatest(false);
       // useLayoutEffect runs after the new peer's DOM commits and before
       // paint, so no old-thread scroll or 240/650/1000ms visible jump.
       autoScrollLockUntil.current=Date.now()+120;
@@ -1588,6 +1619,10 @@ export default function App(){
     sendBusy.current=true;setSending(true);
     drafts.current.set(peer,"");
     if(selectedRef.current===peer)setDraft("");
+    // Own outgoing messages resume following once React commits the bubble.
+    manualUpIntentUntil.current=0;
+    followLatest.current=true;
+    setShowJumpToLatest(false);
     // Render immediately: neither HTTPS latency nor IndexedDB encryption
     // should delay the outgoing message bubble.
     setMessages(previous=>[...previous,optimistic]);
@@ -1802,6 +1837,9 @@ export default function App(){
       file_id:null,file_name:file.name,file_size:file.size,file_progress:0,
       file_state:"uploading",at:Date.now(),previewBlob:file
     };
+    manualUpIntentUntil.current=0;
+    followLatest.current=true;
+    setShowJumpToLatest(false);
     setPendingFiles(previous=>[...previous,optimistic]);
     attachmentPreparedFor.current=null;
     setUploadFile(null);
@@ -2438,15 +2476,17 @@ export default function App(){
             style={{visibility:selected?"hidden":"visible"}}
             className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
             onScroll={onThreadScroll}
-            onWheel={event=>{if(event.deltaY<0)cancelFollowForManualScroll()}}
+            onWheel={event=>{if(event.deltaY<0)noteManualUpIntent()}}
             onTouchStart={event=>{
-              threadTouchY.current=event.touches?.[0]?.clientY??null;
+              const touch=event.touches?.[0];
+              threadTouchY.current=touch?{x:touch.clientX,y:touch.clientY}:null;
             }}
             onTouchMove={event=>{
-              const nextY=event.touches?.[0]?.clientY;
-              if(threadTouchY.current!==null && nextY!==undefined &&
-                 nextY>threadTouchY.current+10)
-                cancelFollowForManualScroll();
+              const touch=event.touches?.[0],start=threadTouchY.current;
+              if(touch&&start){
+                const dy=touch.clientY-start.y,dx=touch.clientX-start.x;
+                if(dy>10&&dy>Math.abs(dx))noteManualUpIntent();
+              }
             }}
             onTouchEnd={()=>{threadTouchY.current=null}}
             onTouchCancel={()=>{threadTouchY.current=null}}
@@ -2455,11 +2495,11 @@ export default function App(){
               // as a request to stop following the latest message.
               const rect=event.currentTarget.getBoundingClientRect();
               if(event.target===event.currentTarget&&event.clientX>=rect.right-14)
-                cancelFollowForManualScroll();
+                noteManualUpIntent();
             }}
             onKeyDown={event=>{
               if(["ArrowUp","PageUp","Home"].includes(event.key))
-                cancelFollowForManualScroll();
+                noteManualUpIntent();
             }}
             role="log" aria-label="聊天记录">
             <div className="wt-thread-content">
@@ -2492,7 +2532,8 @@ export default function App(){
                   accept={id=>controlFile(id,"accept")}
                   reject={id=>controlFile(id,"reject")}
                   download={downloadFile} historyHandle={history.current}
-                  imageCacheRevision={imageCacheRevision}/>
+                  imageCacheRevision={imageCacheRevision}
+                  onImageLayoutChange={settleThreadBottom}/>
               </div>
             : <div key={item.id} className={"ant-message-wrap wt-message-row "+
                 (item.direction==="outgoing"?"wt-message-outgoing":"wt-message-incoming")+
@@ -2566,11 +2607,13 @@ export default function App(){
               </div>)}
             </div>
           </div>
-          {selected&&newBelowCount>0&&<AntButton type="primary" shape="round"
-            className="wt-new-message-indicator" icon={<ArrowDownOutlined/>}
-            onClick={scrollToLatest} aria-label={`查看下面的${newBelowCount}条新消息`}>
-            {newBelowCount} 条新消息
-          </AntButton>}
+          {selected&&(newBelowCount>0||showJumpToLatest)&&
+            <AntButton type="primary" shape="round"
+              className="wt-new-message-indicator" icon={<ArrowDownOutlined/>}
+              onClick={scrollToLatest}
+              aria-label={newBelowCount>0?`查看下面的${newBelowCount}条新消息`:"回到底部"}>
+              {newBelowCount>0?`${newBelowCount} 条新消息`:"回到底部"}
+            </AntButton>}
         </div>
         {selected&&<div className="ant-compose-area">
           <div className="wt-compose-tools">
