@@ -38,6 +38,7 @@ jobs:
       - run: node tests/check_static_assets.mjs
       - run: node tests/pwa_notifications.mjs
       - run: node tests/pwa_experience.mjs
+      - run: node tests/ios_pwa_restore.mjs
       - run: node tests/pwa_startup.mjs
       - run: node tests/ios_splash.mjs
       - run: node tests/react_structure.mjs
