@@ -158,3 +158,64 @@ html:has(.ant-messenger),body:has(.ant-messenger){
   .wt-mobile-me-page .wechat-mobile-tabs button .anticon{font-size:22px}
   .wt-mobile-me-page .wechat-mobile-tabs button.active{color:var(--wt-primary)}
 }
+
+
+/* Modal elevation for dark mode (Ant Design portals live outside .ant-messenger).
+   The overlay, card and form surfaces have three distinct levels. */
+html[data-wtox-theme="dark"] .ant-modal-root .ant-modal-mask{
+  background:rgba(0,0,0,.65)!important;
+  -webkit-backdrop-filter:blur(4px);
+  backdrop-filter:blur(4px);
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-modal-content{
+  background:linear-gradient(180deg,#29292c 0%,#222225 100%)!important;
+  border:1px solid rgba(255,255,255,.12)!important;
+  border-radius:16px!important;
+  box-shadow:0 28px 78px rgba(0,0,0,.62),
+             0 6px 22px rgba(0,0,0,.36),
+             inset 0 1px 0 rgba(255,255,255,.035)!important;
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-modal-header{
+  background:transparent!important;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  padding-bottom:15px;margin-bottom:18px;
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-modal-title{
+  color:#f3f3f5!important;font-weight:650;
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-modal-close{
+  color:#aaaab0!important;border-radius:8px;
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-modal-close:hover{
+  color:#fff!important;background:rgba(255,255,255,.09)!important;
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-modal-body{
+  color:#e9e9ec;
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-modal-footer{
+  border-top:1px solid rgba(255,255,255,.07);
+  padding-top:15px;margin-top:18px;
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-input,
+html[data-wtox-theme="dark"] .ant-modal .ant-input-affix-wrapper,
+html[data-wtox-theme="dark"] .ant-modal .ant-select-selector,
+html[data-wtox-theme="dark"] .ant-modal textarea{
+  background:#161618!important;
+  border-color:rgba(255,255,255,.15)!important;
+  color:#f0f0f2!important;
+}
+html[data-wtox-theme="dark"] .ant-modal .ant-input:focus,
+html[data-wtox-theme="dark"] .ant-modal .ant-input-affix-wrapper-focused,
+html[data-wtox-theme="dark"] .ant-modal .ant-select-focused .ant-select-selector{
+  border-color:#16ac71!important;
+  box-shadow:0 0 0 2px rgba(22,172,113,.18)!important;
+}
+html[data-wtox-theme="dark"] .ant-modal input::placeholder,
+html[data-wtox-theme="dark"] .ant-modal textarea::placeholder{
+  color:#76767d!important;
+}
+@media(prefers-reduced-transparency:reduce){
+  html[data-wtox-theme="dark"] .ant-modal-root .ant-modal-mask{
+    -webkit-backdrop-filter:none;backdrop-filter:none;
+  }
+}
