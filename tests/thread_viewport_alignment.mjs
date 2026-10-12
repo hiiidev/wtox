@@ -48,8 +48,9 @@ assert.ok(app.includes("alignFullThreadBottom(element)"));
 assert.ok(app.includes('element.style.visibility="visible"'));
 assert.ok(app.includes('style={{visibility:selected?"hidden":"visible"}}'),
   "A new peer must remain hidden until its scroll viewport has measurable size");
-assert.ok(app.includes('key={selected')&&
-  app.includes('mobileChat?"open":"list"'),
+assert.ok(app.includes('key={threadViewKey}')&&
+  app.includes('mobileChat?"open":"list"')&&
+  app.includes("previous.viewKey!==threadViewKey"),
   "Return to an already selected mobile peer must create a fresh scroll viewport");
 assert.ok(app.includes('observer.observe(element.parentElement)'),
   "React/CSS pane size must trigger a recheck");
