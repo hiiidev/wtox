@@ -1276,14 +1276,19 @@ export default function App(){
     if(!element)return;
     const atBottom=isNearBottom(element);
     const now=Date.now();
-    const movedUp=didUserScrollUp(lastThreadScrollTop.current,element.scrollTop,
+    const previousTop=lastThreadScrollTop.current;
+    const movedUp=didUserScrollUp(previousTop,element.scrollTop,
       now<=manualUpIntentUntil.current);
+    const movedDown=element.scrollTop>previousTop+2;
     lastThreadScrollTop.current=element.scrollTop;
     if(now>=autoScrollLockUntil.current){
       if(movedUp&&!atBottom){
         cancelFollowForManualScroll();
         setShowJumpToLatest(true);
-      }else if(atBottom){
+      }else if(atBottom&&!movedUp&&
+               (movedDown||now>manualUpIntentUntil.current)){
+        // A user may scroll upward in small increments while still within
+        // the near-bottom threshold; don't erase their intent prematurely.
         manualUpIntentUntil.current=0;
         followLatest.current=true;
         setShowJumpToLatest(false);
