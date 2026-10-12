@@ -21,7 +21,7 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
-import {isNearBottom,countNewEntries,scrollThreadToBottom,shouldFollowThreadScroll} from "./thread_scroll.js";
+import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
 import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
@@ -287,6 +287,7 @@ export default function App(){
   const previousThread=useRef({peer:null,ids:[]});
   const scrollIdleTimer=useRef(null);
   const autoScrollLockUntil=useRef(0);
+  const threadTouchY=useRef(null);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
   const [logoutOpen,setLogoutOpen]=useState(false);
@@ -2415,7 +2416,24 @@ export default function App(){
             className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
             onScroll={onThreadScroll}
             onWheel={event=>{if(event.deltaY<0)cancelFollowForManualScroll()}}
-            onTouchStart={cancelFollowForManualScroll}
+            onTouchStart={event=>{
+              threadTouchY.current=event.touches?.[0]?.clientY??null;
+            }}
+            onTouchMove={event=>{
+              const nextY=event.touches?.[0]?.clientY;
+              if(threadTouchY.current!==null && nextY!==undefined &&
+                 nextY>threadTouchY.current+10)
+                cancelFollowForManualScroll();
+            }}
+            onTouchEnd={()=>{threadTouchY.current=null}}
+            onTouchCancel={()=>{threadTouchY.current=null}}
+            onPointerDown={event=>{
+              // Handle scrollbar-thumb dragging without treating bubble taps
+              // as a request to stop following the latest message.
+              const rect=event.currentTarget.getBoundingClientRect();
+              if(event.target===event.currentTarget&&event.clientX>=rect.right-14)
+                cancelFollowForManualScroll();
+            }}
             onKeyDown={event=>{
               if(["ArrowUp","PageUp","Home"].includes(event.key))
                 cancelFollowForManualScroll();
