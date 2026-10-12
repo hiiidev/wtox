@@ -164,6 +164,42 @@ class ChatApiTests(unittest.TestCase):
             self.assertEqual(ws.receive_json()["type"], "pong")
         self.assertEqual(store.get_pending(self.uid), [])
 
+    def test_friend_requests_survive_generic_ack_and_can_be_accepted(self):
+        request_id = store.append_pending(self.uid, {
+            "type": "friend_request", "public_key": PEER, "text": "Please add me"
+        })
+        message_id = store.append_pending(self.uid, {
+            "type": "message", "public_key": PEER, "text": "Regular message"
+        })
+        self.assertEqual(len(self.client.get("/api/friend-requests").json()["requests"]), 1)
+        # Legacy PWA cached code may accidentally acknowledge BOTH entries.
+        ack = self.client.post("/api/ack", json={"ids": [request_id, message_id]})
+        self.assertEqual(ack.status_code, 200)
+        self.assertEqual([x["id"] for x in store.get_pending(self.uid)], [request_id],
+                         "Generic acknowledgements may delete messages but not requests")
+        # The same rule applies to websocket acknowledgements.
+        with self.client.websocket_connect(
+            "/ws", headers={"origin": "http://testserver"}
+        ) as ws:
+            self.assertEqual(ws.receive_json()["id"], request_id)
+            ws.send_json({"type": "ack", "ids": [request_id]})
+            ws.send_json({"type": "ping"})
+            self.assertEqual(ws.receive_json()["type"], "pong")
+        self.assertEqual(len(self.client.get("/api/friend-requests").json()["requests"]), 1)
+        # Accepting is the only legitimate path that consumes this request.
+        accepted = self.client.post(f"/api/friend-requests/{request_id}/accept")
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(accepted.json()["public_key"], PEER)
+        self.assertEqual(self.client.get("/api/friend-requests").json()["requests"], [])
+
+    def test_friend_request_explicit_rejection(self):
+        request_id = store.append_pending(self.uid, {
+            "type": "friend_request", "public_key": PEER, "text": "Please add me"
+        })
+        self.assertEqual(self.client.delete(f"/api/friend-requests/{request_id}").status_code, 200)
+        self.assertEqual(self.client.get("/api/friend-requests").json()["requests"], [])
+        self.assertEqual(self.client.delete(f"/api/friend-requests/{request_id}").status_code, 404)
+
     def test_websocket_logs_safe_handshake_markers(self):
         # A public proxy may block before reaching ASGI; this marker
         # distinguishes "never reached the app" from backend rejection.

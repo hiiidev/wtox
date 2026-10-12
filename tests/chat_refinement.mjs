@@ -126,7 +126,7 @@ assert.doesNotMatch(app,/friendMessageApi\.open\(/);
 assert.match(app,/className="wt-mobile-request-banner"/);
 assert.match(app,/duration:0/);
 assert.match(app,/dismissedFriendIds\.current=signature/);
-assert.match(app,/friendRequests\.length>0&&<button type="button"/);
+assert.match(app,/requestCount>0&&<button type="button"/);
 assert.match(app,/color="#ef4444"/);
 assert.match(app,/kind="chats"/);
 assert.match(app,/kind="contacts"/);
@@ -205,7 +205,7 @@ assert.match(app,/pageVisible/);
 assert.match(app,/await recoverPending\(h\);[\s\S]*?await refreshTransfers\(\)/);
 assert.match(app,/const transferTimer=setInterval\(\(\)=>\{/);
 assert.match(app,/clearInterval\(transferTimer\)/);
-assert.match(app,/recoverPending\(\),refreshTransfers\(\)/);
+assert.match(app,/recoverPending\(\),\s*refreshFriendRequests\(\),refreshTransfers\(\)/);
 
 assert.ok(app.includes('if(record.delivery_status==="queued")return "等待发送"'));
 assert.ok(app.includes('if(record.delivery_status==="queued_local")return "正在提交"'));
