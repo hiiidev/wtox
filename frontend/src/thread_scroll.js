@@ -12,3 +12,10 @@ export function countNewEntries(previousIds, nextIds) {
   const previous = new Set(previousIds);
   return nextIds.reduce((total, id) => total + (previous.has(id) ? 0 : 1), 0);
 }
+
+/** Scroll to the actual end of the scroll container, including message
+ * footers, translation blocks and bottom spacing after the last bubble. */
+export function scrollThreadToBottom(element) {
+  if (!element) return;
+  element.scrollTop = Math.max(0,element.scrollHeight - element.clientHeight);
+}
