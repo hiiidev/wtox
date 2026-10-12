@@ -31,7 +31,10 @@ class SlidingToxSessionTests(unittest.TestCase):
         ))
         self.token = store.create_tox_session(self.uid)
         self.client = TestClient(app)
-        self.client.cookies.set(profile_api.COOKIE_NAME, self.token)
+        # TestClient stores response cookies for this host under testserver.local.
+        # Seed with the same domain to test actual browser replacement semantics.
+        self.client.cookies.set(profile_api.COOKIE_NAME, self.token,
+                                domain="testserver.local", path="/")
 
     def tearDown(self):
         self.client.close()
