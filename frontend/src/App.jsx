@@ -6,8 +6,8 @@ import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
-  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined,
-  MessageFilled, ContactsFilled, SettingFilled } from "@ant-design/icons";
+  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled
+  } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import {LOGO_URL} from "./versioned_assets.js";
 import {disablePushBeforeLogout} from "./push_client.js";
@@ -15,18 +15,21 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
+import {chatTime} from "./chat_time.js";
+import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
-const transferText={offered:"等待接受",waiting:"等待对方接受",receiving:"接收中",sending:"发送中",
+const transferText={uploading:"正在上传",uncertain:"发送已受理，状态待确认",offered:"等待接受",waiting:"等待对方接受",receiving:"接收中",sending:"发送中",
   completed:"已完成",failed:"失败",cancelled:"已取消"};
 function stateText(record){
   if(record.delivery_status==="delivered"||record.delivery_status==="read")return "已送达";
   if(record.delivery_status==="failed")return "发送失败";
   if(record.delivery_status==="uncertain")return "发送结果待确认";
-  if(["queued","queued_local"].includes(record.delivery_status))return "待发送";
+  if(record.delivery_status==="queued_local")return "正在提交";
+  if(record.delivery_status==="queued")return "等待发送";
   if(["dispatching","dispatching_local"].includes(record.delivery_status))return "正在发送";
   if(record.message_id===undefined&&!record.outbox_id&&!record.delivery_status)return "历史消息";
   return "已发送";
@@ -35,36 +38,66 @@ function Button({children,onClick,kind="",disabled=false}){
   return <AntButton type={kind==="primary"?"primary":"default"}
     onClick={onClick} disabled={disabled} className="wtox-ant-btn">{children}</AntButton>;
 }
-function AttachmentBubble({file,accept,reject,download,historyHandle}){
+async function decodedImage(blob){
+  // A filename extension is not proof that arbitrary bytes are a JPEG/PNG.
+  // Verify decodability before displaying or caching a thumbnail.
+  if(typeof createImageBitmap==="function"){
+    try{
+      const image=await createImageBitmap(blob);
+      image.close();return true;
+    }catch{return false}
+  }
+  const url=URL.createObjectURL(blob);
+  try{
+    const image=new globalThis.Image();
+    image.src=url;
+    await image.decode();
+    return true;
+  }catch{return false}
+  finally{URL.revokeObjectURL(url)}
+}
+
+function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheRevision}){
   const [preview,setPreview]=useState("");
+  const [previewMissing,setPreviewMissing]=useState(false);
   const isPicture=/\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
   const completed=file.file_state==="completed";
   const canDownload=file.direction==="incoming"&&completed;
   useEffect(()=>{
-    if(!isPicture||!file.file_id)return;
+    if(!isPicture)return;
     let alive=true,url="";
+    setPreview("");setPreviewMissing(false);
     (async()=>{
       try{
-        let blob=historyHandle?.ready()?await historyHandle.cachedImage(file.file_id):null;
+        let blob=file.previewBlob||(
+          file.file_id&&historyHandle?.ready()
+            ? await historyHandle.cachedImage(file.file_id):null);
         if(!blob&&canDownload){
-          blob=await(await api("/api/files/"+encodeURIComponent(file.file_id)+"/download")).blob();
+          const response=await api("/api/files/"+encodeURIComponent(file.file_id)+"/download");
+          blob=await response.blob();
           if(blob.size>5*1024*1024)return;
           const mime=/\.png$/i.test(file.file_name)?"image/png":
             /\.webp$/i.test(file.file_name)?"image/webp":
             /\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
           blob=new Blob([blob],{type:mime});
+          if(!await decodedImage(blob))throw new Error("附件不是可解码的图片");
           if(historyHandle?.ready())await historyHandle.cacheImage(file.file_id,blob);
         }
-        if(!blob)return;
+        if(!blob){
+          if(alive&&completed)setPreviewMissing(true);
+          return;
+        }
+        if(!await decodedImage(blob))throw new Error("图片解码失败");
+        if(!alive)return;
         url=URL.createObjectURL(blob);
-        if(alive)setPreview(url);
-        else URL.revokeObjectURL(url);
+        setPreview(url);
       }catch{
-        // Attachment may have expired from encrypted server storage.
+        if(alive)setPreviewMissing(true);
       }
     })();
     return()=>{alive=false;if(url)URL.revokeObjectURL(url)};
-  },[canDownload,isPicture,file.file_id,file.file_name,historyHandle]);
+  },[canDownload,isPicture,file.file_id,file.file_name,file.previewBlob,
+     historyHandle,imageCacheRevision]);
   const percentage=file.file_size>0?Math.min(100,Math.floor(
     (file.file_progress||0)/file.file_size*100)):0;
   const mine=file.direction==="outgoing";
@@ -72,10 +105,15 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
   return <div className={"wtox-attachment-row "+(mine?"out":"")} role="group"
      aria-label={"附件 "+file.file_name}>
     <Card size="small" className="wtox-attachment-bubble">
-      {preview&&<Image className="wtox-attachment-image" src={preview}
-        alt={file.file_name} loading="lazy" width={220}
-        preview={{mask:"查看图片"}}/>}
-      <FileCard name={file.file_name} byte={file.file_size} size="small"/>
+      {isPicture
+        ? <>
+            {preview&&<Image className="wtox-attachment-image" src={preview}
+              alt={file.file_name} width={220} preview={{mask:"查看图片"}}/>}
+            <Typography.Text className="wt-attachment-filename" title={file.file_name}>
+              {file.file_name}
+            </Typography.Text>
+          </>
+        : <FileCard name={file.file_name} byte={file.file_size} size="small"/>}
       <Typography.Text type="secondary">
         {state}{percentage>0&&percentage<100?" · "+percentage+"%":""}
       </Typography.Text>
@@ -87,22 +125,23 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
       {canDownload&&<Button onClick={()=>download({id:file.file_id,name:file.file_name})}>
         下载文件
       </Button>}
-      {completed&&mine&&<small>已由 Toxcore 完成文件传输</small>}
-      {completed&&!preview&&isPicture&&<Typography.Text type="secondary">
+      {completed&&!preview&&previewMissing&&isPicture&&<Typography.Text type="secondary">
         图片预览不可用或已过期
       </Typography.Text>}
     </Card>
-    <time>{new Date(file.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</time>
+    <time>{chatTime(file.at)}</time>
   </div>;
 }
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
-/* One consistent filled Ant Design icon family on mobile and desktop.
- * Bundled in the React bundle: no Iconify or runtime icon-network request.
- */
+/* User-supplied 24px filled SVG paths; embedded, no Iconify requests. */
 function RailIcon({kind}){
-  const Icon=kind==="chats"?MessageFilled:
-    kind==="contacts"?ContactsFilled:SettingFilled;
-  return <Icon className="wt-rail-glyph" aria-hidden="true"/>;
+  if(kind==="settings")return <SettingFilled className="wt-rail-glyph" aria-hidden="true"/>;
+  return <svg xmlns="http://www.w3.org/2000/svg" className="wt-rail-glyph"
+    width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {kind==="chats"?
+      <path fill="currentColor" d="M12 2C6.49 2 2 6.49 2 12c0 2.12.68 4.19 1.93 5.9l-1.75 2.53c-.21.31-.24.7-.06 1.03c.17.33.51.54.89.54h9c5.51 0 10-4.49 10-10S17.51 2 12 2M8 13c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1m4 0c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1m4 0c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1"/>:
+      <path fill="currentColor" d="M9 4a4 4 0 1 0 0 8a4 4 0 1 0 0-8m1 9H8c-2.76 0-5 2.24-5 5v1c0 .55.45 1 1 1h10c.55 0 1-.45 1-1v-1c0-2.76-2.24-5-5-5m5-9c-.47 0-.9.09-1.31.22C14.51 5.24 15 6.55 15 8s-.49 2.75-1.31 3.78c.41.13.84.22 1.31.22c2.28 0 4-1.72 4-4s-1.72-4-4-4m1 9h-1.11A6.97 6.97 0 0 1 17 18v1c0 .35-.07.69-.18 1H20c.55 0 1-.45 1-1v-1c0-2.76-2.24-5-5-5"/>}
+  </svg>;
 }
 
 export default function App(){
@@ -135,6 +174,8 @@ export default function App(){
   const scrollIdleTimer=useRef(null);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
+  const [logoutOpen,setLogoutOpen]=useState(false);
+  const [logoutBusy,setLogoutBusy]=useState(false);
   const [ownProfile,setOwnProfile]=useState({name:"",status_message:"",user_status:0});
   const [profileSaving,setProfileSaving]=useState(false);
   // Permission is only requested from the explicit settings button, never on load.
@@ -198,6 +239,8 @@ export default function App(){
   const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
+  const [pendingFiles,setPendingFiles]=useState([]);
+  const [imageCacheRevision,setImageCacheRevision]=useState(0);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),lastMessage=useRef(0);
   // Persist a random color for each self identity before the first visible
@@ -726,8 +769,9 @@ export default function App(){
               </Typography.Text>}
             </div>
   ):null;
-  const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
-    .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
+  const thread=useMemo(()=>[...messages,...pendingFiles]
+    .filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
+    .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages,pendingFiles]);
   const scrollToLatest=useCallback(()=>{
     const element=threadEl.current;
     followLatest.current=true;
@@ -851,16 +895,32 @@ export default function App(){
       await loadIdentity();
     }catch(error){alert(error.message)}finally{setBusy(false)}
   }
-  async function logout(){
+  async function logout(clearLocalData=false){
+    if(logoutBusy)return;
+    setLogoutBusy(true);
+    const owner=user?.public_key;
+    let pushError=null;
     try{
-      try { await disablePushBeforeLogout(); } catch (error) {
-        console.warn("Push cleanup failed on sign-out:", error);
-      }
+      try{await disablePushBeforeLogout()}
+      catch(error){pushError=error}
+      // The server's Tox identity (and its friend list) is deliberately kept.
       await postJson("/api/logout");
+      // Close this identity's IndexedDB before issuing deleteDatabase().
       history.current?.close();history.current=null;
-      drafts.current.clear();setUser(null);setMessages([]);setFriends([]);
-      setSelected(null);setModal("");setHistoryReady(false);
-    }catch(error){alert(error.message)}
+      let cleanupError=null;
+      if(clearLocalData){
+        try{await clearIdentityBrowserData(owner)}
+        catch(error){cleanupError=error}
+      }
+      drafts.current.clear();setUser(null);setMessages([]);setPendingFiles([]);setFriends([]);
+      setSelected(null);selectedRef.current=null;setModal("");
+      setLogoutOpen(false);setHistoryReady(false);
+      setSeen({});setAvatarColors({});
+      if(cleanupError)alert("已退出，但部分浏览器数据未删除："+cleanupError.message,"warning");
+      else if(pushError)alert("已退出，但离线推送可能仍在该设备上启用。请检查通知权限。","warning");
+    }catch(error){
+      alert("退出失败："+error.message,"error");
+    }finally{setLogoutBusy(false)}
   }
   async function sendText(innerHtml,textContent,innerText){
     if(sendBusy.current||!selectedRef.current)return;
@@ -870,26 +930,48 @@ export default function App(){
     const h=history.current;
     if(!h?.ready()){setModal("settings");alert("请先完成旧聊天历史迁移");return}
     const client_id=crypto.randomUUID().replaceAll("-","");
+    const optimistic={
+      id:client_id,type:"message",direction:"outgoing",public_key:peer,
+      text,at:Date.now(),outbox_id:client_id,delivery_status:"queued_local"
+    };
     sendBusy.current=true;setSending(true);
+    drafts.current.set(peer,"");
+    if(selectedRef.current===peer)setDraft("");
+    // Render immediately: neither HTTPS latency nor IndexedDB encryption
+    // should delay the outgoing message bubble.
+    setMessages(previous=>[...previous,optimistic]);
     try{
-      // Every send enters the encrypted server outbox, even if the peer is
-      // already online. The native worker sends asynchronously.
-      const res=await postJson("/api/messages",{public_key:peer,text,client_id});
-      drafts.current.set(peer,"");
-      if(selectedRef.current===peer)setDraft("");
-      try{
-        await h.persist({
-          id:client_id,type:"message",direction:"outgoing",
-          public_key:peer,text,at:Date.now(),outbox_id:res.id||client_id,
-          session_id:res.session_id,message_id:res.message_id,
-          delivery_status:res.status==="sent"?"sent":"queued"
-        });
-        await recoverPending(h);
-      }catch(error){alert("消息已加入待发队列，但本地历史保存失败："+error.message)}
+      // Always store the client ID before submitting, so an ambiguous network
+      // failure cannot silently duplicate an already-accepted server message.
+      await h.persist(optimistic);
     }catch(error){
+      setMessages(previous=>previous.filter(item=>item.id!==client_id));
       drafts.current.set(peer,text);
       if(selectedRef.current===peer)setDraft(text);
-      alert(error.message);
+      sendBusy.current=false;setSending(false);
+      alert("无法保存本地加密消息："+error.message);return;
+    }
+    try{
+      // The native worker sends asynchronously from the encrypted VPS outbox.
+      const res=await postJson("/api/messages",{public_key:peer,text,client_id});
+      await h.patchEvent(client_id,{
+        outbox_id:res.id||client_id,
+        session_id:res.session_id,message_id:res.message_id,
+        delivery_status:res.status==="sent"?"sent":"queued"
+      });
+      await refreshHistory(h);
+      recoverPending(h).catch(error=>console.warn("消息状态同步失败",error));
+    }catch(error){
+      // Network errors may occur AFTER the server accepted the request:
+      // retain the same client ID and do not auto-retry or ask for a resend.
+      const definitive=error.status>=400&&error.status<500;
+      const state=definitive?"failed":"uncertain";
+      try{
+        await h.patchEvent(client_id,{delivery_status:state,delivery_error:error.message});
+        await refreshHistory(h);
+      }catch{setMessages(previous=>previous.map(item=>item.id===client_id
+        ? {...item,delivery_status:state}:item))}
+      if(definitive)alert("消息发送失败："+error.message);
     }finally{sendBusy.current=false;setSending(false)}
   }
   async function addFriend(){
@@ -977,14 +1059,27 @@ export default function App(){
   }
   async function sendFile(){
     const file=uploadFile;
-    if(!selected||!online(selectedFriend)){alert("附件要求双方在线");return}
+    const peer=selectedRef.current;
+    if(!peer||!online(friends.find(friend=>friend.public_key===peer))){
+      alert("附件要求双方在线");return;
+    }
     if(!file||file.size<1||file.size>5*1024*1024){
       alert("附件大小需为 1 字节至 5 MiB");return;
     }
+    if(busy)return;
+    const localId="pending-file-"+crypto.randomUUID();
+    const optimistic={
+      id:localId,type:"file",direction:"outgoing",public_key:peer,
+      file_id:null,file_name:file.name,file_size:file.size,file_progress:0,
+      file_state:"uploading",at:Date.now(),previewBlob:file
+    };
+    setPendingFiles(previous=>[...previous,optimistic]);
+    setUploadFile(null);
+    // File size can take seconds to upload: show bubble before the request.
     setBusy(true);
     let transfer;
     try{
-      const url="/api/files/send?peer="+encodeURIComponent(selected)+
+      const url="/api/files/send?peer="+encodeURIComponent(peer)+
         "&name="+encodeURIComponent(file.name);
       const response=await api(url,{
         method:"POST",raw:true,
@@ -993,32 +1088,45 @@ export default function App(){
       });
       transfer=await response.json();
     }catch(error){
+      setPendingFiles(previous=>previous.map(entry=>entry.id===localId
+        ? {...entry,file_state:"failed"}:entry));
       alert("提交附件失败："+error.message);
-      setBusy(false);
-      return;
+      setBusy(false);return;
     }
-    // The native API already accepted the send. Never suggest resending
-    // merely because a local image thumbnail or history write failed.
-    setUploadFile(null);
+    // The native API already accepted the send. Never imply retry just
+    // because local encrypted history/caching fails after acceptance.
     if(attachmentInput.current)attachmentInput.current.value="";
+    const h=history.current;
+    let stored=false;
     try{
-      const h=history.current;
-      if(h?.ready()){
-        await h.persistFile(transfer);
-        if(/\.(png|jpe?g|webp|gif)$/i.test(file.name)&&file.size<=5*1024*1024){
-          const mime=file.type.startsWith("image/")?file.type:
-            /\.png$/i.test(file.name)?"image/png":
-            /\.webp$/i.test(file.name)?"image/webp":
-            /\.gif$/i.test(file.name)?"image/gif":"image/jpeg";
-          try{
-            await h.cacheImage(transfer.id,new Blob([file],{type:mime}));
-          }catch(error){alert("附件已提交，但图片本地缓存失败："+error.message)}
+      if(!h?.ready())throw new Error("本地加密历史尚未就绪");
+      await h.persistFile(transfer);
+      if(/\.(png|jpe?g|webp|gif)$/i.test(file.name)){
+        const mime=file.type.startsWith("image/")?file.type:
+          /\.png$/i.test(file.name)?"image/png":
+          /\.webp$/i.test(file.name)?"image/webp":
+          /\.gif$/i.test(file.name)?"image/gif":"image/jpeg";
+        const blob=new Blob([file],{type:mime});
+        if(await decodedImage(blob)){
+          await h.cacheImage(transfer.id,blob);
+          setImageCacheRevision(n=>n+1);
         }
-        await refreshHistory(h);
       }
-    }catch(error){alert("附件已提交，但本地历史保存失败："+error.message)}
+      await refreshHistory(h);
+      stored=true;
+    }catch(error){
+      alert("附件已被 Toxcore 接受，但本地记录或图片缓存失败："+error.message);
+    }
+    if(stored){
+      setPendingFiles(previous=>previous.filter(entry=>entry.id!==localId));
+    }else{
+      // Keep the user-visible bubble instead of silently losing an accepted
+      // attachment; do not recommend resending to avoid duplicate files.
+      setPendingFiles(previous=>previous.map(entry=>entry.id===localId
+        ? {...entry,file_state:"uncertain"}:entry));
+    }
     try{await refreshTransfers()}catch(error){
-      alert("附件已提交，但传输列表同步失败："+error.message)
+      console.warn("附件列表同步失败",error);
     }
     setBusy(false);
   }
@@ -1138,7 +1246,7 @@ export default function App(){
         历史 JSON 导出文件是明文，需自行妥善保存。
       </Typography.Paragraph>
     </Card>
-    <AntButton danger block className="wt-settings-signout" onClick={logout}>退出当前身份</AntButton>
+    <AntButton danger block className="wt-settings-signout" onClick={()=>setLogoutOpen(true)}>退出当前身份</AntButton>
   </div>;
 
   if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><Spin size="large"/></div>;
@@ -1156,7 +1264,7 @@ export default function App(){
         <Typography.Paragraph type="secondary" className="wtox-auth-subtitle">
           创建新身份，或导入已有的 .tox 文件。
         </Typography.Paragraph>
-          <Segmented block size="large" className="wtox-auth-switch"
+          <Segmented block size="middle" className="wtox-auth-switch"
             value={authMode} onChange={mode=>setAuthMode(mode)}
             options={[
               {label:"创建身份",value:"create"},
@@ -1396,15 +1504,19 @@ export default function App(){
             <AntButton type="text" className="wt-peer-avatar-button"
               aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
               onClick={()=>setPeerDetailsOpen(true)}>
-              <Avatar size={40} gap={4} className="ant-chat-avatar"
-                style={{backgroundColor:avatarColor(selectedFriend?.public_key||user.public_key)}}>
-                {selectedFriend?avatarLabel(selectedFriend.name,selectedFriend.public_key):"✦"}
-              </Avatar>
+              <Badge dot color={peerStatusColor==="success"?"#16b977":
+                  peerStatusColor==="warning"?"#faad14":
+                  peerStatusColor==="error"?"#ff4d4f":"#929399"}
+                offset={[-2,3]} className="wt-chat-presence-badge">
+                <Avatar size={40} gap={4} className="ant-chat-avatar"
+                  style={{backgroundColor:avatarColor(selectedFriend?.public_key||user.public_key)}}>
+                  {selectedFriend?avatarLabel(selectedFriend.name,selectedFriend.public_key):"✦"}
+                </Avatar>
+              </Badge>
             </AntButton>
             <div className="ant-peer-title">
               <div className="wt-peer-name-row">
                 <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
-                {selectedFriend&&<Badge status={peerStatusColor} text={peerStatus}/>}
               </div>
               <small title={selectedFriend?.status_message||""}>
                 {selectedFriend?.status_message?.trim()|| (selectedFriend?"暂无状态消息":"wTox")}
@@ -1469,7 +1581,8 @@ export default function App(){
                 <AttachmentBubble file={item}
                   accept={id=>controlFile(id,"accept")}
                   reject={id=>controlFile(id,"reject")}
-                  download={downloadFile} historyHandle={history.current}/>
+                  download={downloadFile} historyHandle={history.current}
+                  imageCacheRevision={imageCacheRevision}/>
               </div>
               </Dropdown>
             : <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}>
@@ -1485,7 +1598,7 @@ export default function App(){
                   placement={item.direction==="outgoing"?"end":"start"}
                   shape="round" variant="filled"
                   footer={<span className="ant-message-status">
-                    {new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}
+                    {chatTime(item.at)}
                     {item.direction==="outgoing"?" · "+stateText(item):""}
                   </span>}
                   footerPlacement={item.direction==="outgoing"?"outer-end":"outer-start"}/>
@@ -1515,10 +1628,10 @@ export default function App(){
                 icon={<PaperClipOutlined/>} aria-label="添加附件"
                 disabled={!selected||!online(selectedFriend)}/>
             </Upload>
-            <p className="ant-compose-status">{!selected?"请先选择好友":
-              !historyReady?"本地加密历史尚未就绪":
-              !online(selectedFriend)?"对方离线":
-              sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
+            {(!historyReady||!online(selectedFriend))&&
+              <p className="ant-compose-status">
+                {!historyReady?"本地加密历史尚未就绪":"对方离线"}
+              </p>}
           </div>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
@@ -1551,6 +1664,32 @@ export default function App(){
         </div>}
       </main>
     </div>
+
+    <AntModal open={logoutOpen} title="退出当前身份" footer={null}
+      destroyOnHidden onCancel={()=>{if(!logoutBusy)setLogoutOpen(false)}}
+      closable={!logoutBusy} maskClosable={!logoutBusy}>
+      <Typography.Paragraph>
+        你希望如何处理当前身份保存在此浏览器中的聊天记录和图片缓存？
+      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary">
+        两种方式都会结束当前登录并尝试取消本设备的离线推送。
+        均不会删除 VPS 上的 Tox 身份、好友列表或服务器中的待发消息。
+      </Typography.Paragraph>
+      <Space orientation="vertical" size="middle" style={{width:"100%"}}>
+        <AntButton block loading={logoutBusy} onClick={()=>logout(false)}>
+          保留本地数据并退出
+        </AntButton>
+        <AntButton block danger type="primary" loading={logoutBusy}
+          onClick={()=>logout(true)}>
+          清除当前身份本地数据并退出
+        </AntButton>
+        <Typography.Text type="secondary" className="wt-settings-footnote">
+          清除会永久删除当前浏览器中该身份的加密消息、图片缓存、
+          已读记录与头像颜色；其他身份的数据及全局主题不受影响。
+          删除前请先备份需要保留的聊天记录。
+        </Typography.Text>
+      </Space>
+    </AntModal>
 
     <AntModal open={!!singleDeleteId} title="删除聊天记录"
       onCancel={()=>setSingleDeleteId(null)} onOk={deleteSingleMessage}

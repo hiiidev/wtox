@@ -45,6 +45,34 @@ assert.match(app,/await h\.persistFile\(transfer\)/);
 assert.match(app,/await h\.cacheImage\(transfer\.id/);
 assert.match(app,/<FileCard name=\{file\.file_name\}/);
 assert.match(app,/<Image className="wtox-attachment-image"/);
+assert.ok(app.includes("await decodedImage(blob)"),
+  "Preview must decode real attachment bytes, not trust filename previews");
+assert.ok(app.includes("setImageCacheRevision(n=>n+1)"),
+  "Outgoing image should rerender once the encrypted image cache is written");
+assert.ok(app.includes("file.previewBlob"),
+  "A newly sent image should be previewable during upload");
+assert.doesNotMatch(app,/已由 Toxcore 完成文件传输/,
+  "Completed attachment should not show redundant Toxcore text");
+assert.match(app,/wt-chat-presence-badge/,
+  "Friend presence should appear on the avatar");
+assert.ok(!app.includes('selectedFriend&&<Badge status={peerStatusColor} text={peerStatus}/>'),
+  "Do not show redundant presence text next to the friend nickname");
+assert.ok(refined.includes("padding-bottom:34px!important"),
+  "Leave space after the last incoming message");
+const sendBody=app.slice(app.indexOf("async function sendText("),
+  app.indexOf("async function addFriend("));
+assert.ok(sendBody.indexOf("setMessages(previous=>[...previous,optimistic])")>=0 &&
+  sendBody.indexOf("setMessages(previous=>[...previous,optimistic])") <
+  sendBody.indexOf('postJson("/api/messages"'),
+  "Optimistic message must enter timeline before server roundtrip");
+const fileBody=app.slice(app.indexOf("async function sendFile()"),
+  app.indexOf("async function controlFile("));
+assert.ok(fileBody.indexOf("setPendingFiles(previous=>[...previous,optimistic])")>=0 &&
+  fileBody.indexOf("setPendingFiles(previous=>[...previous,optimistic])") <
+  fileBody.indexOf("await api(url"),
+  "Optimistic attachment must enter timeline before file upload");
+assert.ok(!app.includes('sending?"正在发送请求"'),
+  "Composer must not host the outgoing send status");
 assert.match(refined,/max-width:none!important/);
 assert.ok(refined.includes("wt-message-outgoing") &&
   refined.includes("justify-content:flex-end"),
@@ -189,7 +217,8 @@ assert.match(app,/const transferTimer=setInterval\(\(\)=>\{/);
 assert.match(app,/clearInterval\(transferTimer\)/);
 assert.match(app,/recoverPending\(\),refreshTransfers\(\)/);
 
-assert.match(app,/record\.delivery_status\)\)return "待发送"/);
+assert.ok(app.includes('if(record.delivery_status==="queued")return "等待发送"'));
+assert.ok(app.includes('if(record.delivery_status==="queued_local")return "正在提交"'));
 assert.match(app,/record\.delivery_status\)\)return "正在发送"/);
 assert.match(app,/title="连接与消息队列"/);
 assert.match(app,/networkDiagnostics\?\.queued/);
@@ -204,13 +233,24 @@ assert.doesNotMatch(app,/<Tooltip title="好友请求">/);
 assert.doesNotMatch(app,/<Tooltip title="添加好友">/);
 assert.doesNotMatch(app,/<Tooltip title="添加附件">/);
 assert.match(app,/aria-label="添加附件"/);
-assert.match(app,/kind==="chats"\?MessageFilled/);
-assert.match(app,/kind==="contacts"\?ContactsFilled:SettingFilled/);
+assert.ok(app.includes("M12 2C6.49 2 2 6.49 2 12"),"Use supplied chat SVG path");
+assert.ok(app.includes("M9 4a4 4 0 1 0 0 8"),"Use supplied contacts SVG path");
 assert.match(app,/title="新消息通知"[\s\S]*?extra=\{<Badge/);
 assert.match(app,/title="连接与消息队列"[\s\S]*?extra=\{<Badge/);
 assert.match(app,/downloadToxFile\(await response\.blob\(\)/);
 const pushSettings=readFileSync("frontend/src/PushSettings.jsx","utf8");
 assert.match(pushSettings,/title="离线推送（PWA）"[\s\S]*?extra=\{<Badge/);
+assert.ok(!app.includes("Enter 发送 · Shift + Enter 换行"),"No shortcut hint below chat");
+assert.ok(app.includes('onClick={()=>setLogoutOpen(true)}'),"Exit must require choice");
+assert.ok(app.includes("清除当前身份本地数据并退出"));
+assert.ok(app.includes("保留本地数据并退出"));
+const railCSS=readFileSync("frontend/src/refine.css","utf8");
+assert.ok(railCSS.includes(".wechat-rail-button.is-active:hover"),
+  "Active desktop nav must still have hover feedback");
+assert.ok(railCSS.includes("background:transparent!important;"),
+  "Selected desktop icon should have no persistent tile");
+assert.ok(railCSS.includes("height:35px;min-height:35px"),
+  "Login segmented control should be compact");
 const toastCSS=readFileSync("frontend/src/ant-style.css","utf8");
 assert.match(toastCSS,/html\[data-wtox-theme="dark"\] \.ant-message \.ant-message-notice-content/);
 
@@ -228,7 +268,8 @@ assert.match(app,/<Upload\.Dragger accept="\.tox,application\/octet-stream"/);
 assert.match(app,/<Form\.Item label="密码" required>/);
 assert.match(app,/<Form\.Item label="密码" extra="未设置密码的 \.tox 文件可留空">/);
 assert.doesNotMatch(app,/旧版账号迁移|wtox-old-backup\.tox|备份密码/);
-assert.doesNotMatch(app,/VPS/);
+assert.ok(app.includes("不会删除 VPS 上的 Tox 身份"),
+  "Logout must distinguish local deletion from the persistent VPS Tox identity");
 assert.match(app,/suffix=\{\(_,info\)=>\{/);
 assert.match(app,/SendButton disabled=\{!draft\.trim\(\)/);
 assert.match(refined,/\.wt-chat-sender button:disabled/);
