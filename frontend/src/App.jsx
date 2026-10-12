@@ -1045,6 +1045,7 @@ export default function App(){
         if(!dead&&currentSocket.readyState===WebSocket.CONNECTING)currentSocket.close();
       },10000);
       currentSocket.onopen=()=>{
+        if(dead||currentSocket!==ws){currentSocket.close();return}
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         lastMessage.current=Date.now();
@@ -1053,10 +1054,12 @@ export default function App(){
           refreshTransfers()]);
       };
       currentSocket.onmessage=msg=>{
+        if(dead||currentSocket!==ws)return;
         lastMessage.current=Date.now();
         try{onRealtime(JSON.parse(msg.data))}catch(error){alert("无法解析实时事件："+error.message)}
       };
       currentSocket.onclose=()=>{
+        if(dead||currentSocket!==ws)return;
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         if(!dead){
@@ -1107,7 +1110,10 @@ export default function App(){
       document.removeEventListener("visibilitychange",wake);
       window.removeEventListener("focus",wake);
       window.removeEventListener("pageshow",wake);
-      if(ws){ws.onclose=null;ws.close()}
+      if(ws){
+        ws.onopen=null;ws.onmessage=null;ws.onclose=null;
+        ws.close();
+      }
       socket.current=null;
     };
   },[user?.public_key,onRealtime,recoverPending,refreshFriends,
