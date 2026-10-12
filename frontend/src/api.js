@@ -6,9 +6,17 @@ export async function api(url, init={}) {
   });
   if(!response.ok){
     let message="请求失败 ("+response.status+")";
-    try{const data=await response.json();message=typeof data.detail==="string"?data.detail:message}
-    catch {}
-    const error=new Error(message);error.status=response.status;throw error;
+    let accessRequired=false;
+    try{
+      const data=await response.json();
+      message=typeof data.detail==="string"?data.detail:message;
+      accessRequired=data.access_required===true;
+    }catch {}
+    const error=new Error(message);
+    error.status=response.status;
+    error.accessRequired=accessRequired;
+    if(accessRequired)window.dispatchEvent(new Event("wtox-site-locked"));
+    throw error;
   }
   return response;
 }
