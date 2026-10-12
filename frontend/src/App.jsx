@@ -1456,7 +1456,9 @@ export default function App(){
     }
     // The native API already accepted the send. Never imply retry just
     // because local encrypted history/caching fails after acceptance.
-    if(attachmentInput.current)attachmentInput.current.value="";
+    // AntD Upload is controlled by uploadFile state. There is no legacy
+    // attachmentInput ref; touching it would throw *after* a successful HTTP
+    // upload and skip saving the encrypted file record and image preview.
     const h=history.current;
     let stored=false;
     try{
