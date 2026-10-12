@@ -13,8 +13,20 @@ self.addEventListener("push", event => {
     let data = {};
     try { data = event.data?.json() || {}; } catch {}
     const kind = data.kind === "friend_request" ? "friend_request" : "message";
-    // Show only the requested notification text. The OS can still display
-    // the installed app name/icon as system-generated notification metadata.
+    // When the PWA is visible, use its in-page websocket/inbox + badges
+    // instead of producing a duplicate phone/OS notification. Service workers
+    // cannot keep a closed page alive; background pushes keep OS delivery.
+    const windows=await self.clients.matchAll({type:"window",includeUncontrolled:true});
+    const visible=windows.filter(client=>
+      new URL(client.url).origin===self.location.origin&&
+      client.visibilityState==="visible");
+    if(visible.length){
+      for(const client of visible){
+        client.postMessage({type:"wtox-foreground-push",kind});
+      }
+      return;
+    }
+    // Background-only OS notification: never include plaintext message data.
     await self.registration.showNotification(
       kind === "friend_request" ? "你有好友请求。" : "你收到了一条新消息。",
       {
