@@ -234,7 +234,10 @@ assert.doesNotMatch(app,/<Tooltip title="添加好友">/);
 assert.doesNotMatch(app,/<Tooltip title="添加附件">/);
 assert.match(app,/aria-label="添加附件"/);
 assert.ok(app.includes("M12 2C6.49 2 2 6.49 2 12"),"Use supplied chat SVG path");
-assert.ok(app.includes("M9 4a4 4 0 1 0 0 8"),"Use supplied contacts SVG path");
+assert.ok(app.includes("M96 128a128 128 0 1 1 256 0"),"Use the new supplied contacts SVG path");
+assert.ok(app.includes('viewBox="0 0 640 512"'),"Preserve contacts 1.25:1 aspect ratio");
+assert.ok(app.includes("wt-rail-glyph-contacts")&&app.includes("wt-rail-glyph-chats")&&
+  app.includes("wt-rail-glyph-settings"),"Icons should have per-shape optical sizing");
 assert.match(app,/title="新消息通知"[\s\S]*?extra=\{<Badge/);
 assert.match(app,/title="连接与消息队列"[\s\S]*?extra=\{<Badge/);
 assert.match(app,/downloadToxFile\(await response\.blob\(\)/);
@@ -245,6 +248,16 @@ assert.ok(app.includes('onClick={()=>setLogoutOpen(true)}'),"Exit must require c
 assert.ok(app.includes("清除当前身份本地数据并退出"));
 assert.ok(app.includes("保留本地数据并退出"));
 const railCSS=readFileSync("frontend/src/refine.css","utf8");
+assert.ok(railCSS.includes(".wechat-rail-button .wt-nav-chat-badge.ant-badge"),
+  "Chat's Badge wrapper must inherit selected and unselected icon color");
+assert.ok(railCSS.includes("color:inherit!important"),
+  "Badge must pass through the parent button's color");
+assert.ok(railCSS.includes(".wt-rail-glyph-chats")&&
+  railCSS.includes(".wt-rail-glyph-contacts")&&
+  railCSS.includes(".wt-rail-glyph-settings.anticon"),
+  "Normalize chat, contacts, and settings icons by optical dimensions");
+assert.ok(railCSS.includes("width:31px!important;height:25px!important"),
+  "Desktop contacts icon must keep the supplied wide aspect ratio");
 assert.ok(railCSS.includes(".wechat-rail-button.is-active:hover"),
   "Active desktop nav must still have hover feedback");
 assert.ok(railCSS.includes("background:transparent!important;"),
