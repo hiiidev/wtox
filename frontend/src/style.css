@@ -1,12 +1,22 @@
 :root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  color:#e8f1ff;background:#0b1220;color-scheme:dark}
+  --wt-startup-bg:#f5f5f5;
+  color:#222326;background:var(--wt-startup-bg);color-scheme:light}
+@media(prefers-color-scheme:dark){
+  :root{--wt-startup-bg:#1e1e1f;color:#f3f3f3;color-scheme:dark}
+}
+html[data-wtox-theme="light"]{
+  --wt-startup-bg:#f5f5f5;color-scheme:light;
+}
+html[data-wtox-theme="dark"]{
+  --wt-startup-bg:#1e1e1f;color-scheme:dark;
+}
 *{box-sizing:border-box}html,body,#root{width:100%;height:100%;min-height:0;margin:0}
 button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.52}
 input,textarea{border:1px solid #3a4e66;border-radius:11px;padding:11px 13px;
  background:#0f1f34;color:#f5faff;outline:0;width:100%;max-width:100%}
 input:focus,textarea:focus{border-color:#6b9cff;box-shadow:0 0 0 3px #427bd62f}
 input[type=checkbox]{width:auto;accent-color:#4b8dff}
-body{background:radial-gradient(circle at 10% -20%,#1d3252,transparent 55%),#0c1422}
+body{background:var(--wt-startup-bg)}
 .wtox-shell{height:100dvh;width:100vw;display:flex;flex-direction:column;min-height:0;color:#e8f1ff}
 
 
@@ -17,7 +27,7 @@ body{background:radial-gradient(circle at 10% -20%,#1d3252,transparent 55%),#0c1
 /* Initial bootstrap has a single unobtrusive spinner, no text or branding. */
 .wtox-loading{
   height:100dvh;min-height:100vh;display:grid;place-items:center;
-  background:var(--wt-bg, #f5f5f5);
+  background:var(--wt-startup-bg);
   color:#16ac71;
 }
 .wtox-loading .ant-spin{color:#16ac71}
@@ -45,7 +55,7 @@ body{background:radial-gradient(circle at 10% -20%,#1d3252,transparent 55%),#0c1
 
 
 
-.wtox-error-page{height:100dvh;padding:28px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;color:#dceafb;background:#101927}
+.wtox-error-page{height:100dvh;padding:28px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;color:#dceafb;background:#1e1e1f}
 .wtox-error-page h1{margin:0;font-size:23px}
 .wtox-error-page p{max-width:480px;color:#95aec9;line-height:1.6}
 .wtox-error-page button{background:#377eea;color:white;border:0;padding:12px 24px;border-radius:11px}

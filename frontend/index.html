@@ -3,25 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#101927">
+  <meta name="theme-color" content="#1e1e1f">
   <meta name="description" content="wTox">
   <title>wTox</title>
   <link rel="icon" type="image/svg+xml" href="/logo.svg">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png?v=4d7f4d8f">
   <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <script>
+    // Match saved visual style on the first paint, before JS/CSS bundles load.
+    try {
+      const stored=localStorage.getItem("wtox-visual-style");
+      const dark=stored==="dark" || (stored!=="light" &&
+        matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.setAttribute("data-wtox-theme",dark?"dark":"light");
+    } catch {
+      document.documentElement.setAttribute("data-wtox-theme",
+        matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+    }
+  </script>
   <style>
+    /* Use neutral app backgrounds even before external CSS and React load. */
+    :root,body,#root{background:#f5f5f5}
+    @media(prefers-color-scheme:dark){
+      :root,body,#root{background:#1e1e1f}
+    }
+    html[data-wtox-theme="light"],html[data-wtox-theme="light"] body,
+    html[data-wtox-theme="light"] #root{background:#f5f5f5}
+    html[data-wtox-theme="dark"],html[data-wtox-theme="dark"] body,
+    html[data-wtox-theme="dark"] #root{background:#1e1e1f}
     /* Paint before React and its JS bundle have downloaded. No text or logo. */
     #root:has(.wtox-boot){min-height:100dvh;display:grid;place-items:center}
     .wtox-boot{display:grid;place-items:center;width:100%;min-height:100dvh;
-      background:#f5f5f5}
+      background:transparent}
     .wtox-boot-ring{width:32px;height:32px;border:3px solid rgba(22,172,113,.2);
       border-top-color:#16ac71;border-radius:50%;animation:wt-boot-spin .8s linear infinite}
     @keyframes wt-boot-spin{to{transform:rotate(360deg)}}
-    @media(prefers-color-scheme:dark){
-      .wtox-boot{background:#1e1e1f}
-    }
     @media(prefers-reduced-motion:reduce){
       .wtox-boot-ring{animation-duration:1.7s}
     }

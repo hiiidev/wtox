@@ -135,14 +135,29 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
   </div>;
 }
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
-/* User-supplied 24px filled SVG paths; embedded, no Iconify requests. */
+/* Embedded SVGs: no external Iconify requests. Align optical sizes with
+ * SettingFilled's 25px glyph using type-specific icon boxes.
+ */
 function RailIcon({kind}){
-  if(kind==="settings")return <SettingFilled className="wt-rail-glyph" aria-hidden="true"/>;
-  return <svg xmlns="http://www.w3.org/2000/svg" className="wt-rail-glyph"
-    width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    {kind==="chats"?
-      <path fill="currentColor" d="M12 2C6.49 2 2 6.49 2 12c0 2.12.68 4.19 1.93 5.9l-1.75 2.53c-.21.31-.24.7-.06 1.03c.17.33.51.54.89.54h9c5.51 0 10-4.49 10-10S17.51 2 12 2M8 13c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1m4 0c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1m4 0c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1"/>:
-      <path fill="currentColor" d="M9 4a4 4 0 1 0 0 8a4 4 0 1 0 0-8m1 9H8c-2.76 0-5 2.24-5 5v1c0 .55.45 1 1 1h10c.55 0 1-.45 1-1v-1c0-2.76-2.24-5-5-5m5-9c-.47 0-.9.09-1.31.22C14.51 5.24 15 6.55 15 8s-.49 2.75-1.31 3.78c.41.13.84.22 1.31.22c2.28 0 4-1.72 4-4s-1.72-4-4-4m1 9h-1.11A6.97 6.97 0 0 1 17 18v1c0 .35-.07.69-.18 1H20c.55 0 1-.45 1-1v-1c0-2.76-2.24-5-5-5"/>}
+  if(kind==="settings"){
+    return <SettingFilled className="wt-rail-glyph wt-rail-glyph-settings"
+      aria-hidden="true"/>;
+  }
+  if(kind==="contacts"){
+    return <svg xmlns="http://www.w3.org/2000/svg"
+      className="wt-rail-glyph wt-rail-glyph-contacts"
+      width="1.25em" height="1em" viewBox="0 0 640 512"
+      aria-hidden="true" focusable="false">
+      <path fill="currentColor"
+        d="M96 128a128 128 0 1 1 256 0a128 128 0 1 1-256 0M0 482.3C0 383.8 79.8 304 178.3 304h91.4c98.5 0 178.3 79.8 178.3 178.3c0 16.4-13.3 29.7-29.7 29.7H29.7C13.3 512 0 498.7 0 482.3M609.3 512H471.5c5.4-9.4 8.6-20.3 8.6-32v-8c0-60.7-27.1-115.2-69.8-151.8c2.4-.1 4.7-.2 7.1-.2h61.4c89 0 161.2 72.2 161.2 161.3c0 17-13.8 30.7-30.7 30.7M432 256c-31 0-59-12.6-79.3-32.9c19.7-26.6 31.3-59.5 31.3-95.1c0-26.8-6.6-52.1-18.3-74.3C384.3 40.1 407.2 32 432 32c61.9 0 112 50.1 112 112s-50.1 112-112 112"/>
+    </svg>;
+  }
+  return <svg xmlns="http://www.w3.org/2000/svg"
+    className="wt-rail-glyph wt-rail-glyph-chats"
+    width="1em" height="1em" viewBox="0 0 24 24"
+    aria-hidden="true" focusable="false">
+    <path fill="currentColor"
+      d="M12 2C6.49 2 2 6.49 2 12c0 2.12.68 4.19 1.93 5.9l-1.75 2.53c-.21.31-.24.7-.06 1.03c.17.33.51.54.89.54h9c5.51 0 10-4.49 10-10S17.51 2 12 2M8 13c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1m4 0c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1m4 0c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1"/>
   </svg>;
 }
 
