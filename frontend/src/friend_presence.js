@@ -15,12 +15,12 @@ export function contactPresenceText(friend) {
   const message = friend?.status_message?.trim() || "暂无状态消息";
   if (isFriendOnline(friend)) return message;
   const last = formatLastOnline(friend?.last_online);
-  return last ? "最后在线时间:" + last : message;
+  return last ? "最后在线:" + last : message;
 }
 export function chatPresenceText(friend) {
   if (!friend) return "wTox";
   const message = friend.status_message?.trim() || "暂无状态消息";
   if (isFriendOnline(friend)) return message;
   const last = formatLastOnline(friend.last_online);
-  return last ? "最后在线时间:" + last + " · " + message : message;
+  return last ? "最后在线:" + last + " · " + message : message;
 }
