@@ -1511,11 +1511,9 @@ export default function App(){
                 setUploadFile(file);
                 return false;
               }}>
-              <Tooltip title="添加附件">
-                <AntButton type="text" className="wt-compose-attach-button"
-                  icon={<PaperClipOutlined/>} aria-label="添加附件"
-                  disabled={!selected||!online(selectedFriend)}/>
-              </Tooltip>
+              <AntButton type="text" className="wt-compose-attach-button"
+                icon={<PaperClipOutlined/>} aria-label="添加附件"
+                disabled={!selected||!online(selectedFriend)}/>
             </Upload>
             <p className="ant-compose-status">{!selected?"请先选择好友":
               !historyReady?"本地加密历史尚未就绪":
