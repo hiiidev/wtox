@@ -1813,7 +1813,7 @@ export default function App(){
         </AntButton>
         <Typography.Text type="secondary" className="wt-settings-footnote">
           清除本地数据会永久删除当前身份在此浏览器中的加密消息、
-          图片缓存、已读记录、头像颜色与其他身份关联数据。
+          图片缓存、已读记录、头像颜色及其他与该身份关联的数据。
           服务器数据无论选择哪项都会删除；请提前备份。
         </Typography.Text>
       </Space>
