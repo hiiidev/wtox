@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from backend import store
 from backend.main import app
@@ -162,6 +163,30 @@ class ChatApiTests(unittest.TestCase):
             ws.send_json({"type": "ping"})
             self.assertEqual(ws.receive_json()["type"], "pong")
         self.assertEqual(store.get_pending(self.uid), [])
+
+    def test_websocket_denials_log_safe_reasons(self):
+        # Browsers only report a generic websocket error when HTTP upgrade
+        # authentication fails. Production logs must identify the condition
+        # without exposing any cookie, token, origin or private key value.
+        for headers, reason in [
+            ({"origin": "https://other.example"}, "origin_host_mismatch"),
+            ({}, "origin_host_mismatch"),
+        ]:
+            with self.subTest(reason=reason, headers=headers):
+                with self.assertLogs("uvicorn.error", level="WARNING") as output:
+                    with self.assertRaises(WebSocketDisconnect):
+                        with self.client.websocket_connect("/ws", headers=headers):
+                            pass
+                self.assertIn(reason, " ".join(output.output))
+                self.assertNotIn("https://other.example", " ".join(output.output))
+        self.client.cookies.delete("wtox_tox_session")
+        with self.assertLogs("uvicorn.error", level="WARNING") as output:
+            with self.assertRaises(WebSocketDisconnect):
+                with self.client.websocket_connect(
+                    "/ws", headers={"origin":"http://testserver"}
+                ):
+                    pass
+        self.assertIn("tox_session_missing_or_expired", " ".join(output.output))
 
     def test_all_messages_use_encrypted_vps_queue(self):
         self.assertTrue(self.client.get("/api/settings").json()["offline_queue"])
