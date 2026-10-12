@@ -22,8 +22,8 @@ _LOCK = threading.RLock()
 
 # Active Tox identity sessions are renewable indefinitely, with an inactivity
 # timeout. Renewal is throttled to avoid writes on each polling request.
-TOX_SESSION_IDLE_SECONDS = 30 * 86400
-TOX_SESSION_RENEW_BEFORE_SECONDS = 15 * 86400
+TOX_SESSION_IDLE_SECONDS = 180 * 86400
+TOX_SESSION_RENEW_BEFORE_SECONDS = 90 * 86400
 
 def data_root() -> Path:
     root = Path(os.environ.get("WTOX_DATA_DIR", "/data"))
