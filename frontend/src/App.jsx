@@ -6,11 +6,12 @@ import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
-  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined } from "@ant-design/icons";
+  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined,
+  MessageFilled, ContactsFilled, SettingFilled } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import {LOGO_URL} from "./versioned_assets.js";
 import {disablePushBeforeLogout} from "./push_client.js";
-import {api,getJson,postJson,downloadBlob,shortKey} from "./api.js";
+import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
@@ -95,17 +96,13 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
   </div>;
 }
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
-/* Inlined filled SVGs: locally bundled by Vite; no icon CDN or font download. */
+/* One consistent filled Ant Design icon family on mobile and desktop.
+ * Bundled in the React bundle: no Iconify or runtime icon-network request.
+ */
 function RailIcon({kind}){
-  return <svg viewBox="0 0 24 24" width="25" height="25" fill="currentColor"
-    focusable="false" aria-hidden="true">
-    {kind==="chats"?
-      <path d="M12 2.6c-5.72 0-10.4 3.74-10.4 8.3 0 2.52 1.43 4.72 3.64 6.23L4.2 21a.7.7 0 0 0 .99.84l3.93-1.99c.92.27 1.9.41 2.88.41 5.72 0 10.4-3.74 10.4-8.3S17.72 2.6 12 2.6ZM7 11a1.4 1.4 0 1 1 2.8 0A1.4 1.4 0 0 1 7 11Zm3.6 0a1.4 1.4 0 1 1 2.8 0 1.4 1.4 0 0 1-2.8 0Zm3.6 0a1.4 1.4 0 1 1 2.8 0 1.4 1.4 0 0 1-2.8 0Z"/>
-    :kind==="contacts"?
-      <><path d="M9.1 12.3a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z"/><path d="M2.3 20.7A1.3 1.3 0 0 1 1 19.4v-1.2c0-3.1 3.4-4.8 8.1-4.8s8.1 1.7 8.1 4.8v1.2a1.3 1.3 0 0 1-1.3 1.3H2.3Z"/><path d="M16.5 4.1a3.6 3.6 0 0 1 .2 7 8.8 8.8 0 0 1 2.7 2c2.4.9 3.6 2.5 3.6 4.7v1h-4.3v-.6c0-2.9-1.3-4.9-3.5-6.3a5.8 5.8 0 0 0 1.3-7.8Z"/></>
-    : <path d="m10 1.7-.4 2.2c-.5.2-1 .4-1.5.6L6.2 3.3 3.3 6.2l1.2 1.9c-.3.5-.5 1-.6 1.5l-2.2.4v4l2.2.4c.1.5.3 1 .6 1.5l-1.2 1.9 2.9 2.9 1.9-1.2c.5.2 1 .4 1.5.6l.4 2.2h4l.4-2.2c.5-.2 1-.4 1.5-.6l1.9 1.2 2.9-2.9-1.2-1.9c.2-.5.4-1 .6-1.5l2.2-.4v-4l-2.2-.4c-.2-.5-.4-1-.6-1.5l1.2-1.9-2.9-2.9-1.9 1.2c-.5-.2-1-.4-1.5-.6L14 1.7h-4ZM12 16.4a4.4 4.4 0 1 1 0-8.8 4.4 4.4 0 0 1 0 8.8Z"/>
-    }
-  </svg>;
+  const Icon=kind==="chats"?MessageFilled:
+    kind==="contacts"?ContactsFilled:SettingFilled;
+  return <Icon className="wt-rail-glyph" aria-hidden="true"/>;
 }
 
 export default function App(){
@@ -827,10 +824,13 @@ export default function App(){
     try{
       const response=await api("/api/tox/create",{method:"POST",
         body:JSON.stringify({password:createPassword})});
-      downloadBlob(await response.blob(),
+      const result=await downloadToxFile(await response.blob(),
         "wtox-"+(response.headers.get("X-Tox-ID")||"new").slice(0,16)+".tox");
       setCreatePassword("");
-      alert("身份创建成功！请保存加密的 .tox 备份和对应密码。");
+      alert(result==="cancelled"
+        ? "身份创建成功，但已取消保存备份。请进入设置重新导出加密的 .tox 文件。"
+        : "身份创建成功！请确认已将 .tox 备份存入手机“文件”或安全位置，并保管密码。",
+        result==="cancelled"?"warning":"success");
       await loadIdentity();
     }catch(error){alert(error.message)}finally{setBusy(false)}
   }
@@ -1043,7 +1043,9 @@ export default function App(){
 
   // Shared Ant Design settings: mobile full page and desktop side drawer.
   const settingsContent=<div className="wt-settings-content">
-    <Card size="small" title="连接与消息队列" className="wt-settings-card wt-settings-network-card">
+    <Card size="small" title="连接与消息队列" className="wt-settings-card wt-settings-network-card"
+      extra={<Badge status={network>0?"success":network===0?"default":"processing"}
+        text={network>0?"已连接":network===0?"未连接":"检查中"}/>}>
       <Space orientation="vertical" size="small" style={{width:"100%"}}>
         <Typography.Text className="wt-network-status">
           <span className={"wt-network-indicator "+(network>0?"connected":"disconnected")} aria-hidden="true"/>
@@ -1074,7 +1076,13 @@ export default function App(){
         options={[{label:"跟随系统",value:"system"},{label:"浅色",value:"light"},
           {label:"深色",value:"dark"}]}/>
     </Card>
-    <Card size="small" title="新消息通知" className="wt-settings-card">
+    <Card size="small" title="新消息通知" className="wt-settings-card"
+      extra={<Badge
+        status={notificationPermission==="denied"?"error":
+          notificationsEnabled&&notificationPermission==="granted"?"success":"default"}
+        text={notificationPermission==="unsupported"?"不支持":
+          notificationPermission==="denied"?"权限受限":
+          notificationsEnabled&&notificationPermission==="granted"?"已启用":"未启用"}/>}>
       <Typography.Paragraph type="secondary">
         授权后，新消息可显示浏览器系统通知。需要 HTTPS 和浏览器支持；
         网页需保持打开，关闭网页后无法接收此类通知。
@@ -1085,12 +1093,6 @@ export default function App(){
           type={notificationsEnabled&&notificationPermission==="granted"?"default":"primary"}>
           {notificationsEnabled&&notificationPermission==="granted"?"关闭新消息通知":"开启新消息通知"}
         </AntButton>
-        <Typography.Text type="secondary">
-          {notificationPermission==="unsupported"?"浏览器不支持":
-            notificationPermission==="denied"?"浏览器已阻止通知":
-            notificationsEnabled&&notificationPermission==="granted"?"已启用":
-            notificationPermission==="granted"?"权限已允许 · 尚未启用":"尚未授权"}
-        </Typography.Text>
       </Space>
     </Card>
     <PushSettings userId={user?.public_key}/>
@@ -1107,8 +1109,9 @@ export default function App(){
         try{
           const response=await api("/api/profile/export/encrypted",{
             method:"POST",body:JSON.stringify({password:backupPassword})});
-          downloadBlob(await response.blob(),"wTox-profile.tox");
-          setBackupPassword("");
+          const result=await downloadToxFile(await response.blob(),"wTox-profile.tox");
+          if(result!=="cancelled")setBackupPassword("");
+          else alert("已取消保存，请重新点击下载 .tox 配置。","warning");
         }catch(e){alert(e.message)}
       }}>下载 .tox 配置</AntButton>
     </Card>
