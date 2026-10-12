@@ -358,32 +358,71 @@ html[data-wtox-theme="light"] .wt-settings-drawer .ant-drawer-body{
   }
 }
 
-/* Ant Design message notices are rendered in a portal outside .ant-messenger.
-   Raise dark notices above the chat surface without changing their animations. */
+/* Ant Design Message renders through a portal outside .ant-messenger.
+   Match our dark Dropdown/Notification elevation and stay distinctly lighter
+   than the #1e1e1f chat canvas and #2f2f30 navigation panels.
+   Scope to HTML theme so light mode and AntD motion are untouched. */
 html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content{
-  background:linear-gradient(180deg,#303034 0%,#262629 100%)!important;
-  color:#f3f4f6!important;
-  border:1px solid rgba(255,255,255,.15)!important;
-  border-radius:13px!important;
-  box-shadow:0 14px 44px rgba(0,0,0,.48),
-             0 4px 12px rgba(0,0,0,.27),
-             inset 0 1px 0 rgba(255,255,255,.035)!important;
-  padding:11px 17px!important;
+  position:relative;
+  background:linear-gradient(155deg,#404146 0%,#37383c 54%,#313236 100%)!important;
+  color:#f6f7f8!important;
+  border:1px solid rgba(255,255,255,.2)!important;
+  border-radius:14px!important;
+  box-shadow:
+    0 22px 58px rgba(0,0,0,.64),
+    0 6px 18px rgba(0,0,0,.43),
+    0 0 0 1px rgba(0,0,0,.3),
+    inset 0 1px 0 rgba(255,255,255,.11)!important;
+  padding:11px 15px!important;
+  min-height:46px;
 }
 html[data-wtox-theme="dark"] .ant-message .ant-message-custom-content{
-  color:#f3f4f6!important;
-  display:inline-flex;align-items:center;gap:7px;
+  display:inline-flex;align-items:center;gap:10px;
+  color:#f6f7f8!important;
   font-size:13px;font-weight:500;line-height:1.55;
 }
 html[data-wtox-theme="dark"] .ant-message .ant-message-custom-content .anticon{
-  font-size:15px;
+  width:26px;height:26px;min-width:26px;
+  display:inline-flex!important;align-items:center;justify-content:center;
+  border-radius:9px;
+  border:1px solid rgba(255,255,255,.11);
+  background:rgba(255,255,255,.075);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+  font-size:16px!important;
 }
-html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content a{
-  color:#60dca2;
+/* Tint only the status pictogram; keep the toast surface neutral and readable. */
+html[data-wtox-theme="dark"] .ant-message .ant-message-success .anticon{
+  color:#59e3ac!important;
+  background:rgba(25,185,119,.17);
+  border-color:rgba(89,227,172,.19);
+}
+html[data-wtox-theme="dark"] .ant-message .ant-message-error .anticon{
+  color:#ff9398!important;
+  background:rgba(246,88,99,.16);
+  border-color:rgba(255,147,152,.2);
+}
+html[data-wtox-theme="dark"] .ant-message .ant-message-warning .anticon{
+  color:#f4ca76!important;
+  background:rgba(241,172,63,.16);
+  border-color:rgba(244,202,118,.2);
+}
+html[data-wtox-theme="dark"] .ant-message .ant-message-info .anticon{
+  color:#9ec4ff!important;
+  background:rgba(93,150,255,.17);
+  border-color:rgba(158,196,255,.19);
+}
+html[data-wtox-theme="dark"] .ant-message .ant-message-loading .anticon{
+  color:#92ddb9!important;
+  background:rgba(38,180,116,.13);
+  border-color:rgba(146,221,185,.18);
+}
+html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content a,
+html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content .ant-btn-link{
+  color:#76ecc0!important;
 }
 @media(prefers-reduced-transparency:reduce){
   html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content{
-    background:#29292d!important;
+    background:#393a3e!important;
   }
 }
 

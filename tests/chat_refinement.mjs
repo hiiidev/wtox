@@ -252,6 +252,22 @@ assert.ok(railCSS.includes("height:35px;min-height:35px"),
 const toastCSS=readFileSync("frontend/src/ant-style.css","utf8");
 assert.match(toastCSS,/html\[data-wtox-theme="dark"\] \.ant-message \.ant-message-notice-content/);
 
+const darkToastStart=toastCSS.indexOf('html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content{');
+assert.ok(darkToastStart>0,"Dark AntD Message is styled at the HTML portal level");
+const darkToast=toastCSS.slice(darkToastStart,toastCSS.indexOf("}",darkToastStart));
+assert.ok(darkToast.includes("#404146")&&darkToast.includes("#313236"),
+  "Dark Message should float above the chat and sidebar using a brighter surface");
+assert.ok(darkToast.includes("0 22px 58px rgba(0,0,0,.64)")&&
+  darkToast.includes("inset 0 1px 0 rgba(255,255,255,.11)"),
+  "Dark Message needs both a clear drop shadow and a light inner rim");
+for(const kind of ["success","error","warning","info","loading"]){
+  assert.ok(toastCSS.includes('.ant-message-'+kind+' .anticon{'),
+    "Provide legible icon contrast for "+kind+" notices");
+}
+assert.ok(!toastCSS.includes('html[data-wtox-theme="light"] .ant-message'),
+  "Do not override the native light theme Message design");
+
+
 assert.doesNotMatch(app,/<Tooltip title=\{selectedFriend\?"查看好友资料":""\}>/);
 assert.doesNotMatch(app,/<Tooltip title=\{selectedFriend\?"更多操作":""\}>/);
 assert.doesNotMatch(app,/aria-label="设置与备份" title="设置"/);
