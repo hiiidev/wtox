@@ -301,8 +301,8 @@ assert.ok(!app.includes("正在连接服务器…")&&!app.includes("连接中断
   "Never show a persistent connection message on first load or reconnect");
 assert.ok(!app.includes("wtox-server-connection"),
   "Remove all keyed realtime connection toasts");
-assert.ok(app.includes("retry=setTimeout(connect,3500)"),
-  "WebSocket must still silently reconnect in the background");
+assert.ok(app.includes("retry=setTimeout(connect,realtimeRetryDelay(failures))"),
+  "WebSocket must retry with capped backoff while the HTTP polling fallback runs");
 assert.ok(app.includes("currentSocket.readyState===WebSocket.CONNECTING"),
   "Stalled WebSocket handshakes should still be closed and retried");
 assert.ok(!app.includes('className="ant-compose-status"'),
