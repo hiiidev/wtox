@@ -190,14 +190,15 @@ assert.match(refined,/font-size:16px!important/);
 assert.match(refined,/\.ant-select-selection-search-input/);
 assert.match(refined,/\.ant-sender textarea/);
 
-assert.match(app,/unreadCountsByPeer\(messages,seen\)/);
+assert.match(app,/unreadCountsByPeer\(messages,seen,activeChatPeer\)/);
 assert.match(app,/totalUnreadForFriends\(unreadByPeer,friends\)/);
 assert.match(app,/section==="chats"&&selected===friend\.public_key\?"is-selected":""/);
 assert.equal((app.match(/count=\{totalUnread\} overflowCount=\{99\}/g)||[]).length,3);
 assert.equal((app.match(/className="wt-nav-chat-badge"/g)||[]).length,3);
 assert.match(refined,/\.wt-nav-chat-badge \.ant-badge-count/);
 assert.match(app,/seenHydration\.current=\{owner:user\.public_key,initial,ready:false\}/);
-assert.match(app,/selected&&mobileChat&&messages\.length/);
+assert.match(app,/activeConversationPeer\(\{/);
+assert.match(app,/pageVisible/);
 
 assert.match(app,/await recoverPending\(h\);[\s\S]*?await refreshTransfers\(\)/);
 assert.match(app,/const transferTimer=setInterval\(\(\)=>\{/);
