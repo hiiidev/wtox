@@ -24,7 +24,7 @@ assert.ok(app.includes("setSocketState(realtimeConnectionState(failures))"));
 assert.ok(app.includes("retry=setTimeout(connect,realtimeRetryDelay(failures))"));
 assert.ok(app.includes('setSocketState("connected")'));
 assert.ok(app.includes("failures=0;"));
-assert.ok(app.includes('socketState==="polling"?"轮询中":"正在重连"'));
+assert.ok(app.includes('polling?"轮询中":"正在重连"'));
 assert.ok(app.includes('socketState==="polling"'));
 assert.ok(app.includes("<DisconnectOutlined"));
 assert.ok(app.includes("const friendTimer=setInterval("));
