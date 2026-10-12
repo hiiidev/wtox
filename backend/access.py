@@ -63,15 +63,17 @@ def _digest(cookie: str) -> str:
 
 def _ensure_table(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS site_access_devices (
-        id TEXT PRIMARY KEY,
-        token_hash TEXT NOT NULL UNIQUE,
+        token_hash TEXT PRIMARY KEY,
+        id TEXT NOT NULL,
         created INTEGER NOT NULL,
         last_seen INTEGER NOT NULL,
         expires INTEGER NOT NULL
     )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_site_device_id ON site_access_devices(id)")
 
 
-def issue_access_cookie(password: str) -> str:
+def issue_access_cookie(password: str, *, device_id: str | None = None,
+                        device_created: int | None = None) -> str:
     nonce = base64.urlsafe_b64encode(secrets.token_bytes(24)).decode("ascii").rstrip("=")
     payload = f"v3.{nonce}"
     mac = hmac.new(_signing_key(password), payload.encode(), hashlib.sha256).hexdigest()
@@ -81,7 +83,9 @@ def issue_access_cookie(password: str) -> str:
         _ensure_table(conn)
         conn.execute("DELETE FROM site_access_devices WHERE expires<=?", (now,))
         conn.execute("INSERT INTO site_access_devices VALUES (?,?,?,?,?)",
-                     (secrets.token_hex(12), _digest(token), now, now, now + REMEMBER_SECONDS))
+                     (_digest(token), device_id or secrets.token_hex(12),
+                      device_created if device_created is not None else now,
+                      now, now + REMEMBER_SECONDS))
     return token
 
 
@@ -108,7 +112,7 @@ def renew_access_cookie(cookie: str | None) -> str | None:
     with store.db() as conn:
         _ensure_table(conn)
         row = conn.execute(
-            "SELECT id FROM site_access_devices WHERE token_hash=? AND expires>?",
+            "SELECT id,created FROM site_access_devices WHERE token_hash=? AND expires>?",
             (_digest(cookie), now)
         ).fetchone()
         if not row:
@@ -116,7 +120,7 @@ def renew_access_cookie(cookie: str | None) -> str | None:
         # Old credential cannot be replayed indefinitely after rotation.
         conn.execute("UPDATE site_access_devices SET expires=MIN(expires,?) WHERE token_hash=?",
                      (now + _GRACE_SECONDS, _digest(cookie)))
-    return issue_access_cookie(password)
+    return issue_access_cookie(password, device_id=row[0], device_created=row[1])
 
 
 def revoke_access_cookie(cookie: str | None):
@@ -124,7 +128,11 @@ def revoke_access_cookie(cookie: str | None):
         return
     with store.db() as conn:
         _ensure_table(conn)
-        conn.execute("DELETE FROM site_access_devices WHERE token_hash=?", (_digest(cookie),))
+        conn.execute(
+            "DELETE FROM site_access_devices WHERE id IN "
+            "(SELECT id FROM site_access_devices WHERE token_hash=?)",
+            (_digest(cookie),)
+        )
 
 
 def access_devices(cookie: str | None) -> list[dict]:
@@ -133,11 +141,14 @@ def access_devices(cookie: str | None) -> list[dict]:
     with store.db() as conn:
         _ensure_table(conn)
         rows = conn.execute(
-            "SELECT id, token_hash, created, last_seen FROM site_access_devices "
-            "WHERE expires>? ORDER BY created DESC LIMIT 100", (int(time.time()),)
+            "SELECT id, MIN(created), MAX(last_seen), "
+            "MAX(CASE WHEN token_hash=? THEN 1 ELSE 0 END) "
+            "FROM site_access_devices WHERE expires>? "
+            "GROUP BY id ORDER BY MAX(last_seen) DESC LIMIT 100",
+            (_digest(cookie), int(time.time()))
         ).fetchall()
-    return [{"id": x[0], "current": x[1] == _digest(cookie),
-             "created": x[2], "last_seen": x[3]} for x in rows]
+    return [{"id": x[0], "current": bool(x[3]),
+             "created": x[1], "last_seen": x[2]} for x in rows]
 
 
 def revoke_device(device_id: str):
