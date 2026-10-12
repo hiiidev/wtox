@@ -151,7 +151,8 @@ assert.match(app,/notifyIncoming\(e\)/);
 assert.match(app,/className="wt-conversation-bubble"/);
 assert.match(refined,/\.wt-conversation-bubble \.ant-bubble-body/);
 assert.match(refined,/width:max-content!important/);
-assert.match(refined,/\.wechat-conversation\.is-selected \.wechat-presence\.online/);
+assert.doesNotMatch(refined,/\\.wechat-conversation\\.is-selected \\.wechat-presence\\.online/,
+  "Selected friend status dots must not gain a separate border");
 
 assert.match(refined,/height:calc\(76px \+ env\(safe-area-inset-top\)\)!important/);
 assert.match(refined,/\.ant-messenger\[data-theme\] \.ant-chat-avatar\{/);
@@ -173,8 +174,10 @@ assert.match(refined,/\.wt-peer-profile-heading-main\{/);
 assert.match(refined,/\.wt-chat-more-button\.ant-btn svg\{/);
 assert.match(refined,/\.ant-mobile-back\.ant-btn:active/);
 assert.match(refined,/\.wechat-mobile-tabs button svg\{/);
-assert.match(refined,/\.wechat-conversation\.is-selected \.wechat-presence\.online/);
-assert.match(refined,/\.wechat-conversation \.wechat-presence\.online\{[\s\S]*?outline:none!important/);
+assert.doesNotMatch(refined,/\\.wechat-conversation\\.is-selected \\.wechat-presence\\.online/,
+  "Selected friend status dots must not gain a separate border");
+assert.match(refined,/\\.wechat-conversation \\.wechat-presence\\.online\\{[\\s\\S]*?border:0!important/,
+  "Online status dots should have no border");
 assert.equal((app.match(/<RailIcon kind="chats"\/>/g)||[]).length,3);
 assert.equal((app.match(/<RailIcon kind="contacts"\/>/g)||[]).length,3);
 assert.equal((app.match(/<RailIcon kind="settings"\/>/g)||[]).length,3);
