@@ -20,6 +20,7 @@ import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
+import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
@@ -37,6 +38,13 @@ function stateText(record){
   if(["dispatching","dispatching_local"].includes(record.delivery_status))return "正在发送";
   if(record.message_id===undefined&&!record.outbox_id&&!record.delivery_status)return "历史消息";
   return "已发送";
+}
+function TranslateIcon({size=18}){
+  return <svg viewBox="0 0 20 20" width={size} height={size} fill="currentColor"
+    focusable="false" aria-hidden="true" style={{display:"block"}}>
+    <path fillRule="evenodd"
+      d="M12.631 9.417c.573-1.36 2.5-1.36 3.072 0l2.565 6.093a.834.834 0 1 1-1.536.646L16.245 15h-4.157l-.486 1.156a.834.834 0 0 1-1.537-.646zm.16 3.916h2.753l-1.377-3.269zM6.667 2.5c.46 0 .833.373.833.833v.834H10a.833.833 0 0 1 0 1.666h-.522c-.26 1.593-.775 2.937-1.613 4.016c.625.437 1.395.774 2.338 1.01a.833.833 0 1 1-.405 1.616c-1.217-.305-2.264-.773-3.131-1.437c-.868.664-1.914 1.133-3.131 1.437a.834.834 0 0 1-.404-1.616c.942-.236 1.711-.573 2.337-1.01C4.63 8.77 4.117 7.426 3.857 5.833h-.524a.834.834 0 0 1 0-1.666h2.5v-.834c0-.46.374-.833.834-.833M5.549 5.833c.221 1.179.596 2.106 1.118 2.835c.522-.729.897-1.656 1.119-2.835z"/>
+  </svg>;
 }
 function Button({children,onClick,kind="",disabled=false}){
   return <AntButton type={kind==="primary"?"primary":"default"}
@@ -263,6 +271,24 @@ export default function App(){
   const [friendId,setFriendId]=useState("");
   const [requestText,setRequestText]=useState("");
   const [friendQrOpen,setFriendQrOpen]=useState(false);
+  const [translationLanguage,setTranslationLanguage]=useState(()=>{
+    try{
+      const stored=localStorage.getItem("wtox-translation-target")||"auto";
+      return TRANSLATION_LANGUAGES.some(item=>item.value===stored)?stored:"auto";
+    }catch{return "auto"}
+  });
+  const [translations,setTranslations]=useState({});
+  const translationRequests=useRef(new Map());
+  const resolvedTranslationLanguage=translationTarget(
+    translationLanguage,navigator.languages?.[0]||navigator.language);
+  useEffect(()=>{
+    try{localStorage.setItem("wtox-translation-target",translationLanguage)}catch{}
+  },[translationLanguage]);
+  useEffect(()=>{
+    for(const pending of translationRequests.current.values())pending.abort();
+    translationRequests.current.clear();
+    setTranslations({});
+  },[selected,user?.public_key,resolvedTranslationLanguage]);
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
   const [pendingFiles,setPendingFiles]=useState([]);
@@ -317,9 +343,54 @@ export default function App(){
       alert(item.type==="file"?"已复制文件名":"已复制消息","success");
     }catch{alert("复制失败，请检查浏览器剪贴板权限","error")}
   }
+  async function translateMessage(item){
+    // The currently authenticated identity and the selected chat are required.
+    const text=String(item?.text||"").trim();
+    const peer=selectedRef.current;
+    if(!user?.public_key||!peer||item.type==="file"||!text||selectedMessageIds.size)return;
+    const key=peer+":"+String(item.id);
+    const old=translations[key];
+    if(old?.text===text&&old.target===resolvedTranslationLanguage){
+      if(old.status==="loading")return;
+      if(old.status==="ok"){
+        setTranslations(current=>({...current,[key]:{
+          ...current[key],hidden:!current[key]?.hidden
+        }}));
+        return;
+      }
+    }
+    translationRequests.current.get(key)?.abort();
+    const controller=new AbortController();
+    translationRequests.current.set(key,controller);
+    setTranslations(current=>({...current,[key]:{
+      text,target:resolvedTranslationLanguage,status:"loading",hidden:false
+    }}));
+    try{
+      // Only this manually chosen message is sent as plaintext; never sync
+      // translations into Tox or persistent encrypted chat history.
+      const response=await postTranslate(text,resolvedTranslationLanguage,controller.signal);
+      if(controller.signal.aborted)return;
+      setTranslations(current=>({...current,[key]:{
+        text,target:resolvedTranslationLanguage,status:"ok",
+        translated:response.translated,source:response.source,hidden:false
+      }}));
+    }catch(error){
+      if(controller.signal.aborted)return;
+      setTranslations(current=>({...current,[key]:{
+        text,target:resolvedTranslationLanguage,status:"error",
+        error:error.message,hidden:false
+      }}));
+    }finally{
+      if(translationRequests.current.get(key)===controller)
+        translationRequests.current.delete(key);
+    }
+  }
   const messageMenu=item=>({
     items:[
       {key:"copy",label:item.type==="file"?"复制文件名":"复制",icon:<CopyOutlined/>},
+      ...(item.type!=="file"&&String(item.text||"").trim()?[{
+        key:"translate",label:"翻译 / 收起译文",icon:<TranslateIcon/>
+      }]:[]),
       {type:"divider"},
       {key:"delete",label:"删除",icon:<DeleteOutlined/>,danger:true,
         disabled:!historyReady||deletingMessages},
@@ -329,6 +400,7 @@ export default function App(){
     onClick:({key,domEvent})=>{
       domEvent?.stopPropagation();
       if(key==="copy")void copyMessage(item);
+      if(key==="translate")void translateMessage(item);
       if(key==="delete")setSingleDeleteId(item.id);
       if(key==="multi")setSelectedMessageIds(previous=>new Set([...previous,item.id]));
     }
@@ -1346,6 +1418,23 @@ export default function App(){
       </Space>
     </Card>}
     <PushSettings userId={user?.public_key}/>
+    <Card size="small" title="消息翻译" className="wt-settings-card">
+      <Typography.Paragraph type="secondary">
+        点击消息的翻译按钮时，才会将该条消息的明文发送到 Google 翻译。
+        这项操作会让第三方看到所选消息内容，请勿翻译敏感信息。
+      </Typography.Paragraph>
+      <Typography.Text type="secondary" className="wt-translation-setting-label">
+        默认翻译语言
+      </Typography.Text>
+      <Select value={translationLanguage} block style={{width:"100%"}}
+        aria-label="默认翻译语言" options={TRANSLATION_LANGUAGES}
+        onChange={setTranslationLanguage}/>
+      <Typography.Paragraph type="secondary" className="wt-settings-footnote">
+        当前目标：{TRANSLATION_LANGUAGES.find(item=>
+          item.value===resolvedTranslationLanguage)?.label||resolvedTranslationLanguage}。
+        自动识别原文语言，翻译不会发送给好友或保存到聊天记录。
+      </Typography.Paragraph>
+    </Card>
     <Card size="small" title="Tox 身份备份" className="wt-settings-card">
       <Typography.Paragraph type="secondary">
         .tox 文件包含身份私钥，请妥善保管，切勿分享。
@@ -1750,10 +1839,47 @@ export default function App(){
                 <Bubble className="wt-conversation-bubble" content={String(item.text||"")}
                   placement={item.direction==="outgoing"?"end":"start"}
                   shape="round" variant="filled"
-                  footer={<span className="ant-message-status">
-                    {chatTime(item.at)}
-                    {item.direction==="outgoing"?" · "+stateText(item):""}
-                  </span>}
+                  footer={<div className={"wt-bubble-footer-stack "+
+                    (item.direction==="outgoing"?"out":"in")}>
+                    <div className="wt-bubble-meta-row">
+                      <span className="ant-message-status">
+                        {chatTime(item.at)}
+                        {item.direction==="outgoing"?" · "+stateText(item):""}
+                      </span>
+                      {!selectedMessageIds.size&&
+                        <button type="button" className="wt-translate-button"
+                          title="翻译 / 收起译文" aria-label="翻译消息"
+                          onClick={event=>{
+                            event.preventDefault();event.stopPropagation();
+                            void translateMessage(item);
+                          }}>
+                          <TranslateIcon size={16}/>
+                        </button>}
+                    </div>
+                    {(()=>{
+                      const translated=translations[selected+":"+String(item.id)];
+                      if(!translated||translated.hidden||
+                        translated.text!==String(item.text||"").trim()||
+                        translated.target!==resolvedTranslationLanguage)return null;
+                      return <div className={"wt-translation-result "+translated.status}
+                        role="status" aria-live="polite">
+                        <div className="wt-translation-heading"><TranslateIcon size={14}/>
+                          {translated.status==="loading"?"翻译中…":
+                           translated.status==="error"?"翻译失败":"译文"}
+                        </div>
+                        <div className="wt-translation-text">
+                          {translated.status==="loading"?"正在识别语言并翻译":
+                           translated.status==="error"?translated.error:
+                           translated.translated}
+                        </div>
+                        {translated.status==="error"&&
+                          <button type="button" className="wt-translation-retry"
+                            onClick={event=>{
+                              event.stopPropagation();void translateMessage(item,true);
+                            }}>重试</button>}
+                      </div>;
+                    })()}
+                  </div>}
                   footerPlacement={item.direction==="outgoing"?"outer-end":"outer-start"}/>
               </div>
               </Dropdown>)}
