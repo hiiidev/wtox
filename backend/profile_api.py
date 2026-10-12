@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+import asyncio
 import time
 from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from . import access, store
 from .tox_backup import encrypt_savedata, decrypt_savedata, is_encrypted
 from .tox_identity import MAX_SAVEDATA, ToxCore, ToxIdentityError
@@ -16,6 +17,9 @@ router = APIRouter()
 COOKIE_NAME = "wtox_tox_session"
 _LOCK = Lock()
 _ATTEMPTS = defaultdict(deque)
+MAX_PASSWORD_BYTES = 1024
+MAX_TOX_UPLOAD = MAX_SAVEDATA + 80 + MAX_PASSWORD_BYTES
+_UPLOAD_SLOTS = asyncio.Semaphore(4)
 
 
 def rate_check(request: Request):
@@ -76,7 +80,7 @@ def status(uid: str = Depends(owner)):
 
 
 class BackupPassword(BaseModel):
-    password: str  # No arbitrary password length restrictions.
+    password: str = Field(max_length=MAX_PASSWORD_BYTES)
 
 
 @router.post("/api/tox/create")
@@ -118,17 +122,30 @@ async def login_with_savedata(request: Request, response: Response):
     # length prepended to the original file bytes in the request body.
     # Passwords never go in URLs, cookies, or HTTP headers themselves.
     prefix = request.headers.get("x-tox-password-bytes", "0")
-    if not prefix.isascii() or not prefix.isdecimal() or len(prefix) > 12:
+    if not prefix.isascii() or not prefix.isdecimal() or len(prefix) > 4:
         raise HTTPException(400, "密码长度无效")
     password_size = int(prefix)
-    parts = []
-    size = 0
-    async for part in request.stream():
-        size += len(part)
-        if size > MAX_SAVEDATA + 80 + password_size:
-            raise HTTPException(413, "配置文件超过 8 MiB")
-        parts.append(part)
-    data = b"".join(parts)
+    if password_size > MAX_PASSWORD_BYTES:
+        raise HTTPException(413, "密码前缀超过 1024 字节")
+    # Enforce an absolute cap independent of user-supplied password lengths.
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        if not declared.isdecimal():
+            raise HTTPException(400, "Content-Length 无效")
+        if int(declared) > MAX_TOX_UPLOAD:
+            raise HTTPException(413, "配置文件超过上传限额")
+    try:
+        await asyncio.wait_for(_UPLOAD_SLOTS.acquire(), timeout=0.5)
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(503, "上传过于繁忙，请稍后重试") from exc
+    try:
+        data = bytearray()
+        async for part in request.stream():
+            if len(data) + len(part) > MAX_TOX_UPLOAD:
+                raise HTTPException(413, "配置文件超过上传限额")
+            data.extend(part)
+    finally:
+        _UPLOAD_SLOTS.release()
     if len(data) < password_size:
         raise HTTPException(400, "密码数据不完整")
     backup = data[password_size:]
@@ -176,12 +193,6 @@ def export_encrypted_profile(body: BackupPassword, request: Request,
 
 @router.get("/api/profile/export")
 def export_profile(uid: str = Depends(owner)):
-    saved = store.read_profile(uid)
-    if saved is None:
-        raise HTTPException(404, "没有此 Tox 身份")
-    return Response(
-        saved, media_type="application/octet-stream",
-        headers={"Content-Disposition":'attachment; filename="wtox-profile.tox"',
-                 "Cache-Control": "no-store",
-                 "X-Content-Type-Options": "nosniff"}
-    )
+    # Raw savedata contains the reusable Tox identity private key.
+    # Keep the route for older clients, but refuse unencrypted exports.
+    raise HTTPException(410, "原始身份导出已禁用，请使用加密备份")

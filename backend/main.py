@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import access, store
+from .body_limit import RequestBodyLimitMiddleware
 from .profile_api import router as profile_router, COOKIE_NAME as TOX_SESSION_COOKIE
 from .tox_api import router as tox_router
 from .session_manager import manager
@@ -51,6 +52,7 @@ class NoStoreMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(NoStoreMiddleware)
+app.add_middleware(RequestBodyLimitMiddleware)
 
 # Do not expose identity, file, push or translation endpoints before the
 # optional site password has been entered. JS/CSS/manifest remain public so
