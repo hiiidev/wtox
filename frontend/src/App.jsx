@@ -850,7 +850,9 @@ export default function App(){
   }
   async function logout(){
     try{
-      await disablePushBeforeLogout();
+      try { await disablePushBeforeLogout(); } catch (error) {
+        console.warn("Push cleanup failed on sign-out:", error);
+      }
       await postJson("/api/logout");
       history.current?.close();history.current=null;
       drafts.current.clear();setUser(null);setMessages([]);setFriends([]);
