@@ -178,6 +178,8 @@ export default function App(){
   const [sitePasswordInput,setSitePasswordInput]=useState("");
   const [siteGateError,setSiteGateError]=useState("");
   const [siteGateBusy,setSiteGateBusy]=useState(false);
+  const [trustedDevices,setTrustedDevices]=useState(null);
+  const [devicePassword,setDevicePassword]=useState("");
   const [friends,setFriends]=useState([]),[network,setNetwork]=useState(-1);
   const [networkDiagnostics,setNetworkDiagnostics]=useState(null);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
@@ -1517,6 +1519,40 @@ export default function App(){
           item.value===resolvedTranslationLanguage)?.label||resolvedTranslationLanguage}。
         自动识别原文语言，翻译不会发送给好友或保存到聊天记录。
       </Typography.Paragraph>
+    </Card>
+    <Card size="small" title="已记住的网站设备" className="wt-settings-card">
+      <Typography.Paragraph type="secondary">
+        使用网站访问密码时，可分别撤销之前记住的设备。
+        撤销其他设备需要重新输入网站访问密码。
+      </Typography.Paragraph>
+      <AntButton block onClick={async()=>{
+        try{setTrustedDevices((await getJson("/api/gate/devices")).devices)}
+        catch(e){alert(e.message)}
+      }}>查看已记住的设备</AntButton>
+      {trustedDevices!==null&&<Space orientation="vertical"
+        style={{width:"100%"}} size="small">
+        <Input.Password autoComplete="current-password" value={devicePassword}
+          placeholder="访问密码（撤销设备时需要）"
+          onChange={e=>setDevicePassword(e.target.value)}/>
+        {trustedDevices.length===0&&<Typography.Text type="secondary">暂无设备</Typography.Text>}
+        {trustedDevices.map(item=><Space key={item.id} wrap>
+          <Typography.Text>{item.current?"此设备":"已记住的设备"} · {new Date(item.created*1000).toLocaleDateString()}</Typography.Text>
+          <AntButton danger size="small" disabled={!devicePassword}
+            onClick={async()=>{
+              if(!window.confirm("确定撤销这台设备的网站访问凭证？"))return;
+              try{
+                const result=await postJson("/api/gate/devices/"+item.id+"/revoke",
+                  {password:devicePassword});
+                setDevicePassword("");
+                if(result.current_revoked){
+                  setSiteGate("locked");setUser(null);setTrustedDevices(null);
+                }else{
+                  setTrustedDevices((await getJson("/api/gate/devices")).devices);
+                }
+              }catch(e){alert(e.message)}
+            }}>撤销</AntButton>
+        </Space>)}
+      </Space>}
     </Card>
     <Card size="small" title="Tox 身份备份" className="wt-settings-card">
       <Typography.Paragraph type="secondary">

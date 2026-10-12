@@ -138,6 +138,8 @@ def site_gate_logout(request: Request, response: Response):
 
 @app.get("/api/gate/devices")
 def site_gate_devices(request: Request):
+    if not access.site_gate_enabled():
+        return {"devices": []}
     return {"devices": access.access_devices(request.cookies.get(access.COOKIE_NAME))}
 
 

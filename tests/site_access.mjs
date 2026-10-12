@@ -34,6 +34,9 @@ assert.ok(api.includes("error.accessRequired=accessRequired") &&
   api.includes('window.dispatchEvent(new Event("wtox-site-locked"))'),
   "Expired/revoked access should return the user to the password form");
 assert.ok(style.includes(".wt-site-gate-card"),"Gate needs responsive theme styling");
+assert.ok(app.includes('getJson("/api/gate/devices")') &&
+  app.includes('"/api/gate/devices/"+item.id+"/revoke"'),
+  "Settings UI must expose per-device revocation");
 
 assert.ok(env.includes("WTOX_ACCESS_PASSWORD="));
 assert.ok(server.includes('"/api/gate/status"') &&

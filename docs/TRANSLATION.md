@@ -35,14 +35,19 @@ HTTPS 转发服务配置：
 
 `WTOX_TRANSLATE_UPSTREAM=https://your-trusted-translation-proxy.example`
 
-该服务必须向上游转发 `/translate_a/single` 及查询参数，并返回与 Google
-网页翻译兼容的 JSON。推荐参考
+该服务必须向上游转发 `POST /translate_a/single`，保留普通
+语言参数查询串，并将消息明文放在 `application/x-www-form-urlencoded`
+请求体的 `q` 字段中；不得把 `q` 复制到 URL 或访问日志。
+注意 Google 网页翻译非正式接口未承诺长期支持 POST，部署时需验证，
+如上游拒绝 POST 则翻译请求会失败，不会自动降级为暴露 URL 的 GET。
+代理应返回与 Google 网页翻译兼容的 JSON。推荐参考
 [RipperTs/proxy_tutorial_for_translation](https://github.com/RipperTs/proxy_tutorial_for_translation)
 配置只允许必要 Google 路径的转发。
 
 **安全注意：** 仅能由服务器管理员通过环境变量设置转发目标；浏览器
 用户不能选择任意上游 URL。请确保 HTTPS 代理可信，并禁用包含消息
-文本（URL 查询参数）的访问日志。无需暴露通用代理给互联网。
+文本的请求体或 URL 的访问日志。不要记录原始 POST body。
+无需暴露通用代理给互联网。
 
 部署仍使用现有的 `docker compose -f compose.yml up -d --build`，
 不要删除 Docker 数据卷、.env 或更换 WTOX_MASTER_KEY。
