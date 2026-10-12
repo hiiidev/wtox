@@ -61,7 +61,8 @@ class AccessTest(unittest.TestCase):
         env={"WTOX_ACCESS_PASSWORD":"good password 123",
              "WTOX_INSECURE_HTTP":"1","WTOX_MASTER_KEY":"c1"*32}
         with patch.dict(os.environ,env):
-            with TestClient(app,base_url="http://testserver") as client:
+            client=TestClient(app,base_url="http://testserver")
+            try:
                 self.assertEqual(client.get("/").status_code,200)
                 public=client.get("/api/gate/status")
                 self.assertEqual(public.json(),{"required":True,"authorized":False})
@@ -103,18 +104,23 @@ class AccessTest(unittest.TestCase):
                 with patch.dict(os.environ,{"WTOX_ACCESS_PASSWORD":"changed password"}):
                     self.assertEqual(client.get("/api/me").status_code,403)
                     self.assertFalse(client.get("/api/gate/status").json()["authorized"])
+            finally:
+                client.close()
 
     def test_brute_force_password_attempts_are_limited(self):
         with patch.dict(os.environ,{
             "WTOX_ACCESS_PASSWORD":"very long password",
             "WTOX_INSECURE_HTTP":"1"
         }):
-            with TestClient(app) as client:
+            client=TestClient(app)
+            try:
                 for _ in range(12):
                     self.assertEqual(client.post("/api/gate/login",
                         json={"password":"bad"}).status_code,401)
                 self.assertEqual(client.post("/api/gate/login",
                     json={"password":"bad"}).status_code,429)
+            finally:
+                client.close()
 
 
 if __name__=="__main__":
