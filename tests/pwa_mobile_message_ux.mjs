@@ -38,6 +38,8 @@ assert.ok(app.includes('if(key==="multi")setSelectedMessageIds('),
 assert.ok(app.includes('document.addEventListener("pointerdown",outside,true)'));
 assert.ok(app.includes('".wt-selectable-message, .wt-batch-toolbar, .ant-popconfirm, .ant-dropdown, .ant-modal"'));
 assert.ok(app.includes("clearSelection();"),"Tap outside active multi-select cancels mode");
+assert.ok(app.includes("Date.now()-suppressSelectionAt.current<1000"),
+  "A missing synthesized tap after long press must not swallow future taps");
 
 // Structural layout: message content is independent from wide full-date
 // timestamp and translation. Both should share the same right-edge anchor.
