@@ -1,74 +1,72 @@
-import React, {useEffect, useRef, useState} from "react";
-import {Button, Modal, Space, Typography} from "antd";
+import React, {useEffect} from "react";
 import {isStandalone, preparePush, savePushSubscription} from "./push_client.js";
 
-/** Shown once per identity on its installed device. System permission is
- * requested only from the direct button click (required by iOS Web Push).
- * The service worker and VAPID key are prepared before the dialog opens.
+/** Automatic PWA push setup without an in-app permission dialog.
+ * iOS requires transient user activation before PushManager.subscribe can
+ * show the native permission request. Preload the SW/VAPID asynchronously,
+ * then subscribe from the user's first interaction inside the installed app.
+ * If permission is already granted, subscriptions are restored immediately.
  */
 export default function PwaPushWelcome({userId}){
-  const [open,setOpen]=useState(false);
-  const [busy,setBusy]=useState(false);
-  const [error,setError]=useState("");
-  const prepared=useRef(null);
-  const dismissKey=userId&&"wtox-pwa-push-prompt-"+userId;
   useEffect(()=>{
+    if(!userId||!isStandalone())return undefined;
     let active=true;
-    prepared.current=null;
-    setOpen(false);
-    if(!userId||!isStandalone())return()=>{active=false};
+    let busy=false;
+    let registration=null;
+    let applicationServerKey=null;
+    const attemptKey="wtox-pwa-push-attempt-"+userId;
+    const removeListeners=()=>{
+      document.removeEventListener("pointerdown",onFirstGesture,true);
+      document.removeEventListener("keydown",onFirstGesture,true);
+    };
+    const save=async subscription=>{
+      await savePushSubscription(subscription);
+      if(active)window.dispatchEvent(new Event("wtox-push-changed"));
+    };
+    const subscribe=()=>{
+      if(!active||busy||!registration)return;
+      busy=true;
+      removeListeners();
+      try{localStorage.setItem(attemptKey,"1")}catch{}
+      // subscribe() is initiated synchronously during the actual user event.
+      // Never await a network request before calling it from that event.
+      const promise=registration.pushManager.subscribe({
+        userVisibleOnly:true,applicationServerKey
+      });
+      Promise.resolve(promise).then(save).catch(error=>{
+        console.warn("PWA push permission/subscription was not granted:",error);
+      }).finally(()=>{busy=false});
+    };
+    function onFirstGesture(event){
+      if(event.type==="keydown"&&(event.key==="Tab"||event.key==="Shift"))return;
+      subscribe();
+    }
     (async()=>{
       try{
-        const context=await preparePush();
+        const prepared=await preparePush();
         if(!active)return;
-        prepared.current=context;
-        if(context.subscription){
-          // Also restore a previously granted subscription for this identity.
-          await savePushSubscription(context.subscription);
-          window.dispatchEvent(new Event("wtox-push-changed"));
+        registration=prepared.registration;
+        applicationServerKey=prepared.applicationServerKey;
+        if(prepared.subscription){
+          if(Notification.permission==="granted")await save(prepared.subscription);
           return;
         }
         if(Notification.permission==="denied")return;
-        if(localStorage.getItem(dismissKey)==="1")return;
-        localStorage.setItem(dismissKey,"1");
-        setOpen(true);
+        if(Notification.permission==="granted"){
+          // No permission prompt is needed; re-create an expired subscription.
+          subscribe();
+          return;
+        }
+        // Default permission: the OS requires a user gesture (especially iOS).
+        // No wTox modal appears, just the native system prompt on first tap.
+        if(localStorage.getItem(attemptKey)==="1")return;
+        document.addEventListener("pointerdown",onFirstGesture,true);
+        document.addEventListener("keydown",onFirstGesture,true);
       }catch(error){
-        // Unavailable push should not interrupt login or cause a permission loop.
-        console.warn("Push introduction not available:",error);
+        console.warn("PWA push auto-setup is unavailable:",error);
       }
     })();
-    return()=>{active=false};
-  },[userId,dismissKey]);
-
-  function close(){if(!busy)setOpen(false)}
-  async function enable(){
-    const context=prepared.current;
-    if(!context||busy)return;
-    setBusy(true);setError("");
-    try{
-      // subscribe must be initiated synchronously in the click handler.
-      const promise=context.registration.pushManager.subscribe({
-        userVisibleOnly:true,applicationServerKey:context.applicationServerKey
-      });
-      const sub=await promise;
-      await savePushSubscription(sub);
-      window.dispatchEvent(new Event("wtox-push-changed"));
-      setOpen(false);
-    }catch(error){setError("开启失败："+error.message)}
-    finally{setBusy(false)}
-  }
-  return <Modal title="开启离线通知" open={open} destroyOnHidden
-    onCancel={close} footer={null} closable={!busy} maskClosable={!busy}>
-    <Typography.Paragraph>
-      开启后，即使离开应用或锁定屏幕，也可以接收新消息和好友请求提醒。
-      通知不会包含聊天正文。
-    </Typography.Paragraph>
-    {error&&<Typography.Paragraph type="danger">{error}</Typography.Paragraph>}
-    <Space style={{width:"100%",justifyContent:"flex-end"}} wrap>
-      <Button onClick={close} disabled={busy}>稍后</Button>
-      <Button type="primary" loading={busy} disabled={!prepared.current} onClick={enable}>
-        开启离线通知
-      </Button>
-    </Space>
-  </Modal>;
+    return()=>{active=false;removeListeners()};
+  },[userId]);
+  return null;
 }
