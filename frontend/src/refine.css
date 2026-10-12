@@ -1633,7 +1633,7 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
 .wt-attachment-modal .wt-send-file-preview .ant-typography{
   font-size:14px;
 }
-.ant-messenger[data-theme] .wt-peer-last-online{
+.wt-peer-last-online{
   display:block;font-size:12px;line-height:1.6;
   color:var(--wt-muted)!important;
 }
