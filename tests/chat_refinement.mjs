@@ -119,7 +119,8 @@ assert.match(refined,/scrollbar-color:var\(--wt-scroll-hover\)/);
 assert.match(refined,/\.wt-chat-more-button\.ant-btn/);
 
 
-assert.doesNotMatch(app,/friendMessageApi\.open\(/);\nassert.match(app,/className="wt-mobile-request-banner"/);
+assert.doesNotMatch(app,/friendMessageApi\.open\(/);
+assert.match(app,/className="wt-mobile-request-banner"/);
 assert.match(app,/duration:0/);
 assert.match(app,/dismissedFriendIds\.current=signature/);
 assert.match(app,/friendRequests\.length>0&&<button type="button"/);
