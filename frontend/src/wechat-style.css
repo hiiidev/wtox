@@ -98,7 +98,6 @@ html[data-wtox-theme="wechat"] body{background:#1d1d1f!important}
 .ant-messenger .ant-message-wrap .ant-bubble-footer{color:#9b9b9f;}
 .ant-messenger .ant-compose-area{padding:0 22px 18px;background:#1d1d1f!important;
  border-top:1px solid #343436;gap:0;}
-.ant-messenger .ant-compose-status{font-size:11px;color:#8d8d91;padding:8px 1px 4px;}
 .ant-messenger .ant-compose-area .ant-sender{min-height:126px;
  background:#202022!important;border:1px solid #454548!important;border-radius:9px;box-shadow:none!important;}
 .ant-messenger .ant-compose-area .ant-sender textarea{color:#eee!important;}
@@ -159,7 +158,6 @@ html[data-wtox-theme="wechat"] body{background:#1d1d1f!important}
   .ant-messenger .ant-compose-area .ant-sender{min-height:52px;background:#fff!important;border:1px solid #ddd!important;}
   .ant-messenger .ant-compose-area .ant-sender textarea{color:#202024!important;}
   .ant-messenger .ant-compose-area .ant-sender .ant-btn-primary{background:#07b759!important;}
-  .ant-messenger .ant-compose-status{color:#7a7a7d;font-size:10px;}
   .ant-messenger .wtox-attachment-bubble{color:#222!important;background:#fff!important;}
   .ant-messenger .wtox-attachment-row.out .wtox-attachment-bubble{color:#222!important;background:#95ec69!important;}
   .ant-messenger .wtox-attachment-bubble small{color:#666!important;}
