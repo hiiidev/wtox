@@ -281,8 +281,24 @@ assert.match(app,/<Upload\.Dragger accept="\.tox,application\/octet-stream"/);
 assert.match(app,/<Form\.Item label="密码" required>/);
 assert.match(app,/<Form\.Item label="密码" extra="未设置密码的 \.tox 文件可留空">/);
 assert.doesNotMatch(app,/旧版账号迁移|wtox-old-backup\.tox|备份密码/);
-assert.ok(app.includes("不会删除 VPS 上的 Tox 身份"),
-  "Logout must distinguish local deletion from the persistent VPS Tox identity");
+assert.ok(app.includes("服务器上的当前 Tox 身份、好友列表、待发送消息和附件"),
+  "Logout must clearly warn that VPS identity deletion is permanent");
+assert.ok(app.includes('api("/api/profile",{')&&app.includes('method:"DELETE"'),
+  "Both sign-out choices must delete the server identity before client cleanup");
+assert.ok(!app.includes("两种方式都会结束当前登录并尝试取消本设备的离线推送"),
+  "Do not retain the obsolete session-only logout promise");
+assert.ok(!app.includes("确认永久删除服务器身份？"),
+  "Do not introduce secondary confirmation after the logout dialog");
+assert.ok(app.includes("头像颜色及其他与该身份关联的数据"),
+  "Local cleanup must describe data scoped to the selected identity");
+assert.ok(app.includes("正在连接服务器…")&&app.includes("连接中断，正在重新连接…"),
+  "Show useful Ant Message text for initial connection and recovery");
+assert.ok(app.includes('uiMessageApi.destroy(toastKey)'),
+  "Connection notice must disappear on success and unmount");
+assert.ok(app.includes('<span className="wtox-boot-ring" aria-hidden="true"/>'),
+  "React loading screen should keep the pre-bundle boot spinner");
+assert.ok(app.includes("selectedRef.current=null;")&&app.includes("setMobileChat(false);"),
+  "Mobile chat return must clear the conversation selection");
 assert.match(app,/suffix=\{\(_,info\)=>\{/);
 assert.match(app,/SendButton disabled=\{!draft\.trim\(\)/);
 assert.match(refined,/\.wt-chat-sender button:disabled/);
