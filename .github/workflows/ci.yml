@@ -48,6 +48,7 @@ jobs:
       - run: node tests/chat_time.mjs
       - run: node tests/active_chat_scroll.mjs
       - run: node tests/thread_switch_bottom.mjs
+      - run: node tests/thread_follow_images.mjs
       - run: node tests/thread_viewport_alignment.mjs
       - run: node tests/friend_delete_ws_diagnostics.mjs
       - run: node tests/contact_actions_and_presence.mjs
