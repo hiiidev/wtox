@@ -76,26 +76,29 @@ class SessionManager:
         The DB claim is durable BEFORE any native send. A crash after claim
         leaves 'uncertain' (never an automatic duplicate on restart).
         """
-        s=self.get(uid)
-        for eid,peer,text in store.outbox_queued(uid):
-            try:
-                # Avoid consuming a job while the friend is offline. A race
-                # immediately after this check re-queues on FriendOfflineError.
-                current=next((x for x in s.friends() if x["public_key"]==peer),None)
-                if not current or current["status"]==0:continue
-                if not store.outbox_claim(uid,eid):continue
+        # Serialize dispatch with account purges to prevent post-delete sends.
+        with self.lock:
+            s=self.get(uid)
+            for eid,peer,text in store.outbox_queued(uid):
                 try:
-                    message_id=s.send_message(peer,text)
-                except FriendOfflineError:
-                    store.outbox_finish(uid,eid,"queued")
-                    continue
-                except (ValueError,ToxActionError) as exc:
-                    store.outbox_finish(uid,eid,"failed",error=str(exc)[:160])
-                else:
-                    store.outbox_finish(uid,eid,"sent",session_id=s.session_id,
-                                        message_id=message_id)
-            except Exception as exc:
-                print("Offline outbox dispatch error:",uid[:8],type(exc).__name__,flush=True)
+                    # Avoid consuming a job while the friend is offline. A race
+                    # immediately after this check re-queues on FriendOfflineError.
+                    current=next((x for x in s.friends() if x["public_key"]==peer),None)
+                    if not current or current["status"]==0:continue
+                    if not store.outbox_claim(uid,eid):continue
+                    try:
+                        message_id=s.send_message(peer,text)
+                    except FriendOfflineError:
+                        store.outbox_finish(uid,eid,"queued")
+                        continue
+                    except (ValueError,ToxActionError) as exc:
+                        store.outbox_finish(uid,eid,"failed",error=str(exc)[:160])
+                    else:
+                        store.outbox_finish(uid,eid,"sent",session_id=s.session_id,
+                                            message_id=message_id)
+                except Exception as exc:
+                    print("Offline outbox dispatch error:",uid[:8],type(exc).__name__,flush=True)
+
 
     async def _outbox_loop(self):
         while True:
@@ -149,6 +152,34 @@ class SessionManager:
 
     def detach(self, uid, ws):
         self.sockets.get(uid, set()).discard(ws)
+
+    async def remove_account(self, uid: str) -> None:
+        """Stop the live native Tox identity, erase its attachment spool and
+        related persistent rows, then disconnect all browser sockets.
+
+        Serialize with outbox dispatch and session restoration. Keep the
+        database unchanged when shutting down the Tox thread fails.
+        """
+        await asyncio.to_thread(self._remove_account_sync, uid)
+        sockets = list(self.sockets.pop(uid, ()))
+        if sockets:
+            await asyncio.gather(*(ws.close(code=1008) for ws in sockets),
+                                 return_exceptions=True)
+
+    def _remove_account_sync(self, uid: str) -> None:
+        with self.lock:
+            # Stop native callbacks (which can write savedata) before erasing
+            # the profile. We must never let a stopped session restore itself.
+            running = self.sessions.get(uid)
+            if running is not None:
+                running.close()
+                self.sessions.pop(uid, None)
+            if self.disk is None:
+                self.disk = DiskAttachmentStore()
+            # Remove disk before DB indexes: on failure the account remains
+            # recoverable and cleanup can be retried.
+            self.disk.remove_account(uid)
+            store.delete_tox_identity(uid)
 
     async def shutdown(self):
         if self.disk_cleanup_task:

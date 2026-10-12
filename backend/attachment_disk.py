@@ -170,6 +170,19 @@ class DiskAttachmentStore:
         parent.mkdir(mode=0o700, exist_ok=True)
         return DiskAttachment(self, uid, ident, name, expected, direction, public_key)
 
+    def remove_account(self, uid: str) -> None:
+        """Delete all encrypted file blocks, including incomplete uploads.
+
+        Identity validation and the account-specific parent folder prevent
+        recursive deletion outside tox-attachments/<account id>.
+        """
+        uid = _identifier(uid)
+        folder = self.root / uid
+        if folder.exists():
+            if folder.is_symlink():
+                raise ValueError("附件目录不可为符号链接")
+            shutil.rmtree(folder)
+
     def discard(self, uid: str, ident: str) -> None:
         path = self.folder(uid, ident)
         if path.exists():

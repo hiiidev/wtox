@@ -1,6 +1,6 @@
 import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input,
-  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Spin, Modal as AntModal, notification,
+  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal, notification,
   Dropdown, Badge, List, Typography, Form, Select, Drawer, Grid, Card, Image, Upload, QRCode, message } from "antd";
 import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
@@ -716,13 +716,24 @@ export default function App(){
   // triggers immediate catch-up after mobile browser background suspension.
   useEffect(()=>{
     if(!user?.public_key)return;
-    let dead=false,ws=null,retry=null;
+    let dead=false,ws=null,retry=null,connectedOnce=false;
+    const toastKey="wtox-server-connection";
+    const connecting=()=>{
+      if(dead)return;
+      uiMessageApi.open({
+        key:toastKey,type:"loading",duration:0,
+        content:connectedOnce?"连接中断，正在重新连接…":"正在连接服务器…"
+      });
+    };
     const connect=()=>{
       if(dead)return;
+      connecting();
       ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws");
       socket.current=ws;
       lastMessage.current=Date.now();
       ws.onopen=()=>{
+        connectedOnce=true;
+        uiMessageApi.destroy(toastKey);
         lastMessage.current=Date.now();
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
           refreshTransfers()]);
@@ -731,7 +742,12 @@ export default function App(){
         lastMessage.current=Date.now();
         try{onRealtime(JSON.parse(msg.data))}catch(error){alert("无法解析实时事件："+error.message)}
       };
-      ws.onclose=()=>{if(!dead)retry=setTimeout(connect,3500)};
+      ws.onclose=()=>{
+        if(!dead){
+          connecting();
+          retry=setTimeout(connect,3500);
+        }
+      };
     };
     connect();
     const friendTimer=setInterval(()=>{
@@ -760,7 +776,8 @@ export default function App(){
     document.addEventListener("visibilitychange",wake);
     window.addEventListener("focus",wake);
     return()=>{
-      dead=true;clearTimeout(retry);clearInterval(friendTimer);
+      dead=true;uiMessageApi.destroy(toastKey);
+      clearTimeout(retry);clearInterval(friendTimer);
       clearInterval(pendingTimer);clearInterval(transferTimer);clearInterval(pingTimer);
       document.removeEventListener("visibilitychange",wake);
       window.removeEventListener("focus",wake);
@@ -768,7 +785,7 @@ export default function App(){
       socket.current=null;
     };
   },[user?.public_key,onRealtime,recoverPending,refreshFriends,
-    refreshNetwork,refreshTransfers,alert]);
+    refreshNetwork,refreshTransfers,alert,uiMessageApi]);
 
   useEffect(()=>{
     if(!user?.public_key)return;
@@ -899,12 +916,28 @@ export default function App(){
 
   // The extra in-app History entry allows native iOS back-swipe and the
   // physical/software back button to return to the conversation list.
+  // Returning to the conversation list must clear selection so no friend
+  // retains the desktop-style highlighted card on iOS/Android.
+  function clearMobileConversation(){
+    selectedRef.current=null;
+    setSelected(null);
+    setMobileChat(false);
+    setPeerDetailsOpen(false);
+    clearSelection();
+  }
   function returnFromMobileChat(){
     if(window.history.state?.wtoxChat)window.history.back();
-    else setMobileChat(false);
+    else clearMobileConversation();
   }
   useEffect(()=>{
-    const onPop=()=>setMobileChat(false);
+    const onPop=()=>{
+      if(!window.matchMedia("(max-width:767px)").matches)return;
+      selectedRef.current=null;
+      setSelected(null);
+      setMobileChat(false);
+      setPeerDetailsOpen(false);
+      clearSelection();
+    };
     window.addEventListener("popstate",onPop);
     return()=>window.removeEventListener("popstate",onPop);
   },[]);
@@ -982,8 +1015,13 @@ export default function App(){
     try{
       try{await disablePushBeforeLogout()}
       catch(error){pushError=error}
-      // The server's Tox identity (and its friend list) is deliberately kept.
-      await postJson("/api/logout");
+      // Both choices permanently remove the server-side private key, friends,
+      // outbox messages, files and device push subscriptions. Only local
+      // browser history differs between the two choices.
+      await api("/api/profile",{
+        method:"DELETE",
+        headers:{"X-WTox-Delete":"delete-current-identity"}
+      });
       // Close this identity's IndexedDB before issuing deleteDatabase().
       history.current?.close();history.current=null;
       let cleanupError=null;
@@ -1332,7 +1370,7 @@ export default function App(){
     <AntButton danger block className="wt-settings-signout" onClick={()=>setLogoutOpen(true)}>退出当前身份</AntButton>
   </div>;
 
-  if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><Spin size="large"/></div>;
+  if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><span className="wtox-boot-ring" aria-hidden="true"/></div>;
   if(bootstrapError)return <div className="wtox-error-page" role="alert">
     <p>{bootstrapError}</p><AntButton type="primary" onClick={loadIdentity}>重试</AntButton>
   </div>;
@@ -1761,9 +1799,9 @@ export default function App(){
       <Typography.Paragraph>
         你希望如何处理当前身份保存在此浏览器中的聊天记录和图片缓存？
       </Typography.Paragraph>
-      <Typography.Paragraph type="secondary">
-        两种方式都会结束当前登录并尝试取消本设备的离线推送。
-        均不会删除 VPS 上的 Tox 身份、好友列表或服务器中的待发消息。
+      <Typography.Paragraph type="warning">
+        退出将永久删除服务器上的当前 Tox 身份、好友列表、待发送消息和附件。
+        如需以后恢复身份，请先导出并保存 .tox 备份。
       </Typography.Paragraph>
       <Space orientation="vertical" size="middle" style={{width:"100%"}}>
         <AntButton block loading={logoutBusy} onClick={()=>logout(false)}>
@@ -1774,9 +1812,9 @@ export default function App(){
           清除当前身份本地数据并退出
         </AntButton>
         <Typography.Text type="secondary" className="wt-settings-footnote">
-          清除会永久删除当前浏览器中该身份的加密消息、图片缓存、
-          已读记录与头像颜色；其他身份的数据及全局主题不受影响。
-          删除前请先备份需要保留的聊天记录。
+          清除本地数据会永久删除当前身份在此浏览器中的加密消息、
+          图片缓存、已读记录、头像颜色及其他与该身份关联的数据。
+          服务器数据无论选择哪项都会删除；请提前备份。
         </Typography.Text>
       </Space>
     </AntModal>

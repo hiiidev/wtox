@@ -81,10 +81,30 @@ def frontend_health():
 
 @app.post("/api/logout")
 def logout(request: Request, response: Response):
+    # Legacy session-only logout, kept for older clients.
     store.revoke_tox_session(request.cookies.get(TOX_SESSION_COOKIE))
     response.delete_cookie(TOX_SESSION_COOKIE, path="/")
     response.delete_cookie("wtox_session", path="/")
     return {"ok": True}
+
+@app.delete("/api/profile")
+async def delete_current_profile(request: Request, response: Response):
+    """Irreversibly remove the authenticated Tox identity from this VPS."""
+    from .profile_api import require_same_origin
+    require_same_origin(request)
+    if request.headers.get("x-wtox-delete") != "delete-current-identity":
+        raise HTTPException(400, "请明确确认删除当前 Tox 身份")
+    token=request.cookies.get(TOX_SESSION_COOKIE)
+    uid=store.tox_session_user(token)
+    if not uid:
+        raise HTTPException(401, "登录会话已失效")
+    try:
+        await manager.remove_account(uid)
+    except (OSError,ValueError,RuntimeError) as exc:
+        raise HTTPException(503, "服务器身份删除失败，请重试："+str(exc)) from exc
+    response.delete_cookie(TOX_SESSION_COOKIE,path="/")
+    response.delete_cookie("wtox_session",path="/")
+    return {"ok":True,"deleted":True}
 
 @app.get("/api/me")
 def me(request: Request):

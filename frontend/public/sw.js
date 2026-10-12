@@ -1,4 +1,13 @@
 /* wTox Web Push service worker. Do not cache identity, chat or API responses. */
+// Activate updated notification wording without requiring users to remove
+// and reinstall their Home Screen app. Existing push subscriptions remain.
+self.addEventListener("install",event=>{
+  event.waitUntil(self.skipWaiting());
+});
+self.addEventListener("activate",event=>{
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("push", event => {
   event.waitUntil((async () => {
     let data = {};

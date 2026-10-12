@@ -1200,3 +1200,35 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     width:24px!important;height:24px!important;
   }
 }
+
+/* Desktop composer: do not stretch the paperclip toolbar to message width.
+   Sender stays flexible; the affordance row takes only its content width.
+   Existing mobile touch-target overrides below 768px remain in place. */
+@media(min-width:768px){
+  .ant-messenger[data-theme] .ant-compose-area{
+    padding:9px 20px 13px!important;
+    gap:4px!important;
+  }
+  .ant-messenger[data-theme] .ant-compose-area>.wt-compose-tools{
+    width:max-content!important;max-width:100%!important;
+    min-height:40px!important;
+    padding:0!important;gap:6px!important;
+    margin:0!important;
+  }
+  .ant-messenger[data-theme] .wt-compose-tools .wt-compose-attach-button.ant-btn{
+    width:40px!important;height:40px!important;min-width:40px!important;
+    flex-basis:40px!important;
+  }
+  .ant-messenger[data-theme] .ant-compose-area>.wt-chat-sender.ant-sender{
+    min-height:72px!important;
+  }
+  .ant-messenger[data-theme] .wt-thread-content::after{
+    content:"";display:block;flex:none;height:22px;
+  }
+}
+/* Mobile also keeps a small buffer below the final message footer. */
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wt-thread-content::after{
+    content:"";display:block;flex:none;height:15px;
+  }
+}

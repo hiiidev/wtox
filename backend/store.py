@@ -159,6 +159,31 @@ def legacy_session_user(token: str | None) -> str | None:
     return row[0] if row else None
 
 
+
+def delete_tox_identity(uid: str) -> None:
+    """Permanently purge exactly one Tox account and all referencing rows.
+
+    No ON DELETE CASCADE exists in the legacy schema. Explicit child deletes
+    prevent foreign-key errors and cross-identity data loss. The calling
+    SessionManager must stop the native Tox instance and disk transfers first.
+    """
+    if not isinstance(uid, str) or not __import__("re").fullmatch(r"[0-9a-f]{32}", uid):
+        raise ValueError("无效身份标识")
+    with db() as c:
+        if c.execute("SELECT 1 FROM accounts WHERE id=?", (uid,)).fetchone() is None:
+            raise ValueError("当前 Tox 身份已不存在")
+        children = ("tox_sessions", "sessions", "pending", "outbox",
+                    "archived_attachments", "disk_attachments",
+                    "friend_addresses", "push_subscriptions")
+        for table in children:
+            exists = c.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (table,)).fetchone()
+            if exists:
+                c.execute(f"DELETE FROM {table} WHERE account_id=?", (uid,))
+        c.execute("DELETE FROM accounts WHERE id=?", (uid,))
+
+
 def active_profiles():
     with db() as c:
         return [r[0] for r in c.execute("SELECT id FROM accounts WHERE profile IS NOT NULL")]

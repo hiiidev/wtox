@@ -18,4 +18,5 @@ export async function clearIdentityBrowserData(owner, {
   // Only remove identity-specific preferences AFTER the database is gone.
   storage.removeItem("wtox-avatar-colors-"+owner);
   storage.removeItem("wtox-seen-"+owner);
+  storage.removeItem("wtox-pwa-push-prompt-"+owner);
 }
