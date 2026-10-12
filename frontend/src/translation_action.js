@@ -27,7 +27,7 @@ export function showQuickTranslate(text) {
   const value=String(text??"").trim();
   if (!value || !/\p{L}/u.test(value)) return false;
   // Keep non-ASCII language scripts, including Chinese/Japanese/Arabic etc.
-  if (/[^\x00-\x7F]/u.test(value)) return true;
+  if ([...value].some(ch=>ch.codePointAt(0)>127 && /\p{L}/u.test(ch))) return true;
   const words=value.match(/[a-z]+/gi)||[];
   if (!words.length) return false;
   const noise=word=>{
