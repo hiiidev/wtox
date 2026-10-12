@@ -291,10 +291,18 @@ assert.ok(!app.includes("确认永久删除服务器身份？"),
   "Do not introduce secondary confirmation after the logout dialog");
 assert.ok(app.includes("头像颜色及其他与该身份关联的数据"),
   "Local cleanup must describe data scoped to the selected identity");
-assert.ok(app.includes("正在连接服务器…")&&app.includes("连接中断，正在重新连接…"),
-  "Show useful Ant Message text for initial connection and recovery");
-assert.ok(app.includes('uiMessageApi.destroy(toastKey)'),
-  "Connection notice must disappear on success and unmount");
+assert.ok(!app.includes("正在连接服务器…")&&!app.includes("连接中断，正在重新连接…"),
+  "Never show a persistent connection message on first load or reconnect");
+assert.ok(!app.includes("wtox-server-connection"),
+  "Remove all keyed realtime connection toasts");
+assert.ok(app.includes("retry=setTimeout(connect,3500)"),
+  "WebSocket must still silently reconnect in the background");
+assert.ok(app.includes("currentSocket.readyState===WebSocket.CONNECTING"),
+  "Stalled WebSocket handshakes should still be closed and retried");
+assert.ok(!app.includes('className="ant-compose-status"'),
+  "No additional status row should appear below the attachment button");
+assert.ok(!refined.includes(".ant-compose-status"),
+  "Remove styles for deleted chat composer status");
 assert.ok(app.includes('<span className="wtox-boot-ring" aria-hidden="true"/>'),
   "React loading screen should keep the pre-bundle boot spinner");
 assert.ok(app.includes("selectedRef.current=null;")&&app.includes("setMobileChat(false);"),

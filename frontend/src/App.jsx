@@ -716,35 +716,39 @@ export default function App(){
   // triggers immediate catch-up after mobile browser background suspension.
   useEffect(()=>{
     if(!user?.public_key)return;
-    let dead=false,ws=null,retry=null,connectedOnce=false;
-    const toastKey="wtox-server-connection";
-    const connecting=()=>{
-      if(dead)return;
-      uiMessageApi.open({
-        key:toastKey,type:"loading",duration:0,
-        content:connectedOnce?"连接中断，正在重新连接…":"正在连接服务器…"
-      });
-    };
+    let dead=false,ws=null,retry=null,handshakeTimeout=null;
     const connect=()=>{
       if(dead)return;
-      connecting();
-      ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws");
+      try{
+        ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws");
+      }catch(error){
+        // A failed WebSocket constructor must not leave the UI frozen.
+        console.warn("WebSocket connection failed:",error);
+        retry=setTimeout(connect,3500);
+        return;
+      }
       socket.current=ws;
       lastMessage.current=Date.now();
-      ws.onopen=()=>{
-        connectedOnce=true;
-        uiMessageApi.destroy(toastKey);
+      const currentSocket=ws;
+      // Some mobile gateways stall the upgrade handshake indefinitely.
+      handshakeTimeout=setTimeout(()=>{
+        if(!dead&&currentSocket.readyState===WebSocket.CONNECTING)currentSocket.close();
+      },10000);
+      currentSocket.onopen=()=>{
+        clearTimeout(handshakeTimeout);
+        handshakeTimeout=null;
         lastMessage.current=Date.now();
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
           refreshTransfers()]);
       };
-      ws.onmessage=msg=>{
+      currentSocket.onmessage=msg=>{
         lastMessage.current=Date.now();
         try{onRealtime(JSON.parse(msg.data))}catch(error){alert("无法解析实时事件："+error.message)}
       };
-      ws.onclose=()=>{
+      currentSocket.onclose=()=>{
+        clearTimeout(handshakeTimeout);
+        handshakeTimeout=null;
         if(!dead){
-          connecting();
           retry=setTimeout(connect,3500);
         }
       };
@@ -776,8 +780,9 @@ export default function App(){
     document.addEventListener("visibilitychange",wake);
     window.addEventListener("focus",wake);
     return()=>{
-      dead=true;uiMessageApi.destroy(toastKey);
-      clearTimeout(retry);clearInterval(friendTimer);
+      dead=true;
+      clearTimeout(retry);clearTimeout(handshakeTimeout);
+      clearInterval(friendTimer);
       clearInterval(pendingTimer);clearInterval(transferTimer);clearInterval(pingTimer);
       document.removeEventListener("visibilitychange",wake);
       window.removeEventListener("focus",wake);
@@ -785,7 +790,7 @@ export default function App(){
       socket.current=null;
     };
   },[user?.public_key,onRealtime,recoverPending,refreshFriends,
-    refreshNetwork,refreshTransfers,alert,uiMessageApi]);
+    refreshNetwork,refreshTransfers,alert]);
 
   useEffect(()=>{
     if(!user?.public_key)return;
@@ -1756,10 +1761,6 @@ export default function App(){
                 icon={<PaperClipOutlined/>} aria-label="添加附件"
                 disabled={!selected||!online(selectedFriend)}/>
             </Upload>
-            {(!historyReady||!online(selectedFriend))&&
-              <p className="ant-compose-status">
-                {!historyReady?"本地加密历史尚未就绪":"对方离线"}
-              </p>}
           </div>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}

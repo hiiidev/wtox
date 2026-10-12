@@ -53,7 +53,6 @@ html:has(.ant-messenger),body:has(.ant-messenger){
 .ant-compose-area{border-top:1px solid var(--wt-border);
   background:var(--wt-panel)!important;padding:14px clamp(16px,4vw,38px) 19px;
   display:flex;flex-direction:column;gap:9px}
-.ant-compose-status{margin:0;font-size:12px;color:var(--wt-muted)}
 .ant-compose-area .ant-sender{
   background:var(--wt-chat);border-color:var(--wt-border);
   box-shadow:0 2px 10px rgba(28,63,105,.025);
