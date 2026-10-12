@@ -19,6 +19,7 @@ class NativeFriendMetadataTests(unittest.TestCase):
         session.friend_status_message_size=lambda tox,number,error:len("正在路上".encode("utf-8"))
         session.friend_connection=lambda tox,number,error:2
         session.friend_user_status=lambda tox,number,error:1
+        session.friend_last_online=lambda tox,number,error:1760000000
 
         def copy(data,buffer):
             for i,value in enumerate(data.encode("utf-8")):
@@ -36,7 +37,19 @@ class NativeFriendMetadataTests(unittest.TestCase):
             "status":2,
             "status_message":"正在路上",
             "user_status":1,
+            "last_online":1760000000,
         }])
+
+    def test_native_last_online_unavailable_is_not_fabricated(self):
+        session=self.make_session()
+        session.friend_last_online=lambda tox,number,error:0
+        self.assertIsNone(session.friends()[0]["last_online"])
+
+        def native_error(tox,number,error):
+            C.cast(error,C.POINTER(C.c_int)).contents.value=1
+            return 1760000000
+        session.friend_last_online=native_error
+        self.assertIsNone(session.friends()[0]["last_online"])
 
     def test_offline_connection_does_not_erase_cached_profile_status(self):
         session=self.make_session()
