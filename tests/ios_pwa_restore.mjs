@@ -36,8 +36,8 @@ assert.ok(!app.includes('message.open({content:"连接成功"'),
 
 // Restore before remote catch-up: network failure must not flash an empty
 // chat history while local AES-GCM history is already available.
-const load=app.slice(app.indexOf('const previous=history.current'),
-  app.indexOf('// Encrypted image previews are temporary browser data too'));
+const load=app.slice(app.indexOf("const owner=user.public_key;"),
+  app.indexOf("// Encrypted image previews are temporary browser data too"));
 assert.ok(load.includes("if(restoredIdentity.current&&restoredIdentity.current!==owner){"),
   "An actual identity switch must explicitly clear the previous identity");
 assert.ok(load.includes("setFriends([])")&&load.includes("setMessages([])"),
