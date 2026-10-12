@@ -197,6 +197,7 @@ export default function App(){
   const [newBelowCount,setNewBelowCount]=useState(0);
   const [threadScrolling,setThreadScrolling]=useState(false);
   const [selectedMessageIds,setSelectedMessageIds]=useState(()=>new Set());
+  const [mobileMessageMenuId,setMobileMessageMenuId]=useState(null);
   const [deletingMessages,setDeletingMessages]=useState(false);
   const [singleDeleteId,setSingleDeleteId]=useState(null);
   const threadEl=useRef(null);
@@ -306,8 +307,26 @@ export default function App(){
   const avatarColor=useCallback(key=>avatarColors[key]||avatarFallbackColor(key),[avatarColors]);
   const longPressTimer=useRef(null);
   const suppressSelectionClick=useRef(false);
+  const suppressSelectionAt=useRef(0);
   const cancelLongPress=()=>{if(longPressTimer.current)clearTimeout(longPressTimer.current);longPressTimer.current=null};
-  const clearSelection=()=>{cancelLongPress();setSelectedMessageIds(new Set())};
+  const clearSelection=()=>{
+    cancelLongPress();
+    setSelectedMessageIds(new Set());
+    setMobileMessageMenuId(null);
+  };
+  // When multi-select is active, tapping the header, composer or empty
+  // canvas exits selection without silently deleting any messages.
+  useEffect(()=>{
+    if(!selectedMessageIds.size)return undefined;
+    const outside=event=>{
+      if(event.target.closest?.(
+        ".wt-selectable-message, .wt-batch-toolbar, .ant-popconfirm, .ant-dropdown, .ant-modal"
+      ))return;
+      clearSelection();
+    };
+    document.addEventListener("pointerdown",outside,true);
+    return()=>document.removeEventListener("pointerdown",outside,true);
+  },[selectedMessageIds.size]);
   function toggleMessageSelection(id){
     setSelectedMessageIds(previous=>{
       const next=new Set(previous);
@@ -322,13 +341,23 @@ export default function App(){
        event?.target?.closest?.("button,a,input,textarea,[role=button]"))return;
     longPressTimer.current=setTimeout(()=>{
       suppressSelectionClick.current=true;
-      setSelectedMessageIds(previous=>new Set([...previous,item.id]));
+      suppressSelectionAt.current=Date.now();
+      if(isMobile){
+        // A long press opens the action/info menu. Multi-select is a
+        // deliberate choice inside it, not the consequence of holding.
+        setMobileMessageMenuId(String(item.id));
+      }else{
+        setSelectedMessageIds(previous=>new Set([...previous,item.id]));
+      }
       longPressTimer.current=null;
-    },650);
+    },600);
   }
   function messageSelectionClick(event,id){
     if(suppressSelectionClick.current){
-      suppressSelectionClick.current=false;event.preventDefault();event.stopPropagation();return;
+      suppressSelectionClick.current=false;
+      if(Date.now()-suppressSelectionAt.current<1000){
+        event.preventDefault();event.stopPropagation();return;
+      }
     }
     if(selectedMessageIds.size){
       event.preventDefault();event.stopPropagation();
@@ -402,6 +431,7 @@ export default function App(){
     ],
     onClick:({key,domEvent})=>{
       domEvent?.stopPropagation();
+      setMobileMessageMenuId(null);
       if(key==="copy")void copyMessage(item);
       if(key==="translate")void translateMessage(item);
       if(key==="delete")setSingleDeleteId(item.id);
@@ -1815,13 +1845,20 @@ export default function App(){
             <p>发送一条消息，开始你们的对话</p>
           </div>}
           {thread.map(item=>item.type==="file"
-            ? <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}>
+            ? <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}
+                open={isMobile?mobileMessageMenuId===String(item.id):undefined}
+                onOpenChange={open=>{if(!open)setMobileMessageMenuId(null)}}>
               <div className={"ant-timeline-file wt-selectable-message"+
                 (selectedMessageIds.has(item.id)?" is-batch-selected":"")+
                 (selectedMessageIds.size?" is-selecting":"")}
                 onPointerDown={event=>startLongPress(item,event)}
                 onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
                 onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
+                onContextMenu={event=>{
+                  if(isMobile){
+                    event.preventDefault();setMobileMessageMenuId(String(item.id));
+                  }
+                }}
                 onClickCapture={event=>messageSelectionClick(event,item.id)}>
                 <AttachmentBubble file={item}
                   accept={id=>controlFile(id,"accept")}
@@ -1830,7 +1867,9 @@ export default function App(){
                   imageCacheRevision={imageCacheRevision}/>
               </div>
               </Dropdown>
-            : <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}>
+            : <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}
+                open={isMobile?mobileMessageMenuId===String(item.id):undefined}
+                onOpenChange={open=>{if(!open)setMobileMessageMenuId(null)}}>
               <div className={"ant-message-wrap wt-message-row wt-selectable-message "+
                 (item.direction==="outgoing"?"wt-message-outgoing":"wt-message-incoming")+
                 (selectedMessageIds.has(item.id)?" is-batch-selected":"")+
@@ -1838,11 +1877,19 @@ export default function App(){
                 onPointerDown={event=>startLongPress(item,event)}
                 onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
                 onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
+                onContextMenu={event=>{
+                  if(isMobile){
+                    event.preventDefault();setMobileMessageMenuId(String(item.id));
+                  }
+                }}
                 onClickCapture={event=>messageSelectionClick(event,item.id)}>
-                <Bubble className="wt-conversation-bubble" content={String(item.text||"")}
-                  placement={item.direction==="outgoing"?"end":"start"}
-                  shape="round" variant="filled"
-                  footer={<div className={"wt-bubble-footer-stack "+
+                <div className={"wt-message-main-stack "+
+                  (item.direction==="outgoing"?"out":"in")}>
+                  <Bubble className="wt-conversation-bubble"
+                    content={String(item.text||"")}
+                    placement={item.direction==="outgoing"?"end":"start"}
+                    shape="round" variant="filled"/>
+                  <div className={"wt-bubble-footer-stack "+
                     (item.direction==="outgoing"?"out":"in")}>
                     <div className="wt-bubble-meta-row">
                       <span className="ant-message-status">
@@ -1882,8 +1929,8 @@ export default function App(){
                             }}>重试</button>}
                       </div>;
                     })()}
-                  </div>}
-                  footerPlacement={item.direction==="outgoing"?"outer-end":"outer-start"}/>
+                  </div>
+                </div>
               </div>
               </Dropdown>)}
             </div>

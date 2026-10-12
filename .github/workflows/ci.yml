@@ -40,6 +40,7 @@ jobs:
       - run: node tests/tox_download.mjs
       - run: node tests/chat_refinement.mjs
       - run: node tests/chat_translation.mjs
+      - run: node tests/pwa_mobile_message_ux.mjs
       - run: node tests/mobile_friend_qr.mjs
       - run: node tests/history_io.mjs
       - name: Check default queue and profile API invariants

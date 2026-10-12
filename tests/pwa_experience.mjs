@@ -17,12 +17,18 @@ assert.match(app,/if\(isStandalone\(\)\)return;/,
 assert.match(app,/if\(isStandalone\(\) \|\| !user\?\.public_key/,
   "Do not offer old browser notification permission in PWA");
 assert.match(app,/<PwaPushWelcome userId=\{user\?\.public_key\}\/>/);
-assert.match(welcome,/title="开启离线通知"/);
-assert.match(welcome,/wtox-pwa-push-prompt-/);
+assert.ok(!welcome.includes("<Modal")&&!welcome.includes("开启离线通知</"),
+  "Never render an additional PWA permission introduction dialog");
+assert.ok(welcome.includes("wtox-pwa-push-attempt-"),
+  "Prompt the user only once per identity and device");
 assert.match(welcome,/if\(!userId\|\|!isStandalone\(\)\)/);
-assert.match(welcome,/context\.registration\.pushManager\.subscribe\(/);
-assert.match(welcome,/onClick=\{enable\}/,
-  "Permission subscription must be initiated directly by click");
+assert.ok(welcome.includes('document.addEventListener("click",onFirstGesture,true)'),
+  "Native iOS permission requires a first user gesture");
+assert.ok(welcome.includes('document.addEventListener("keydown",onFirstGesture,true)'),
+  "Keyboard access must trigger the same native permission flow");
+assert.ok(welcome.includes("registration.pushManager.subscribe({"),
+  "Subscription must originate from the gesture without awaiting network work");
+assert.ok(welcome.includes("return null;"),"Auto setup must not add a dialog");
 assert.match(settings,/开启后，即使离开应用或锁定屏幕/);
 assert.doesNotMatch(settings,/VPS|iPhone|iPad|离线推送已关闭/);
 assert.match(settings,/setDetail\("null"\)|setDetail\(""\)/);
