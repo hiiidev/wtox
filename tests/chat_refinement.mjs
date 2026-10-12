@@ -268,7 +268,8 @@ assert.match(app,/<Upload\.Dragger accept="\.tox,application\/octet-stream"/);
 assert.match(app,/<Form\.Item label="密码" required>/);
 assert.match(app,/<Form\.Item label="密码" extra="未设置密码的 \.tox 文件可留空">/);
 assert.doesNotMatch(app,/旧版账号迁移|wtox-old-backup\.tox|备份密码/);
-assert.doesNotMatch(app,/VPS/);
+assert.ok(app.includes("不会删除 VPS 上的 Tox 身份"),
+  "Logout must distinguish local deletion from the persistent VPS Tox identity");
 assert.match(app,/suffix=\{\(_,info\)=>\{/);
 assert.match(app,/SendButton disabled=\{!draft\.trim\(\)/);
 assert.match(refined,/\.wt-chat-sender button:disabled/);
