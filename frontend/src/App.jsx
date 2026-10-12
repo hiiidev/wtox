@@ -17,6 +17,7 @@ import {LOGO_URL} from "./versioned_assets.js";
 import {disablePushBeforeLogout} from "./push_client.js";
 import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.js";
 import {openIdentityHistory} from "./history.js";
+import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
@@ -69,7 +70,9 @@ async function decodedImage(blob){
   finally{URL.revokeObjectURL(url)}
 }
 
-function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheRevision}){
+function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheRevision,
+  contextMenu,contextOpen,onContextOpenChange,onBubblePointerDown,onBubblePointerUp,
+  onBubblePointerMove,onBubbleContextMenu,onBubbleClickCapture}){
   const [preview,setPreview]=useState("");
   const [previewMissing,setPreviewMissing]=useState(false);
   const isPicture=/\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
@@ -87,7 +90,7 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
         if(!blob&&canDownload){
           const response=await api("/api/files/"+encodeURIComponent(file.file_id)+"/download");
           blob=await response.blob();
-          if(blob.size>5*1024*1024)return;
+          if(blob.size>MAX_ATTACHMENT_BYTES)return;
           const mime=/\.png$/i.test(file.file_name)?"image/png":
             /\.webp$/i.test(file.file_name)?"image/webp":
             /\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
@@ -116,6 +119,13 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
   const state=transferText[file.file_state]||file.file_state;
   return <div className={"wtox-attachment-row "+(mine?"out":"")} role="group"
      aria-label={"附件 "+file.file_name}>
+    <Dropdown trigger={["contextMenu"]} menu={contextMenu}
+        open={contextOpen} onOpenChange={onContextOpenChange}>
+      <div className="wt-file-context-target wt-selectable-message"
+        onPointerDown={onBubblePointerDown}
+        onPointerUp={onBubblePointerUp} onPointerCancel={onBubblePointerUp}
+        onPointerLeave={onBubblePointerUp} onPointerMove={onBubblePointerMove}
+        onContextMenu={onBubbleContextMenu} onClickCapture={onBubbleClickCapture}>
     <Card size="small" className="wtox-attachment-bubble">
       {isPicture
         ? <>
@@ -125,7 +135,10 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
               {file.file_name}
             </Typography.Text>
           </>
-        : <FileCard name={file.file_name} byte={file.file_size} size="small"/>}
+        : <FileCard name={file.file_name} size="small"/>}
+      <Typography.Text className="wt-attachment-size" type="secondary">
+        {formatAttachmentSize(file.file_size)}
+      </Typography.Text>
       <Typography.Text type="secondary">
         {state}{percentage>0&&percentage<100?" · "+percentage+"%":""}
       </Typography.Text>
@@ -141,6 +154,8 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
         图片预览不可用或已过期
       </Typography.Text>}
     </Card>
+      </div>
+    </Dropdown>
     <time>{chatTime(file.at)}</time>
   </div>;
 }
@@ -1015,9 +1030,10 @@ export default function App(){
               </Typography.Text>}
             </div>
   ):null;
-  const thread=useMemo(()=>[...messages,...pendingFiles]
-    .filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
-    .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages,pendingFiles]);
+  // Realtime Tox transfer updates can persist while HTTP upload is still
+  // resolving. Merge the optimistic upload with the canonical transfer ID.
+  const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
+    .slice(-250),[selected,messages,pendingFiles]);
   const scrollToLatest=useCallback(()=>{
     const element=threadEl.current;
     followLatest.current=true;
@@ -1406,8 +1422,8 @@ export default function App(){
     if(!peer||!online(friends.find(friend=>friend.public_key===peer))){
       alert("附件要求双方在线");return;
     }
-    if(!file||file.size<1||file.size>5*1024*1024){
-      alert("附件大小需为 1 字节至 5 MiB");return;
+    if(!file||file.size<1||file.size>MAX_ATTACHMENT_BYTES){
+      alert("附件大小需为 1 字节至 15 MB");return;
     }
     if(busy)return;
     const localId="pending-file-"+crypto.randomUUID();
@@ -1430,6 +1446,8 @@ export default function App(){
         body:file
       });
       transfer=await response.json();
+      setPendingFiles(previous=>previous.map(entry=>entry.id===localId
+        ? {...entry,file_id:transfer.id,file_state:transfer.state||"waiting"}:entry));
     }catch(error){
       setPendingFiles(previous=>previous.map(entry=>entry.id===localId
         ? {...entry,file_state:"failed"}:entry));
@@ -1486,7 +1504,7 @@ export default function App(){
       const isImage=/\.(png|jpe?g|gif|webp)$/i.test(file.name||"");
       if(isImage&&h?.ready())blob=await h.cachedImage(file.id);
       if(!blob)blob=await(await api("/api/files/"+encodeURIComponent(file.id)+"/download")).blob();
-      if(isImage&&h?.ready()&&blob.size<=5*1024*1024)
+      if(isImage&&h?.ready()&&blob.size<=MAX_ATTACHMENT_BYTES)
         await h.cacheImage(file.id,blob);
       downloadBlob(blob,file.name);
     }catch(error){alert(error.message)}
@@ -2045,50 +2063,50 @@ export default function App(){
             <p>发送一条消息，开始你们的对话</p>
           </div>}
           {thread.map(item=>item.type==="file"
-            ? <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}
-                open={isMobile?mobileMessageMenuId===String(item.id):undefined}
-                onOpenChange={open=>{if(!open)setMobileMessageMenuId(null)}}>
-              <div className={"ant-timeline-file wt-selectable-message"+
+            ? <div key={item.id} className={"ant-timeline-file"+
                 (selectedMessageIds.has(item.id)?" is-batch-selected":"")+
-                (selectedMessageIds.size?" is-selecting":"")}
-                onPointerDown={event=>startLongPress(item,event)}
-                onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
-                onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
-                onContextMenu={event=>{
-                  if(isMobile){
-                    event.preventDefault();setMobileMessageMenuId(String(item.id));
-                  }
-                }}
-                onClickCapture={event=>messageSelectionClick(event,item.id)}>
+                (selectedMessageIds.size?" is-selecting":"")}>
                 <AttachmentBubble file={item}
+                  contextMenu={messageMenu(item)}
+                  contextOpen={isMobile?mobileMessageMenuId===String(item.id):undefined}
+                  onContextOpenChange={open=>{if(!open)setMobileMessageMenuId(null)}}
+                  onBubblePointerDown={event=>startLongPress(item,event)}
+                  onBubblePointerUp={cancelLongPress}
+                  onBubblePointerMove={cancelLongPress}
+                  onBubbleContextMenu={event=>{
+                    if(isMobile){
+                      event.preventDefault();setMobileMessageMenuId(String(item.id));
+                    }
+                  }}
+                  onBubbleClickCapture={event=>messageSelectionClick(event,item.id)}
                   accept={id=>controlFile(id,"accept")}
                   reject={id=>controlFile(id,"reject")}
                   download={downloadFile} historyHandle={history.current}
                   imageCacheRevision={imageCacheRevision}/>
               </div>
-              </Dropdown>
-            : <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}
-                open={isMobile?mobileMessageMenuId===String(item.id):undefined}
-                onOpenChange={open=>{if(!open)setMobileMessageMenuId(null)}}>
-              <div className={"ant-message-wrap wt-message-row wt-selectable-message "+
+            : <div key={item.id} className={"ant-message-wrap wt-message-row "+
                 (item.direction==="outgoing"?"wt-message-outgoing":"wt-message-incoming")+
                 (selectedMessageIds.has(item.id)?" is-batch-selected":"")+
-                (selectedMessageIds.size?" is-selecting":"")}
-                onPointerDown={event=>startLongPress(item,event)}
-                onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
-                onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
-                onContextMenu={event=>{
-                  if(isMobile){
-                    event.preventDefault();setMobileMessageMenuId(String(item.id));
-                  }
-                }}
-                onClickCapture={event=>messageSelectionClick(event,item.id)}>
+                (selectedMessageIds.size?" is-selecting":"")}>
                 <div className={"wt-message-main-stack "+
                   (item.direction==="outgoing"?"out":"in")}>
-                  <Bubble className="wt-conversation-bubble"
+                  <Dropdown trigger={["contextMenu"]} menu={messageMenu(item)}
+                    open={isMobile?mobileMessageMenuId===String(item.id):undefined}
+                    onOpenChange={open=>{if(!open)setMobileMessageMenuId(null)}}>
+                    <span className="wt-text-context-target wt-selectable-message"
+                      onPointerDown={event=>startLongPress(item,event)}
+                      onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress}
+                      onPointerLeave={cancelLongPress} onPointerMove={cancelLongPress}
+                      onContextMenu={event=>{
+                        if(isMobile){event.preventDefault();setMobileMessageMenuId(String(item.id))}
+                      }}
+                      onClickCapture={event=>messageSelectionClick(event,item.id)}>
+                      <Bubble className="wt-conversation-bubble"
                     content={String(item.text||"")}
                     placement={item.direction==="outgoing"?"end":"start"}
                     shape="round" variant="filled"/>
+                    </span>
+                  </Dropdown>
                   <div className={"wt-bubble-footer-stack "+
                     (item.direction==="outgoing"?"out":"in")}>
                     <div className="wt-bubble-meta-row">
@@ -2131,8 +2149,7 @@ export default function App(){
                     })()}
                   </div>
                 </div>
-              </div>
-              </Dropdown>)}
+              </div>)}
             </div>
           </div>
           {selected&&newBelowCount>0&&<AntButton type="primary" shape="round"
@@ -2146,8 +2163,8 @@ export default function App(){
             <Upload showUploadList={false} maxCount={1} className="wt-chat-file-upload"
               disabled={!selected||!online(selectedFriend)}
               beforeUpload={file=>{
-                if(file.size<1||file.size>5*1024*1024){
-                  alert("附件大小需要在 1 字节至 5 MiB 之间","error");
+                if(file.size<1||file.size>MAX_ATTACHMENT_BYTES){
+                  alert("附件大小需要在 1 字节至 15 MB 之间","error");
                   return Upload.LIST_IGNORE;
                 }
                 setUploadFile(file);
@@ -2164,7 +2181,8 @@ export default function App(){
               onOpenChange={open=>{if(!open)setUploadFile(null)}}>
               {uploadFile&&<Space orientation="vertical" size="small"
                 className="wt-send-file-preview">
-                <FileCard name={uploadFile.name} byte={uploadFile.size} size="small"/>
+                <FileCard name={uploadFile.name} size="small"/>
+                <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
                 <Space>
                   <AntButton type="primary" size="small" loading={busy}
                     disabled={!online(selectedFriend)} onClick={sendFile}>
