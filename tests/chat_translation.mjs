@@ -8,6 +8,7 @@ assert.equal(translationTarget("auto","zh-HK"),"zh-TW");
 assert.equal(translationTarget("auto","zh-TW"),"zh-TW");
 assert.equal(translationTarget("auto","en-US"),"en");
 assert.equal(translationTarget("auto","pt-BR"),"pt");
+assert.equal(translationTarget("auto","bn-BD"),"bn");
 assert.equal(translationTarget("auto","ja-JP"),"ja");
 assert.equal(translationTarget("auto","nonsense"),"en");
 assert.equal(translationTarget("fr","zh-CN"),"fr");
