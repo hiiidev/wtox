@@ -39,6 +39,16 @@ assert.equal(second[friendB],AVATAR_PALETTE[5]);
 assert.equal(ensureAvatarColors("D".repeat(64),[friendA],storage,()=>8)[friendA],
   AVATAR_PALETTE[8],"Different Tox identities need isolated avatar preferences");
 assert.deepEqual(JSON.parse(data.get("wtox-avatar-colors-"+account)),second);
+const ownA=ensureAvatarColors(account,[account,friendA],storage,()=>6);
+assert.equal(ownA[account],AVATAR_PALETTE[6],"Self avatar gets a random saved color");
+const ownB=ensureAvatarColors("D".repeat(64),["D".repeat(64)],storage,()=>9);
+assert.equal(ownB["D".repeat(64)],AVATAR_PALETTE[9],
+  "A different identity gets its own saved random color");
+assert.equal(ensureAvatarColors(account,[account],storage,()=>2)[account],AVATAR_PALETTE[6],
+  "Re-login keeps the original self avatar color");
+assert.equal(ensureAvatarColors("D".repeat(64),["D".repeat(64)],storage,()=>2)["D".repeat(64)],
+  AVATAR_PALETTE[9],"Switching back to another identity keeps its own color");
+assert.equal(JSON.parse(data.get("wtox-avatar-colors-"+account))[account],AVATAR_PALETTE[6]);
 console.log("Chat scroll anchoring and per-friend Avatar preferences OK");
 
 const {shouldNotifyMessage,messageNotificationId}=await source("frontend/src/message_notifications.js");
