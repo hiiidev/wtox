@@ -211,6 +211,15 @@ export default function App(){
   const [trustedDevices,setTrustedDevices]=useState(null);
   const [devicePassword,setDevicePassword]=useState("");
   const [friends,setFriends]=useState([]),[network,setNetwork]=useState(-1);
+  const [socketState,setSocketState]=useState("connecting");
+  const [slowReconnect,setSlowReconnect]=useState(false);
+  const activeIdentity=useRef(null),friendsSyncedIdentity=useRef(null);
+  activeIdentity.current=user?.public_key||null;
+  useEffect(()=>{
+    if(socketState==="connected"){setSlowReconnect(false);return}
+    const timer=setTimeout(()=>setSlowReconnect(true),10000);
+    return()=>clearTimeout(timer);
+  },[socketState]);
   const [networkDiagnostics,setNetworkDiagnostics]=useState(null);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
   const [section,setSection]=useState("chats");
@@ -248,6 +257,10 @@ export default function App(){
   const [singleDeleteId,setSingleDeleteId]=useState(null);
   const threadEl=useRef(null);
   const swipeStart=useRef(null);
+  const swipeFallbackTimer=useRef(null);
+  const backNavigationPending=useRef(false);
+  const mobileChatRef=useRef(false);
+  mobileChatRef.current=mobileChat;
   const followLatest=useRef(true);
   const previousThread=useRef({peer:null,ids:[]});
   const scrollIdleTimer=useRef(null);
@@ -647,7 +660,17 @@ export default function App(){
   },[user?.public_key,notificationPermission,uiMessageApi]);
 
   const refreshFriends=useCallback(async()=>{
-    setFriends((await getJson("/api/friends")).friends||[]);
+    const owner=activeIdentity.current;
+    if(!owner)return;
+    const result=(await getJson("/api/friends")).friends||[];
+    // A request started before a different identity was selected must not
+    // replace the new account's friend list.
+    if(activeIdentity.current!==owner)return;
+    friendsSyncedIdentity.current=owner;
+    setFriends(result);
+    const h=history.current;
+    if(h?.ready()&&h.owner===owner)
+      await h.saveFriendsSnapshot(result).catch(()=>{});
   },[]);
   const refreshFriendRequests=useCallback(async()=>{
     const data=await getJson("/api/friend-requests");
@@ -907,19 +930,34 @@ export default function App(){
   useEffect(()=>{
     if(!user?.public_key)return;
     let dead=false;
-    const previous=history.current;history.current=null;previous?.close();
-    setHistoryReady(false);setMigrateRequired(false);setMessages([]);
-    setSelected(null);selectedRef.current=null;setDraft("");setMobileChat(false);
+    const owner=user.public_key;
+    const previous=history.current;
+    // A normal mobile history navigation must not reset this identity. On a
+    // genuinely different identity, close the old DB without clearing the
+    // UI until the next identity's encrypted rows are available.
+    if(previous?.owner===owner&&previous.ready())return;
+    history.current=null;previous?.close();
+    setHistoryReady(false);setMigrateRequired(false);
+    friendsSyncedIdentity.current=null;
     (async()=>{
       try{
-        const h=await openIdentityHistory(user.public_key);
+        const h=await openIdentityHistory(owner);
         if(dead){h.close();return}
         history.current=h;
         setHistoryReady(h.ready());setMigrateRequired(h.needsMigration());
         if(h.ready()){
+          // Render decrypted local history and friend snapshot BEFORE any
+          // network round trips. iOS may suspend all fetching on back-swipe.
+          const cached=await h.read();
+          if(dead||history.current!==h)return;
+          setMessages(cached);
+          const snapshot=await h.readFriendsSnapshot().catch(()=>null);
+          if(!dead&&history.current===h&&
+             friendsSyncedIdentity.current!==owner&&snapshot)
+            setFriends(snapshot);
           // A previous tab may have closed AFTER invoking Tox send but BEFORE
           // storing the API reply. Do not silently retry such messages.
-          for(const item of await h.read()){
+          for(const item of cached){
             if(item.direction==="outgoing"&&item.delivery_status==="dispatching_local"){
               await h.patchEvent(item.id,{
                 delivery_status:"uncertain",
@@ -936,7 +974,13 @@ export default function App(){
         }
       }catch(error){if(!dead)alert("无法打开本地加密历史："+error.message)}
     })();
-    return()=>{dead=true;history.current?.close();history.current=null};
+    return()=>{
+      dead=true;
+      // Never close a newer identity's handle from a stale effect cleanup.
+      if(history.current?.owner===owner){
+        history.current.close();history.current=null;
+      }
+    };
   },[user?.public_key,recoverPending,refreshTransfers,migrateLegacyBrowserQueue,alert]);
 
   // Encrypted image previews are temporary browser data too; remove after
@@ -955,11 +999,13 @@ export default function App(){
     let dead=false,ws=null,retry=null,handshakeTimeout=null;
     const connect=()=>{
       if(dead)return;
+      setSocketState(previous=>previous==="connected"?"reconnecting":previous);
       try{
         ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws");
       }catch(error){
         // A failed WebSocket constructor must not leave the UI frozen.
         console.warn("WebSocket connection failed:",error);
+        setSocketState("reconnecting");
         retry=setTimeout(connect,3500);
         return;
       }
@@ -974,6 +1020,7 @@ export default function App(){
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         lastMessage.current=Date.now();
+        setSocketState("connected");
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
           refreshTransfers()]);
       };
@@ -985,6 +1032,7 @@ export default function App(){
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         if(!dead){
+          setSocketState("reconnecting");
           retry=setTimeout(connect,3500);
         }
       };
@@ -1010,11 +1058,19 @@ export default function App(){
     },25000);
     const wake=()=>{
       if(!dead&&document.visibilityState==="visible"){
+        // A restored iOS page can still hold an already closed or zombie WS.
+        if(!ws||ws.readyState>=WebSocket.CLOSING){
+          clearTimeout(retry);
+          retry=null;
+          connect();
+        }else if(ws.readyState===WebSocket.OPEN&&
+                 Date.now()-lastMessage.current>60000)ws.close();
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),refreshTransfers()]);
       }
     };
     document.addEventListener("visibilitychange",wake);
     window.addEventListener("focus",wake);
+    window.addEventListener("pageshow",wake);
     return()=>{
       dead=true;
       clearTimeout(retry);clearTimeout(handshakeTimeout);
@@ -1022,6 +1078,7 @@ export default function App(){
       clearInterval(pendingTimer);clearInterval(transferTimer);clearInterval(pingTimer);
       document.removeEventListener("visibilitychange",wake);
       window.removeEventListener("focus",wake);
+      window.removeEventListener("pageshow",wake);
       if(ws){ws.onclose=null;ws.close()}
       socket.current=null;
     };
@@ -1227,12 +1284,21 @@ export default function App(){
     clearSelection();
   }
   function returnFromMobileChat(){
-    if(window.history.state?.wtoxChat)window.history.back();
-    else clearMobileConversation();
+    if(backNavigationPending.current)return;
+    if(window.history.state?.wtoxChat){
+      backNavigationPending.current=true;
+      window.history.back();
+      // A suspended iOS page may not dispatch popstate until resumed.
+      setTimeout(()=>{backNavigationPending.current=false},1200);
+    }else clearMobileConversation();
   }
   useEffect(()=>{
     const onPop=()=>{
-      if(!window.matchMedia("(max-width:767px)").matches)return;
+      clearTimeout(swipeFallbackTimer.current);
+      swipeFallbackTimer.current=null;
+      backNavigationPending.current=false;
+      if(!window.matchMedia("(max-width:767px)").matches||
+         !mobileChatRef.current||window.history.state?.wtoxChat)return;
       selectedRef.current=null;
       setSelected(null);
       setMobileChat(false);
@@ -1240,7 +1306,10 @@ export default function App(){
       clearSelection();
     };
     window.addEventListener("popstate",onPop);
-    return()=>window.removeEventListener("popstate",onPop);
+    return()=>{
+      clearTimeout(swipeFallbackTimer.current);
+      window.removeEventListener("popstate",onPop);
+    };
   },[]);
   function onChatTouchStart(event){
     if(!isMobile||!mobileChat||!isStandalone()||
@@ -1254,7 +1323,16 @@ export default function App(){
     swipeStart.current=null;
     const touch=event.changedTouches?.[0];
     if(origin&&touch&&touch.clientX-origin.x>90 &&
-       Math.abs(touch.clientY-origin.y)<70)returnFromMobileChat();
+       Math.abs(touch.clientY-origin.y)<70){
+      // Prefer iOS's native history gesture. Run our own fallback only when
+      // the native popstate didn't happen, preventing two back operations.
+      clearTimeout(swipeFallbackTimer.current);
+      swipeFallbackTimer.current=setTimeout(()=>{
+        swipeFallbackTimer.current=null;
+        if(mobileChatRef.current&&window.history.state?.wtoxChat)
+          returnFromMobileChat();
+      },550);
+    }
   }
   function cancelConversationPress(){
     if(conversationPressTimer.current)clearTimeout(conversationPressTimer.current);
@@ -2000,6 +2078,12 @@ export default function App(){
             <strong>{section==="contacts"?"通讯录":"聊天"}</strong>
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
+          {socketState!=="connected"&&<span className="wt-connection-indicator"
+            role="status" aria-label={slowReconnect?"正在重连":"正在连接"}
+            title={slowReconnect?"正在重连":"正在连接"}>
+            <LoadingOutlined spin aria-hidden="true"/>
+            {slowReconnect&&<span className="wt-reconnect-label">正在重连</span>}
+          </span>}
           <div className="wt-list-actions" role="group" aria-label="好友操作">
             <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
               <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
