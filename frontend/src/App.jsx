@@ -1535,10 +1535,15 @@ export default function App(){
       alert("附件要求双方在线","error");return;
     }
     const op=++attachmentPreparationId.current;
+    // Clear the previous chooser immediately: a pending conversion must not
+    // leave an older attachment sendable, even if the new file is invalid.
+    attachmentPreparedFor.current=null;
+    setUploadFile(null);
     const photo=isPhotoAttachment(file);
     if(file.size<1 || (photo
         ? file.size>MAX_SOURCE_PHOTO_BYTES
         : file.size>MAX_ATTACHMENT_BYTES)){
+      setPreparingPhoto(false);
       alert(photo?"原照片不得超过 40 MB":"附件不能超过 15 MB","error");
       return;
     }
