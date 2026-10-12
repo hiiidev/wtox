@@ -19,4 +19,5 @@ export async function clearIdentityBrowserData(owner, {
   storage.removeItem("wtox-avatar-colors-"+owner);
   storage.removeItem("wtox-seen-"+owner);
   storage.removeItem("wtox-pwa-push-prompt-"+owner);
+  storage.removeItem("wtox-pwa-push-attempt-"+owner);
 }
