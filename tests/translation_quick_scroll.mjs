@@ -4,7 +4,7 @@ import {showQuickTranslate} from "../frontend/src/translation_action.js";
 for (const value of [
   "", "  ", "123456", "2026/10/13 12:30", "-45.20%", "￥100", "🙃🙃",
   "aaaaaaa", "kkkkk", "abababab", "abcabcabc",
-  "qwerty", "asdfgh", "zxcvbn", "abcdefg", "xjkwpm"
+  "qwerty", "asdfgh", "asdfgh！", "zxcvbn", "abcdefg", "xjkwpm"
 ]) assert.equal(showQuickTranslate(value),false,
   "Should not show inline quick Translate for: "+value);
 for(const value of [
