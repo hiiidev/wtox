@@ -81,6 +81,15 @@ assert.ok(wechatStyles.includes("grid-template-columns:70px") &&
   wechatStyles.includes("@media(max-width:767px)") &&
   wechatStyles.includes(".wechat-mobile-tabs"),
   "Desktop three-column and mobile single-pane layouts must exist");
+const pushUi=readFileSync("frontend/src/PushSettings.jsx","utf8");
+const pushClient=readFileSync("frontend/src/push_client.js","utf8");
+assert.match(pushUi,/!userId \|\| !isStandalone\(\)/,
+  "Web Push settings and subscriptions must be visible only in an installed PWA");
+assert.match(pushUi,/离线推送（PWA）/);
+assert.doesNotMatch(pushUi,/iPhone PWA/);
+assert.match(pushClient,/if \(!isStandalone\(\)\)/,
+  "iOS and Android must subscribe from their installed PWA window");
+
 assert.ok(app.includes("latestByPeer") && app.includes("unreadFor"),
   "Conversations must display recent messages and unread counts");
 assert.ok(app.includes("startLongPress")&&app.includes("selectedMessageIds")&&

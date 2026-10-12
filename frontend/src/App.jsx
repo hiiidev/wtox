@@ -203,8 +203,10 @@ export default function App(){
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),lastMessage=useRef(0);
-  useEffect(()=>{
-    if(!user?.public_key)return;
+  // Persist a random color for each self identity before the first visible
+  // frame; returning to an identity reuses its saved color.
+  useLayoutEffect(()=>{
+    if(!user?.public_key){setAvatarColors({});return}
     const keys=[user.public_key,...friends.map(f=>f.public_key)];
     setAvatarColors(ensureAvatarColors(user.public_key,keys,
       typeof localStorage!=="undefined"?localStorage:null));
@@ -1041,11 +1043,6 @@ export default function App(){
 
   // Shared Ant Design settings: mobile full page and desktop side drawer.
   const settingsContent=<div className="wt-settings-content">
-    <div className="wt-settings-overview" aria-hidden="true">
-      <span className="wt-settings-eyebrow">WTOX / PREFERENCES</span>
-      <strong>你的聊天，由你掌控</strong>
-      <p>连接状态、通知、个人身份和聊天数据都在这里管理。</p>
-    </div>
     <Card size="small" title="连接与消息队列" className="wt-settings-card wt-settings-network-card">
       <Space orientation="vertical" size="small" style={{width:"100%"}}>
         <Typography.Text className="wt-network-status">
@@ -1289,16 +1286,12 @@ export default function App(){
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
           <div className="wt-list-actions" role="group" aria-label="好友操作">
-            <Tooltip title="好友请求" placement="bottom">
-              <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
-                <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
-                  onClick={()=>setModal("requests")}/>
-              </Badge>
-            </Tooltip>
-            <Tooltip title="添加好友" placement="bottom">
-              <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
-                onClick={()=>setModal("add")}/>
-            </Tooltip>
+            <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
+              <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
+                onClick={()=>setModal("requests")}/>
+            </Badge>
+            <AntButton type="text" icon={<PlusOutlined/>} aria-label="添加好友"
+              onClick={()=>setModal("add")}/>
           </div>
         </div>
         <div className="wechat-search">
@@ -1558,7 +1551,7 @@ export default function App(){
       </main>
     </div>
 
-    <AntModal open={!!singleDeleteId} title="删除聊天记录" centered
+    <AntModal open={!!singleDeleteId} title="删除聊天记录"
       onCancel={()=>setSingleDeleteId(null)} onOk={deleteSingleMessage}
       okText="删除记录" cancelText="取消"
       okButtonProps={{danger:true,loading:deletingMessages}}
@@ -1571,7 +1564,7 @@ export default function App(){
     </AntModal>
 
     <AntModal open={deleteFriendOpen&&!!selectedFriend} title="删除好友"
-      centered destroyOnHidden onCancel={()=>setDeleteFriendOpen(false)}
+      destroyOnHidden onCancel={()=>setDeleteFriendOpen(false)}
       onOk={removeFriend} okText="删除好友" cancelText="取消"
       okButtonProps={{danger:true,loading:removingFriend}}
       cancelButtonProps={{disabled:removingFriend}} closable={!removingFriend}
@@ -1592,11 +1585,11 @@ export default function App(){
           </Drawer>
         : <AntModal open={peerDetailsOpen&&!!selectedFriend} title="好友资料"
             onCancel={()=>setPeerDetailsOpen(false)} footer={null}
-            centered destroyOnHidden width={500}>
+            destroyOnHidden width={500}>
             {peerProfileContent}
           </AntModal>}
     <AntModal open={modal==="profile"} title="我的 Tox 资料"
-      onCancel={closeModal} footer={null} centered destroyOnHidden width={520}>
+      onCancel={closeModal} footer={null} destroyOnHidden width={520}>
       <div className="wt-own-tox-id-heading">
         <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
         <AntButton type="text" size="small" icon={<QrcodeOutlined/>}
@@ -1628,7 +1621,7 @@ export default function App(){
       </Form>
     </AntModal>
 
-    <AntModal open={modal==="qrcode"} centered title="我的 Tox ID 二维码"
+    <AntModal open={modal==="qrcode"} title="我的 Tox ID 二维码"
       onCancel={()=>setModal("profile")}
       footer={<AntButton onClick={()=>setModal("profile")}>返回我的资料</AntButton>}
       width={360} destroyOnHidden>
@@ -1652,7 +1645,7 @@ export default function App(){
     </Drawer>
 
     <AntModal open={modal==="add"} title="添加 Tox 好友" onCancel={closeModal}
-      footer={null} centered destroyOnHidden>
+      footer={null} destroyOnHidden>
       <Form layout="vertical" onFinish={addFriend}>
         <Form.Item label="好友 Tox ID（76 位）" required>
           <Input.TextArea rows={3} value={friendId} onChange={e=>setFriendId(e.target.value)}
@@ -1665,7 +1658,7 @@ export default function App(){
       </Form>
     </AntModal>
     <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`}
-      onCancel={closeModal} footer={null} centered destroyOnHidden>
+      onCancel={closeModal} footer={null} destroyOnHidden>
       <List dataSource={friendRequests} locale={{emptyText:"暂无待处理的好友请求"}}
         renderItem={item=><List.Item actions={[
           <AntButton key="accept" type="primary" size="small" onClick={()=>acceptRequest(item)}>接受</AntButton>,

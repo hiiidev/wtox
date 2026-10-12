@@ -995,21 +995,21 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
    always-on gray pill treatment used by the mobile toolbar. */
 @media(min-width:768px){
   .ant-messenger[data-theme] .wechat-list-head .wt-list-actions{
-    display:flex;align-items:center;gap:10px;
+    display:flex;align-items:center;gap:6px;
   }
   .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn{
-    width:46px!important;height:46px!important;min-width:46px!important;
-    padding:0!important;border-radius:14px!important;
+    width:40px!important;height:40px!important;min-width:40px!important;
+    padding:0!important;border-radius:12px!important;
     border:1px solid transparent!important;
     background:transparent!important;
     color:var(--wt-muted)!important;
     box-shadow:none!important;
-    font-size:24px!important;
+    font-size:20px!important;
     transition:background-color .18s ease,color .18s ease,
       border-color .18s ease,transform .18s ease!important;
   }
   .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn .anticon{
-    font-size:24px!important;
+    font-size:20px!important;
     display:inline-flex;align-items:center;justify-content:center;
   }
   .ant-messenger[data-theme] .wechat-list-head .wt-list-actions .ant-btn:hover:not(:disabled){
