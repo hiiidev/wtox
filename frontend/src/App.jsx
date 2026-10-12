@@ -178,6 +178,23 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
   </div>;
 }
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
+function RealtimeConnectionIndicator({socketState,slowReconnect}){
+  if(socketState==="connected")return null;
+  const polling=socketState==="polling";
+  return <span className={"wt-connection-indicator"+(polling?" is-polling":"")}
+    role="status"
+    aria-label={polling?"实时连接不可用，正在轮询同步":
+      slowReconnect?"正在重连":"正在连接"}
+    title={polling
+      ?"实时 WebSocket 暂不可用，消息和好友信息将继续通过 HTTP 轮询同步"
+      :slowReconnect?"正在重连":"正在连接"}>
+    {polling?<DisconnectOutlined aria-hidden="true"/>:
+      <LoadingOutlined spin aria-hidden="true"/>}
+    {(slowReconnect||polling)&&<span className="wt-reconnect-label">
+      {polling?"轮询中":"正在重连"}
+    </span>}
+  </span>;
+}
 /* Embedded SVGs: no external Iconify requests. Align optical sizes with
  * SettingFilled's 25px glyph using type-specific icon boxes.
  */
@@ -2152,24 +2169,14 @@ export default function App(){
               </Badge>
             </AntButton>
             <strong>{section==="contacts"?"通讯录":"聊天"}</strong>
+            <RealtimeConnectionIndicator socketState={socketState}
+              slowReconnect={slowReconnect}/>
           </div>
-          <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
-          {socketState!=="connected"&&<span className={"wt-connection-indicator"+
-              (socketState==="polling"?" is-polling":"")}
-            role="status"
-            aria-label={socketState==="polling"?"实时连接不可用，正在轮询同步":
-              slowReconnect?"正在重连":"正在连接"}
-            title={socketState==="polling"
-              ?"实时 WebSocket 暂不可用，消息和好友信息将继续通过 HTTP 轮询同步"
-              :slowReconnect?"正在重连":"正在连接"}>
-            {socketState==="polling"
-              ?<DisconnectOutlined aria-hidden="true"/>
-              :<LoadingOutlined spin aria-hidden="true"/>}
-            {(slowReconnect||socketState==="polling")&&
-              <span className="wt-reconnect-label">
-                {socketState==="polling"?"轮询中":"正在重连"}
-              </span>}
-          </span>}
+          <h2 className="wechat-desktop-heading">
+            {section==="contacts"?"通讯录":"聊天"}
+            <RealtimeConnectionIndicator socketState={socketState}
+              slowReconnect={slowReconnect}/>
+          </h2>
           <div className="wt-list-actions" role="group" aria-label="好友操作">
             <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
               <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
