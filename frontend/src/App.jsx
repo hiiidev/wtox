@@ -2221,7 +2221,7 @@ export default function App(){
       </main>
     </div>
 
-    <AntModal centered={isMobile} open={logoutOpen} title="退出当前身份" footer={null}
+    <AntModal open={logoutOpen} title="退出当前身份" footer={null} centered={isMobile}
       destroyOnHidden onCancel={()=>{if(!logoutBusy)setLogoutOpen(false)}}
       closable={!logoutBusy} maskClosable={!logoutBusy}>
       <Typography.Paragraph>
@@ -2247,7 +2247,7 @@ export default function App(){
       </Space>
     </AntModal>
 
-    <AntModal centered={isMobile} open={!!singleDeleteId} title="删除聊天记录"
+    <AntModal open={!!singleDeleteId} title="删除聊天记录" centered={isMobile}
       onCancel={()=>setSingleDeleteId(null)} onOk={deleteSingleMessage}
       okText="删除记录" cancelText="取消"
       okButtonProps={{danger:true,loading:deletingMessages}}
@@ -2259,7 +2259,7 @@ export default function App(){
       </Typography.Text>
     </AntModal>
 
-    <AntModal centered={isMobile} open={!!conversationDeletePeer} title="删除聊天记录"
+    <AntModal open={!!conversationDeletePeer} title="删除聊天记录" centered={isMobile}
       onCancel={()=>{if(!deletingConversation)setConversationDeletePeer(null)}}
       onOk={deleteConversationHistory} okText="删除记录" cancelText="取消"
       okButtonProps={{danger:true,loading:deletingConversation}}
@@ -2274,7 +2274,7 @@ export default function App(){
       </Typography.Text>
     </AntModal>
 
-    <AntModal centered={isMobile} open={deleteFriendOpen&&!!selectedFriend} title="删除好友"
+    <AntModal open={deleteFriendOpen&&!!selectedFriend} title="删除好友" centered={isMobile}
       destroyOnHidden onCancel={()=>setDeleteFriendOpen(false)}
       onOk={removeFriend} okText="删除好友" cancelText="取消"
       okButtonProps={{danger:true,loading:removingFriend}}
@@ -2294,12 +2294,12 @@ export default function App(){
             onClose={()=>setPeerDetailsOpen(false)} destroyOnHidden>
             {peerProfileContent}
           </Drawer>
-        : <AntModal centered={isMobile} open={peerDetailsOpen&&!!selectedFriend} title="好友资料"
+        : <AntModal open={peerDetailsOpen&&!!selectedFriend} title="好友资料" centered={isMobile}
             onCancel={()=>setPeerDetailsOpen(false)} footer={null}
             destroyOnHidden width={500}>
             {peerProfileContent}
           </AntModal>}
-    <AntModal centered={isMobile} open={modal==="profile"} title="我的 Tox 资料"
+    <AntModal open={modal==="profile"} title="我的 Tox 资料" centered={isMobile}
       onCancel={closeModal} footer={null} destroyOnHidden width={520}>
       <div className="wt-own-tox-id-heading">
         <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
@@ -2332,7 +2332,7 @@ export default function App(){
       </Form>
     </AntModal>
 
-    <AntModal centered={isMobile} open={modal==="qrcode"} title="我的 Tox ID 二维码"
+    <AntModal open={modal==="qrcode"} title="我的 Tox ID 二维码" centered={isMobile}
       onCancel={()=>setModal("profile")}
       footer={<AntButton onClick={()=>setModal("profile")}>返回我的资料</AntButton>}
       width={360} destroyOnHidden>
@@ -2355,7 +2355,7 @@ export default function App(){
       {settingsContent}
     </Drawer>
 
-    <AntModal centered={isMobile} open={modal==="add"} title={friendQrOpen?"扫描好友二维码":"添加 Tox 好友"}
+    <AntModal open={modal==="add"} title={friendQrOpen?"扫描好友二维码":"添加 Tox 好友"} centered={isMobile}
       onCancel={closeAddFriend} footer={null} destroyOnHidden
       className="wt-add-friend-modal" width={480}>
       {friendQrOpen
@@ -2393,7 +2393,7 @@ export default function App(){
           </Form>
         </div>}
     </AntModal>
-    <AntModal centered={isMobile} open={modal==="requests"} title={`好友请求（${friendRequests.length}）`}
+    <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`} centered={isMobile}
       onCancel={closeModal} footer={null} destroyOnHidden>
       <List dataSource={friendRequests} locale={{emptyText:"暂无待处理的好友请求"}}
         renderItem={item=><List.Item actions={[
