@@ -46,6 +46,8 @@ jobs:
       - run: node tests/active_chat_scroll.mjs
       - run: node tests/contact_actions_and_presence.mjs
       - run: node tests/translation_actions_and_attachment_modal.mjs
+      - run: node tests/translation_quick_scroll.mjs
+      - run: node tests/photo_sanitize.mjs
       - run: node tests/identity_cleanup.mjs
       - run: node tests/tox_download.mjs
       - run: node tests/chat_refinement.mjs
