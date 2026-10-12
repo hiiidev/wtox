@@ -178,7 +178,7 @@ assert.match(app,/recoverPending\(\),refreshTransfers\(\)/);
 
 assert.match(app,/record\.delivery_status\)\)return "待发送"/);
 assert.match(app,/record\.delivery_status\)\)return "正在发送"/);
-assert.match(app,/title="VPS Tox 网络与消息队列"/);
+assert.match(app,/title="连接与消息队列"/);
 assert.match(app,/networkDiagnostics\?\.queued/);
 assert.match(app,/await refreshOutbox\(h\);\s*for\(const row of data\.pending/);
 
