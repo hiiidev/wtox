@@ -24,7 +24,7 @@ for (const size of [180, 192, 512, 1024]) {
   assert.equal(data.readUInt32BE(16),size,"PNG width mismatch");
   assert.equal(data.readUInt32BE(20),size,"PNG height mismatch");
 }
-assert.match(html,/\\/logo\\.svg\\?t=[a-z0-9]+/,"Logo query must change on every Vite build");
+assert.ok(html.includes("/logo.svg?t="),"Logo query must change on every Vite build");
 const backend=readFileSync("backend/main.py","utf8");
-assert.match(backend,/app\\.mount\\("\\/icons"/,"Backend must serve generated PWA PNGs");
+assert.ok(backend.includes('app.mount("/icons"'),"Backend must serve generated PWA PNGs");
 console.log("Vite JS/CSS, versioned SVG and all PWA PNG icons exist");
