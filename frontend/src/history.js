@@ -115,6 +115,46 @@ export async function openIdentityHistory(owner){
       for(const row of rows)output.push(await cryptoOpen(row,key));
       return output.sort((a,b)=>(a.at||0)-(b.at||0));
     }
+    // Cache a minimal friend-list snapshot in the SAME per-identity AES-GCM
+    // IndexedDB as chat history. Never put profile names or keys in localStorage.
+    // It is display-only until the live /api/friends response arrives.
+    async function readFriendsSnapshot(){
+      requireKey();
+      const record=await meta(db,"friends-snapshot");
+      if(!record?.value)return null;
+      const value=await cryptoOpen(record.value,key);
+      if(!Array.isArray(value?.friends)||value.friends.length>2000)return null;
+      return value.friends.filter(friend=>
+        friend&&typeof friend.public_key==="string"&&
+        /^[a-f0-9]{64}$/i.test(friend.public_key)).map(friend=>({
+          public_key:friend.public_key,
+          name:typeof friend.name==="string"?friend.name:"",
+          status_message:typeof friend.status_message==="string"?friend.status_message:"",
+          user_status:Number.isInteger(friend.user_status)?friend.user_status:0,
+          last_online:Number.isSafeInteger(friend.last_online)?friend.last_online:null,
+          tox_id:typeof friend.tox_id==="string"?friend.tox_id:null,
+          status:0 // Do not show stale green online indicators before sync.
+        }));
+    }
+    async function saveFriendsSnapshot(friends){
+      requireKey();
+      if(!Array.isArray(friends)||friends.length>2000)
+        throw new Error("好友列表缓存超出范围");
+      const safe=friends.filter(friend=>typeof friend?.public_key==="string"&&
+        /^[a-f0-9]{64}$/i.test(friend.public_key)).map(friend=>({
+          public_key:friend.public_key,
+          name:String(friend.name||"").slice(0,256),
+          status_message:String(friend.status_message||"").slice(0,1024),
+          user_status:Number(friend.user_status)||0,
+          last_online:Number.isSafeInteger(friend.last_online)?friend.last_online:null,
+          tox_id:typeof friend.tox_id==="string"?friend.tox_id:null
+        }));
+      const encrypted=await cryptoSeal({friends:safe},key);
+      const tx=db.transaction("meta","readwrite");
+      tx.objectStore("meta").put({id:"friends-snapshot",value:encrypted});
+      await completed(tx);
+    }
+
     async function persist(event){
       requireKey();
       if(!["message","friend_request"].includes(event.type))return false;
@@ -332,6 +372,6 @@ export async function openIdentityHistory(owner){
       return encrypted.length;
     }
     return {owner,ready:()=>!!key,needsMigration:()=>needsMigration,
-      migrate,read,persist,persistFile,deleteEvent,deleteConversation,patchEvent,cacheImage,cachedImage,expireImages,deleteCachedImage,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
+      migrate,read,readFriendsSnapshot,saveFriendsSnapshot,persist,persistFile,deleteEvent,deleteConversation,patchEvent,cacheImage,cachedImage,expireImages,deleteCachedImage,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
   }catch(error){db.close();throw error}
 }
