@@ -16,6 +16,7 @@ import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
+import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
@@ -894,16 +895,32 @@ export default function App(){
       await loadIdentity();
     }catch(error){alert(error.message)}finally{setBusy(false)}
   }
-  async function logout(){
+  async function logout(clearLocalData=false){
+    if(logoutBusy)return;
+    setLogoutBusy(true);
+    const owner=user?.public_key;
+    let pushError=null;
     try{
-      try { await disablePushBeforeLogout(); } catch (error) {
-        console.warn("Push cleanup failed on sign-out:", error);
-      }
+      try{await disablePushBeforeLogout()}
+      catch(error){pushError=error}
+      // The server's Tox identity (and its friend list) is deliberately kept.
       await postJson("/api/logout");
+      // Close this identity's IndexedDB before issuing deleteDatabase().
       history.current?.close();history.current=null;
+      let cleanupError=null;
+      if(clearLocalData){
+        try{await clearIdentityBrowserData(owner)}
+        catch(error){cleanupError=error}
+      }
       drafts.current.clear();setUser(null);setMessages([]);setPendingFiles([]);setFriends([]);
-      setSelected(null);setModal("");setHistoryReady(false);
-    }catch(error){alert(error.message)}
+      setSelected(null);selectedRef.current=null;setModal("");
+      setLogoutOpen(false);setHistoryReady(false);
+      setSeen({});setAvatarColors({});
+      if(cleanupError)alert("已退出，但部分浏览器数据未删除："+cleanupError.message,"warning");
+      else if(pushError)alert("已退出，但离线推送可能仍在该设备上启用。请检查通知权限。","warning");
+    }catch(error){
+      alert("退出失败："+error.message,"error");
+    }finally{setLogoutBusy(false)}
   }
   async function sendText(innerHtml,textContent,innerText){
     if(sendBusy.current||!selectedRef.current)return;
@@ -1611,10 +1628,10 @@ export default function App(){
                 icon={<PaperClipOutlined/>} aria-label="添加附件"
                 disabled={!selected||!online(selectedFriend)}/>
             </Upload>
-            <p className="ant-compose-status">{!selected?"请先选择好友":
-              !historyReady?"本地加密历史尚未就绪":
-              !online(selectedFriend)?"对方离线":
-              "Enter 发送 · Shift + Enter 换行"}</p>
+            {(!historyReady||!online(selectedFriend))&&
+              <p className="ant-compose-status">
+                {!historyReady?"本地加密历史尚未就绪":"对方离线"}
+              </p>}
           </div>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
@@ -1647,6 +1664,32 @@ export default function App(){
         </div>}
       </main>
     </div>
+
+    <AntModal open={logoutOpen} title="退出当前身份" footer={null}
+      destroyOnHidden onCancel={()=>{if(!logoutBusy)setLogoutOpen(false)}}
+      closable={!logoutBusy} maskClosable={!logoutBusy}>
+      <Typography.Paragraph>
+        你希望如何处理当前身份保存在此浏览器中的聊天记录和图片缓存？
+      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary">
+        两种方式都会结束当前登录并尝试取消本设备的离线推送。
+        均不会删除 VPS 上的 Tox 身份、好友列表或服务器中的待发消息。
+      </Typography.Paragraph>
+      <Space orientation="vertical" size="middle" style={{width:"100%"}}>
+        <AntButton block loading={logoutBusy} onClick={()=>logout(false)}>
+          保留本地数据并退出
+        </AntButton>
+        <AntButton block danger type="primary" loading={logoutBusy}
+          onClick={()=>logout(true)}>
+          清除当前身份本地数据并退出
+        </AntButton>
+        <Typography.Text type="secondary" className="wt-settings-footnote">
+          清除会永久删除当前浏览器中该身份的加密消息、图片缓存、
+          已读记录与头像颜色；其他身份的数据及全局主题不受影响。
+          删除前请先备份需要保留的聊天记录。
+        </Typography.Text>
+      </Space>
+    </AntModal>
 
     <AntModal open={!!singleDeleteId} title="删除聊天记录"
       onCancel={()=>setSingleDeleteId(null)} onOk={deleteSingleMessage}
