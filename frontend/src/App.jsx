@@ -174,6 +174,10 @@ function RailIcon({kind}){
 export default function App(){
   const [user,setUser]=useState(null),[loading,setLoading]=useState(true);
   const [bootstrapError,setBootstrapError]=useState("");
+  const [siteGate,setSiteGate]=useState("checking");
+  const [sitePasswordInput,setSitePasswordInput]=useState("");
+  const [siteGateError,setSiteGateError]=useState("");
+  const [siteGateBusy,setSiteGateBusy]=useState(false);
   const [friends,setFriends]=useState([]),[network,setNetwork]=useState(-1);
   const [networkDiagnostics,setNetworkDiagnostics]=useState(null);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
@@ -747,13 +751,59 @@ export default function App(){
       const info=await getJson("/api/me",{signal:AbortSignal.timeout(12000)});
       setUser(info);
     }catch(error){
+      if(error.accessRequired){
+        setSiteGate("locked");
+        setUser(null);
+        return;
+      }
       if(error.status===401){setUser(null);return}
       setBootstrapError(error.name==="TimeoutError"
         ?"连接超时，请检查网络后重试。"
         :"无法连接服务："+error.message);
     }finally{setLoading(false)}
   },[]);
-  useEffect(()=>{loadIdentity()},[loadIdentity]);
+  const checkSiteAccess=useCallback(async()=>{
+    setLoading(true);setBootstrapError("");
+    try{
+      const status=await getJson("/api/gate/status",{
+        signal:AbortSignal.timeout(12000)
+      });
+      if(status.required&&!status.authorized){
+        setUser(null);setSiteGate("locked");
+        return;
+      }
+      setSiteGate("unlocked");
+      await loadIdentity();
+    }catch(error){
+      setSiteGate("error");
+      setBootstrapError(error.name==="TimeoutError"
+        ?"连接超时，请检查网络后重试。"
+        :"无法检查访问权限："+error.message);
+    }finally{setLoading(false)}
+  },[loadIdentity]);
+  useEffect(()=>{void checkSiteAccess()},[checkSiteAccess]);
+  useEffect(()=>{
+    const locked=()=>{
+      setSiteGate("locked");
+      setSitePasswordInput("");
+      setUser(null);
+      setLoading(false);
+    };
+    window.addEventListener("wtox-site-locked",locked);
+    return()=>window.removeEventListener("wtox-site-locked",locked);
+  },[]);
+  async function enterSite(){
+    if(!sitePasswordInput||siteGateBusy)return;
+    setSiteGateBusy(true);setSiteGateError("");
+    try{
+      await postJson("/api/gate/login",{password:sitePasswordInput});
+      setSitePasswordInput("");
+      setSiteGate("unlocked");
+      await loadIdentity();
+    }catch(error){
+      setSiteGateError(error.message);
+    }finally{setSiteGateBusy(false)}
+  }
 
   // React reuses the existing wtox-local-<public-key> IndexedDB database and
   // the same non-extractable AES-GCM key; no history migration is necessary.
@@ -1518,8 +1568,40 @@ export default function App(){
   </div>;
 
   if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><span className="wtox-boot-ring" aria-hidden="true"/></div>;
+  if(siteGate==="locked")return <ConfigProvider theme={{
+    algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm,
+    token:{colorPrimary:"#16ac71",borderRadius:12}
+  }}>
+    <main className="wtox-auth-layout" data-theme={effectiveTheme}>
+      <section className="wtox-auth-card wt-site-gate-card" aria-label="网站访问验证">
+        <div className="wtox-auth-card-header">
+          <img src={LOGO_URL} className="wtox-auth-small-mark" alt=""/>
+          <strong>wTox</strong>
+        </div>
+        <Typography.Paragraph type="secondary" className="wtox-auth-subtitle">
+          请输入访问密码以继续。
+        </Typography.Paragraph>
+        <Form layout="vertical" className="wtox-auth-form" onFinish={enterSite}>
+          <Form.Item label="访问密码" required>
+            <Input.Password autoComplete="current-password" autoFocus
+              size="large" value={sitePasswordInput}
+              onChange={event=>setSitePasswordInput(event.target.value)}
+              placeholder="请输入访问密码" aria-label="访问密码"/>
+          </Form.Item>
+          {siteGateError&&<Typography.Paragraph type="danger"
+            role="alert" className="wt-site-gate-error">
+            {siteGateError}
+          </Typography.Paragraph>}
+          <AntButton type="primary" htmlType="submit" block size="large"
+            loading={siteGateBusy} disabled={!sitePasswordInput||siteGateBusy}>
+            继续
+          </AntButton>
+        </Form>
+      </section>
+    </main>
+  </ConfigProvider>;
   if(bootstrapError)return <div className="wtox-error-page" role="alert">
-    <p>{bootstrapError}</p><AntButton type="primary" onClick={loadIdentity}>重试</AntButton>
+    <p>{bootstrapError}</p><AntButton type="primary" onClick={checkSiteAccess}>重试</AntButton>
   </div>;
   if(!user)return <ConfigProvider theme={{
     algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm,
