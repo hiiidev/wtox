@@ -38,8 +38,8 @@ assert.equal(rows.length,1,"Failed upload remains visible for inspection");
 rows=mergeFileTimeline([committed],[pending],"B".repeat(64));
 assert.equal(rows.length,0,"Conversation isolation must remain strict");
 
-assert.match(app,/mergeFileTimeline\\(messages,pendingFiles,selected\\)/);
-assert.doesNotMatch(app,/attachmentInput\\.current/,
+assert.ok(app.includes("mergeFileTimeline(messages,pendingFiles,selected)"));
+assert.ok(!app.includes("attachmentInput.current"),
   "Old file-input ref must not abort successful native upload before image caching");
 const send=app.slice(app.indexOf("async function sendFile()"),
   app.indexOf("async function controlFile("));
@@ -50,7 +50,7 @@ assert.ok(send.indexOf("setPendingFiles(previous=>previous.filter(")>
   send.indexOf("await h.cacheImage(transfer.id,blob)"),
   "Optimistic thumbnail must not vanish before saving the encrypted image");
 assert.match(app,/Fallback|Fall back|WebKit/);
-assert.match(app,/centered=\\{isMobile\\}/);
+assert.ok(app.includes("centered={isMobile}"));
 assert.match(app,/setPendingFiles\(previous=>previous\.map\(entry=>entry\.id===localId[\s\S]*file_id:transfer\.id/);
 assert.match(app,/wt-text-context-target wt-selectable-message/);
 assert.match(app,/wt-file-context-target wt-selectable-message/);
