@@ -8,7 +8,7 @@ const css=readFileSync("frontend/src/refine.css","utf8");
 // iOS cannot be prompted on ordinary page mount, so preload registration
 // and call PushManager.subscribe synchronously on the next actual user gesture.
 assert.ok(!welcome.includes("<Modal"),"No custom onboarding modal");
-assert.ok(welcome.includes('document.addEventListener("pointerdown",onFirstGesture,true)'));
+assert.ok(welcome.includes('document.addEventListener("click",onFirstGesture,true)'));
 assert.ok(welcome.includes('document.addEventListener("keydown",onFirstGesture,true)'));
 assert.ok(welcome.includes("registration.pushManager.subscribe({"));
 assert.ok(welcome.includes('Notification.permission==="granted"'),
