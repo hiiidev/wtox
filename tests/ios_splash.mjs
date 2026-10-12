@@ -28,7 +28,7 @@ for(const [w,h,dpr] of sizes){
 }
 assert.ok(generator.includes('fill="#07C160"'),"Use requested PWA splash green");
 assert.ok(generator.includes('fill="#fff"'),"Use white logo and wordmark");
-assert.ok(generator.includes('>wTox</text>'),"Show wTox wordmark under the logo");
+assert.ok(generator.includes("WORDMARK_PATH")&&generator.includes("WORDMARK_ADVANCE"),"Render wTox as scalable vector outlines even without installed fonts");
 assert.ok(generator.includes('public/logo.svg'),"Use the supplied SVG for startup logo");
 assert.ok(js.includes('<span className="wtox-boot-ring"'),
   "React should reuse the same spinner from first HTML paint");
