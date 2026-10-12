@@ -42,10 +42,12 @@ assert.ok(server.includes('class SiteGateMiddleware(BaseHTTPMiddleware)'));
 assert.ok(server.includes('request.cookies.get(access.COOKIE_NAME)'));
 assert.ok(websocket.includes("access.gate_authorized(ws.cookies.get(access.COOKIE_NAME))"),
   "WebSocket bypasses HTTP middleware, must independently check site access");
-assert.ok(gate.includes("REMEMBER_SECONDS = 10 * 365 * 86400") &&
+assert.ok(gate.includes("REMEMBER_SECONDS = 365 * 86400") &&
   gate.includes("def issue_access_cookie(password: str)") &&
-  gate.includes('payload = f"v2.{nonce}"'),
-  "Persistent signed tokens must not use a 30-day expiry");
+  gate.includes('payload = f"v3.{nonce}"') &&
+  gate.includes("def revoke_device(device_id: str)") &&
+  gate.includes("def renew_access_cookie(cookie: str | None)"),
+  "Persistent signed tokens must be revocable, rotated and server-tracked");
 assert.ok(gate.includes('samesite')===false,
   "Cookie attributes are set only by the API handler");
 assert.ok(server.includes('samesite="strict"')&&server.includes("httponly=True"),
