@@ -1,0 +1,61 @@
+name: Cleanup obsolete merged branches (one-shot)
+on:
+  push:
+    branches: [main]
+jobs:
+  cleanup:
+    # This job executes only for the specifically marked merge of PR #22.
+    if: ${{ contains(github.event.head_commit.message, '[cleanup-merged-branches]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Remove only unchanged branches whose PR is already merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidates=(
+            '13|feat/chat-translate-google-backend|0c5ea24c5323f0a90530df47fe5f3ffd22aef215'
+            '16|feat/env-site-access-password-remember-device|9d062381dae0f61f66511634667db945fc4f9dbc'
+            '10|feat/ios-splash-chat-composer-refresh|01d93c6dd6bad6ba30faf60b7058cc526839fcea'
+            '1|feat/iphone-pwa-web-push|9d7d2534f630e5e080679acaea850d5ddeed5345'
+            '19|feat/mobile-conversation-controls-20261013|ddb215c9be7831bb9f984b30dd023f073fcf2637'
+            '12|feat/mobile-friend-qr-scanner|63d21c05f2a06731006335d3ae61a141605a994b'
+            '8|feat/pwa-notice-ios-ux-bootstrap|ca61434e0d563ea625f32fe7bb8c4761b85954ad'
+            '18|feat/sliding-tox-sessions-20261013|e4c278baac4c125b497f2990e035e3d0930eb293'
+            '2|feat/ui-loading-modal-attachments|a7146c6a84c3474a6e711dde5717727b85c34890'
+            '21|fix/active-read-and-thread-bottom-20261013|23c3f987577c6552672a2b4ab55059f9410e4dba'
+            '20|fix/attachment-bubble-and-15mb-20261013|567f9050ae3beea130e336fbc31c954786748894'
+            '6|fix/chat-optimistic-files-presence-time|88302b047942d038a5c1498985eb18f107fe5f71'
+            '3|fix/desktop-drawers-icons-scrollbars|6294e1e81c17cd69aea633e8ce2511bffef3976a'
+            '9|fix/pwa-startup-neutral-background-meta|6e26e2c140178445c89564af3cfee97943395192'
+            '11|fix/realtime-connecting-toast-timeout|003b84b5168226e64c9d5fbc0e9be8a70a8f58c2'
+            '22|fix/translation-bottom-and-quick-action-filter-20261013|CURRENT'
+            '4|refine/identity-avatar-android-pwa-settings|9e3cddc4469aeaa3bd9c2050f5f41669ee18067d'
+            '5|refine/mobile-nav-tox-download-notice-badges|2d0b02dee256e9d34d733bf79f614067f854daaf'
+            '14|refine/pwa-auto-permission-mobile-longpress-outgoing-bubbles|9b4a663130581cbae7638cb15982647e775539a2'
+            '7|refine/pwa-minimal-notification-text|36234005b16cd777eda18884f0f793ab7d552ccc'
+            '17|security/harden-uploads-auth-20261013|112eab15b6511c14f312ff8405a68aa7b21ba11a'
+            '15|style/dark-ant-message-elevation|6e0d01dfc792c4d09aa6f561d2d658e48ff79cc3'
+          )
+          for spec in "${candidates[@]}"; do
+            IFS="|" read -r number ref expected <<< "$spec"
+            if [[ "$ref" == "main" ]]; then continue; fi
+            pr_data=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number")
+            merged_at=$(jq -r ".merged_at" <<< "$pr_data")
+            pr_ref=$(jq -r ".head.ref" <<< "$pr_data")
+            pr_sha=$(jq -r ".head.sha" <<< "$pr_data")
+            if [[ "$merged_at" == "null" || "$pr_ref" != "$ref" ]]; then
+              echo "Skipping non-merged or mismatched PR #$number: $ref"; continue
+            fi
+            if [[ "$expected" == "CURRENT" ]]; then expected="$pr_sha"; fi
+            current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$ref" --jq ".object.sha" 2>/dev/null || true)
+            if [[ -z "$current" || "$current" != "$expected" || "$pr_sha" != "$expected" ]]; then
+              echo "Skipping changed/missing branch: $ref"; continue
+            fi
+            echo "Deleting verified merged branch: $ref (PR #$number)"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$ref"
+          done
