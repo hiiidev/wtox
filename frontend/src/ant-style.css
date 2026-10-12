@@ -358,3 +358,32 @@ html[data-wtox-theme="light"] .wt-settings-drawer .ant-drawer-body{
     -webkit-backdrop-filter:none;backdrop-filter:none;
   }
 }
+
+/* Ant Design message notices are rendered in a portal outside .ant-messenger.
+   Raise dark notices above the chat surface without changing their animations. */
+html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content{
+  background:linear-gradient(180deg,#303034 0%,#262629 100%)!important;
+  color:#f3f4f6!important;
+  border:1px solid rgba(255,255,255,.15)!important;
+  border-radius:13px!important;
+  box-shadow:0 14px 44px rgba(0,0,0,.48),
+             0 4px 12px rgba(0,0,0,.27),
+             inset 0 1px 0 rgba(255,255,255,.035)!important;
+  padding:11px 17px!important;
+}
+html[data-wtox-theme="dark"] .ant-message .ant-message-custom-content{
+  color:#f3f4f6!important;
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:13px;font-weight:500;line-height:1.55;
+}
+html[data-wtox-theme="dark"] .ant-message .ant-message-custom-content .anticon{
+  font-size:15px;
+}
+html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content a{
+  color:#60dca2;
+}
+@media(prefers-reduced-transparency:reduce){
+  html[data-wtox-theme="dark"] .ant-message .ant-message-notice-content{
+    background:#29292d!important;
+  }
+}
