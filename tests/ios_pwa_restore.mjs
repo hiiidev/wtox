@@ -70,7 +70,7 @@ assert.ok(app.includes('window.removeEventListener("pageshow",wake)'));
 assert.ok(app.includes("Date.now()-lastMessage.current>60000"));
 assert.ok(app.includes("if(dead||currentSocket!==ws)return;"),
   "Superseded sockets must not deliver old-account events or schedule retries");
-assert.ok(app.includes("ws.onopen=null;ws.onmessage=null;ws.onclose=null;"),
+assert.ok(app.includes("ws.onopen=null;ws.onmessage=null;ws.onerror=null;ws.onclose=null;"),
   "Unmount must silence callbacks from the old socket");
 
 // The contact snapshot is AES-GCM encrypted in the existing per-identity
