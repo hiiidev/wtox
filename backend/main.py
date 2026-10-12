@@ -14,6 +14,7 @@ from .tox_api import router as tox_router
 from .session_manager import manager
 from . import web_push
 from .push_api import router as push_router
+from .translate_api import router as translate_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -157,3 +158,4 @@ def service_worker():
 app.include_router(push_router)
 app.include_router(profile_router)
 app.include_router(tox_router)
+app.include_router(translate_router)
