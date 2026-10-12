@@ -3,7 +3,7 @@ import {Badge, Button, Card, Space, Typography} from "antd";
 import {postJson} from "./api.js";
 import {
   preparePush, savePushSubscription, disablePush,
-  isIPhoneOrIPad, isStandalone
+  isStandalone
 } from "./push_client.js";
 
 export default function PushSettings({userId}) {
@@ -36,7 +36,22 @@ export default function PushSettings({userId}) {
         if (live) setDetail(error.message);
       }
     })();
-    return () => {live = false; context.current = null;};
+    const refresh=async()=>{
+      try{
+        const registration=context.current?.registration;
+        if(!registration)return;
+        const subscription=await registration.pushManager.getSubscription();
+        if(live){
+          context.current.subscription=subscription;
+          setEnabled(!!subscription&&Notification.permission==="granted");
+        }
+      }catch{}
+    };
+    window.addEventListener("wtox-push-changed",refresh);
+    return () => {
+      live = false;context.current = null;
+      window.removeEventListener("wtox-push-changed",refresh);
+    };
   }, [userId]);
 
   async function enable() {
@@ -69,7 +84,7 @@ export default function PushSettings({userId}) {
       await disablePush(context.current.registration);
       context.current.subscription = null;
       setEnabled(false);
-      setDetail("离线推送已关闭");
+      setDetail("");
     } catch (error) {
       setDetail("关闭失败：" + error.message);
     } finally {
@@ -98,8 +113,7 @@ export default function PushSettings({userId}) {
     extra={<Badge status={enabled?"success":ready?"default":"warning"}
       text={enabled?"已启用":ready?"未启用":"未就绪"}/>}>
     <Typography.Paragraph type="secondary">
-      {isIPhoneOrIPad() ? "iPhone / iPad 已在主屏幕模式运行。" : "已安装的 PWA 可在此启用通知。"}
-      VPS 上的 Toxcore 收到新消息或好友请求时，可以在锁屏或关闭应用后发送提醒。
+      开启后，即使离开应用或锁定屏幕，也能收到新消息和好友请求提醒。
       通知不会包含聊天正文。
     </Typography.Paragraph>
     <Space wrap>
