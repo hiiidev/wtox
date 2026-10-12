@@ -198,7 +198,6 @@ export default function App(){
   const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
-  const attachmentInput=useRef(null);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),lastMessage=useRef(0);
   useEffect(()=>{
@@ -1514,20 +1513,27 @@ export default function App(){
         </div>
         <div className="ant-compose-area">
           <div className="wt-compose-tools">
-            <Tooltip title="添加附件">
-              <AntButton type="text" className="wt-compose-attach-button"
-                icon={<PaperClipOutlined/>} aria-label="添加附件"
-                disabled={!selected||!online(selectedFriend)}
-                onClick={()=>attachmentInput.current?.click()}/>
-            </Tooltip>
+            <Upload showUploadList={false} maxCount={1} className="wt-chat-file-upload"
+              disabled={!selected||!online(selectedFriend)}
+              beforeUpload={file=>{
+                if(file.size<1||file.size>5*1024*1024){
+                  alert("附件大小需要在 1 字节至 5 MiB 之间","error");
+                  return Upload.LIST_IGNORE;
+                }
+                setUploadFile(file);
+                return false;
+              }}>
+              <Tooltip title="添加附件">
+                <AntButton type="text" className="wt-compose-attach-button"
+                  icon={<PaperClipOutlined/>} aria-label="添加附件"
+                  disabled={!selected||!online(selectedFriend)}/>
+              </Tooltip>
+            </Upload>
             <p className="ant-compose-status">{!selected?"请先选择好友":
               !historyReady?"本地加密历史尚未就绪":
               !online(selectedFriend)?"对方离线":
               sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
           </div>
-          <input type="file" hidden ref={attachmentInput}
-            aria-label="选择要发送的附件"
-            onChange={e=>setUploadFile(e.target.files?.[0]||null)}/>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
             header={<Sender.Header title="准备发送附件" open={!!uploadFile}

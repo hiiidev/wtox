@@ -979,3 +979,13 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
   .wtox-auth-card-bottom{margin-top:32px}
   .wtox-auth-form .ant-input-affix-wrapper input{font-size:16px!important}
 }
+
+/* Ant Design Upload owns the chat attachment file picker. */
+.ant-messenger[data-theme] .wt-compose-tools .wt-chat-file-upload.ant-upload-wrapper,
+.ant-messenger[data-theme] .wt-compose-tools .wt-chat-file-upload .ant-upload-select{
+  display:inline-flex!important;align-items:center;justify-content:center;
+  width:auto!important;max-width:fit-content!important;flex:none!important;
+}
+.ant-messenger[data-theme] .wt-compose-tools .wt-chat-file-upload .ant-upload{
+  display:inline-flex;align-items:center;justify-content:center;
+}
