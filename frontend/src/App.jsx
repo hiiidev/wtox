@@ -15,18 +15,20 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
+import {chatTime} from "./chat_time.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
-const transferText={offered:"等待接受",waiting:"等待对方接受",receiving:"接收中",sending:"发送中",
+const transferText={uploading:"正在上传",offered:"等待接受",waiting:"等待对方接受",receiving:"接收中",sending:"发送中",
   completed:"已完成",failed:"失败",cancelled:"已取消"};
 function stateText(record){
   if(record.delivery_status==="delivered"||record.delivery_status==="read")return "已送达";
   if(record.delivery_status==="failed")return "发送失败";
   if(record.delivery_status==="uncertain")return "发送结果待确认";
-  if(["queued","queued_local"].includes(record.delivery_status))return "待发送";
+  if(record.delivery_status==="queued_local")return "正在提交";
+  if(record.delivery_status==="queued")return "等待发送";
   if(["dispatching","dispatching_local"].includes(record.delivery_status))return "正在发送";
   if(record.message_id===undefined&&!record.outbox_id&&!record.delivery_status)return "历史消息";
   return "已发送";
@@ -198,6 +200,8 @@ export default function App(){
   const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
+  const [pendingFiles,setPendingFiles]=useState([]);
+  const [imageCacheRevision,setImageCacheRevision]=useState(0);
   const history=useRef(null),socket=useRef(null),selectedRef=useRef(null),sendBusy=useRef(false);
   const drafts=useRef(new Map()),lastMessage=useRef(0);
   // Persist a random color for each self identity before the first visible
@@ -726,8 +730,9 @@ export default function App(){
               </Typography.Text>}
             </div>
   ):null;
-  const thread=useMemo(()=>messages.filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
-    .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages]);
+  const thread=useMemo(()=>[...messages,...pendingFiles]
+    .filter(e=>e.public_key===selected&&["message","file"].includes(e.type))
+    .sort((a,b)=>a.at-b.at).slice(-250),[selected,messages,pendingFiles]);
   const scrollToLatest=useCallback(()=>{
     const element=threadEl.current;
     followLatest.current=true;
@@ -858,7 +863,7 @@ export default function App(){
       }
       await postJson("/api/logout");
       history.current?.close();history.current=null;
-      drafts.current.clear();setUser(null);setMessages([]);setFriends([]);
+      drafts.current.clear();setUser(null);setMessages([]);setPendingFiles([]);setFriends([]);
       setSelected(null);setModal("");setHistoryReady(false);
     }catch(error){alert(error.message)}
   }
@@ -1396,15 +1401,19 @@ export default function App(){
             <AntButton type="text" className="wt-peer-avatar-button"
               aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
               onClick={()=>setPeerDetailsOpen(true)}>
-              <Avatar size={40} gap={4} className="ant-chat-avatar"
-                style={{backgroundColor:avatarColor(selectedFriend?.public_key||user.public_key)}}>
-                {selectedFriend?avatarLabel(selectedFriend.name,selectedFriend.public_key):"✦"}
-              </Avatar>
+              <Badge dot color={peerStatusColor==="success"?"#16b977":
+                  peerStatusColor==="warning"?"#faad14":
+                  peerStatusColor==="error"?"#ff4d4f":"#929399"}
+                offset={[-2,3]} className="wt-chat-presence-badge">
+                <Avatar size={40} gap={4} className="ant-chat-avatar"
+                  style={{backgroundColor:avatarColor(selectedFriend?.public_key||user.public_key)}}>
+                  {selectedFriend?avatarLabel(selectedFriend.name,selectedFriend.public_key):"✦"}
+                </Avatar>
+              </Badge>
             </AntButton>
             <div className="ant-peer-title">
               <div className="wt-peer-name-row">
                 <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
-                {selectedFriend&&<Badge status={peerStatusColor} text={peerStatus}/>}
               </div>
               <small title={selectedFriend?.status_message||""}>
                 {selectedFriend?.status_message?.trim()|| (selectedFriend?"暂无状态消息":"wTox")}
@@ -1469,7 +1478,8 @@ export default function App(){
                 <AttachmentBubble file={item}
                   accept={id=>controlFile(id,"accept")}
                   reject={id=>controlFile(id,"reject")}
-                  download={downloadFile} historyHandle={history.current}/>
+                  download={downloadFile} historyHandle={history.current}
+                  imageCacheRevision={imageCacheRevision}/>
               </div>
               </Dropdown>
             : <Dropdown key={item.id} trigger={["contextMenu"]} menu={messageMenu(item)}>
@@ -1485,7 +1495,7 @@ export default function App(){
                   placement={item.direction==="outgoing"?"end":"start"}
                   shape="round" variant="filled"
                   footer={<span className="ant-message-status">
-                    {new Date(item.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}
+                    {chatTime(item.at)}
                     {item.direction==="outgoing"?" · "+stateText(item):""}
                   </span>}
                   footerPlacement={item.direction==="outgoing"?"outer-end":"outer-start"}/>
@@ -1518,7 +1528,7 @@ export default function App(){
             <p className="ant-compose-status">{!selected?"请先选择好友":
               !historyReady?"本地加密历史尚未就绪":
               !online(selectedFriend)?"对方离线":
-              sending?"正在发送请求":"Enter 发送 · Shift + Enter 换行"}</p>
+              "Enter 发送 · Shift + Enter 换行"}</p>
           </div>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
