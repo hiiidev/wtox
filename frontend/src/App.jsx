@@ -214,6 +214,7 @@ export default function App(){
   const [socketState,setSocketState]=useState("connecting");
   const [slowReconnect,setSlowReconnect]=useState(false);
   const activeIdentity=useRef(null),friendsSyncedIdentity=useRef(null);
+  const restoredIdentity=useRef(null);
   const friendSnapshotWrite=useRef({owner:null,signature:null,at:0});
   activeIdentity.current=user?.public_key||null;
   useEffect(()=>{
@@ -942,10 +943,22 @@ export default function App(){
     }
     try{localStorage.setItem("wtox-seen-"+user.public_key,JSON.stringify(seen))}catch{}
   },[user?.public_key,seen]);
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     if(!user?.public_key)return;
     let dead=false;
     const owner=user.public_key;
+    if(restoredIdentity.current&&restoredIdentity.current!==owner){
+      // Cross-identity isolation takes priority over avoiding a reconnect
+      // flicker. Never show another Tox account's names or decrypted messages.
+      setFriends([]);
+      setMessages([]);
+      setSelected(null);
+      selectedRef.current=null;
+      setMobileChat(false);
+      setDraft("");
+      friendSnapshotWrite.current={owner:null,signature:null,at:0};
+    }
+    restoredIdentity.current=owner;
     const previous=history.current;
     // A normal mobile history navigation must not reset this identity. On a
     // genuinely different identity, close the old DB without clearing the
