@@ -1878,10 +1878,13 @@ export default function App(){
                   }
                 }}
                 onClickCapture={event=>messageSelectionClick(event,item.id)}>
-                <Bubble className="wt-conversation-bubble" content={String(item.text||"")}
-                  placement={item.direction==="outgoing"?"end":"start"}
-                  shape="round" variant="filled"
-                  footer={<div className={"wt-bubble-footer-stack "+
+                <div className={"wt-message-main-stack "+
+                  (item.direction==="outgoing"?"out":"in")}>
+                  <Bubble className="wt-conversation-bubble"
+                    content={String(item.text||"")}
+                    placement={item.direction==="outgoing"?"end":"start"}
+                    shape="round" variant="filled"/>
+                  <div className={"wt-bubble-footer-stack "+
                     (item.direction==="outgoing"?"out":"in")}>
                     <div className="wt-bubble-meta-row">
                       <span className="ant-message-status">
@@ -1921,8 +1924,8 @@ export default function App(){
                             }}>重试</button>}
                       </div>;
                     })()}
-                  </div>}
-                  footerPlacement={item.direction==="outgoing"?"outer-end":"outer-start"}/>
+                  </div>
+                </div>
               </div>
               </Dropdown>)}
             </div>
