@@ -148,7 +148,7 @@ async def login_with_savedata(request: Request, response: Response):
         _UPLOAD_SLOTS.release()
     if len(data) < password_size:
         raise HTTPException(400, "密码数据不完整")
-    backup = data[password_size:]
+    backup = bytes(data[password_size:])
     if len(backup) > MAX_SAVEDATA + (80 if is_encrypted(backup) else 0):
         raise HTTPException(413, "配置文件超过 8 MiB")
     try:
