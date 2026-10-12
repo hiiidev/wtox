@@ -23,7 +23,9 @@ const main=readFileSync("backend/main.py","utf8");
 assert.ok(app.includes("key:\"translate\"") &&
   app.includes('if(key==="translate")void translateMessage(item)'),
   "Right-click text menu should translate, not attachments");
-assert.ok(app.includes('aria-label="翻译消息"'),"On-screen touch action required");
+assert.ok(app.includes("title={action.label} aria-label={action.label}"),"Translation action labels must reflect current state");
+assert.ok(app.includes("translationActionFor(item).label"),"Right-click menu must reflect translation state");
+assert.doesNotMatch(app,/翻译 \/ 收起译文/,"Avoid two contradictory actions in one label");
 assert.ok(app.includes("wt-bubble-footer-stack") &&
   app.includes("wt-translation-result"),
   "Translate below original bubble, preserving original text and time");
