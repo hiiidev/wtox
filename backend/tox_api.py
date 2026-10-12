@@ -138,7 +138,7 @@ def accept_pending_request(request_id: str, request: Request,
         raise HTTPException(400,str(exc)) from exc
     except ToxActionError as exc:
         raise HTTPException(409,str(exc)) from exc
-    store.ack_pending(uid,[request_id])
+    store.ack_pending(uid,[request_id],resolve_friend_requests=True)
     return {"ok": True, "public_key":key}
 
 
@@ -150,7 +150,7 @@ def reject_pending_request(request_id: str, request: Request,
                item["event"].get("type")=="friend_request"
                for item in store.get_pending(uid)):
         raise HTTPException(404,"好友请求不存在或已过期")
-    store.ack_pending(uid,[request_id])
+    store.ack_pending(uid,[request_id],resolve_friend_requests=True)
     return {"ok": True}
 
 
