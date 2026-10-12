@@ -176,7 +176,7 @@ class ChatApiTests(unittest.TestCase):
         logs=" ".join(output.output)
         self.assertIn("wTox /ws upgrade reached application",logs)
         self.assertIn("wTox /ws upgrade accepted",logs)
-        self.assertNotIn(self.session_token,logs)
+        self.assertNotIn(self.client.cookies.get("wtox_tox_session"),logs)
 
     def test_websocket_denials_log_safe_reasons(self):
         # Browsers only report a generic websocket error when HTTP upgrade
