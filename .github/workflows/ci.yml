@@ -69,11 +69,21 @@ jobs:
           done
       - run: cp .env.example .env && docker compose config -q
   native-smoke:
-    # Run on demand, and once for commits explicitly marked [native-check].
-    # This exercises real c-toxcore and ToxEncryptSave in Docker.
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[native-check]')
+    # Mandatory on PRs to verify native Toxcore and encrypted savedata.
+    timeout-minutes: 35
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[native-check]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t wtox-native-smoke .
 
+  caddy-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Caddy body cap and browser protection headers
+        run: |
+          docker run --rm -e SITE_DOMAIN=chat.example.test \
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
