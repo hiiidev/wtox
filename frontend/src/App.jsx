@@ -1804,24 +1804,13 @@ export default function App(){
         如需以后恢复身份，请先导出并保存 .tox 备份。
       </Typography.Paragraph>
       <Space orientation="vertical" size="middle" style={{width:"100%"}}>
-        <Popconfirm
-          title="确认永久删除服务器身份？"
-          description="服务器数据会被删除，请确认已备份 .tox 文件。"
-          okText="确认删除并退出" okButtonProps={{danger:true}}
-          cancelText="取消" onConfirm={()=>logout(false)}>
-          <AntButton block loading={logoutBusy}>
-            保留本地数据并退出
-          </AntButton>
-        </Popconfirm>
-        <Popconfirm
-          title="确认永久删除服务器及本地数据？"
-          description="服务器身份、好友、待发送消息及附件均将清除。"
-          okText="永久删除并退出" okButtonProps={{danger:true}}
-          cancelText="取消" onConfirm={()=>logout(true)}>
-          <AntButton block danger type="primary" loading={logoutBusy}>
-            清除当前身份本地数据并退出
-          </AntButton>
-        </Popconfirm>
+        <AntButton block loading={logoutBusy} onClick={()=>logout(false)}>
+          保留本地数据并退出
+        </AntButton>
+        <AntButton block danger type="primary" loading={logoutBusy}
+          onClick={()=>logout(true)}>
+          清除当前身份本地数据并退出
+        </AntButton>
         <Typography.Text type="secondary" className="wt-settings-footnote">
           清除本地数据会永久删除当前身份在此浏览器中的加密消息、
           图片缓存、已读记录、头像颜色与其他身份关联数据。
