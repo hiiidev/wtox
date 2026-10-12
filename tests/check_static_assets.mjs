@@ -14,4 +14,17 @@ for(const name of referenced){
 }
 const icon=join(root,"logo.svg");
 assert.ok(existsSync(icon),"Generated logo favicon must be present in Vite output");
-console.log("Vite HTML JS/CSS URLs and wtox favicon all exist");
+
+const {readFileSync: read}=await import("node:fs");
+for (const size of [180, 192, 512, 1024]) {
+  const file=join(root,"icons",`icon-${size}.png`);
+  assert.ok(existsSync(file),`PWA PNG ${size}x${size} missing from Vite output`);
+  const data=read(file);
+  assert.equal(data.subarray(0,8).toString("hex"),"89504e470d0a1a0a","Invalid PNG signature");
+  assert.equal(data.readUInt32BE(16),size,"PNG width mismatch");
+  assert.equal(data.readUInt32BE(20),size,"PNG height mismatch");
+}
+assert.match(html,/\\/logo\\.svg\\?t=[a-z0-9]+/,"Logo query must change on every Vite build");
+const backend=readFileSync("backend/main.py","utf8");
+assert.match(backend,/app\\.mount\\("\\/icons"/,"Backend must serve generated PWA PNGs");
+console.log("Vite JS/CSS, versioned SVG and all PWA PNG icons exist");
