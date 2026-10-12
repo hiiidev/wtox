@@ -726,16 +726,25 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
   display:flex;gap:8px;align-items:center;min-height:42px;
   padding:4px 0;
 }
+/* Icon-only attachment affordance; keep a 40px touch target without a tile. */
 .ant-messenger[data-theme] .wt-compose-attach-button.ant-btn{
-  flex:0 0 40px;width:40px;height:40px;
-  border:1px solid var(--wt-border)!important;
-  border-radius:11px!important;
+  flex:0 0 40px;width:40px;min-width:40px;height:40px;
+  padding:0!important;border:0!important;border-radius:0!important;
+  box-shadow:none!important;
   display:inline-flex;align-items:center;justify-content:center;
-  color:var(--wt-text)!important;background:var(--wt-panel)!important;
-  font-size:19px;
+  color:var(--wt-muted)!important;background:transparent!important;
+  font-size:21px;
 }
-.ant-messenger[data-theme] .wt-compose-attach-button.ant-btn:hover:not(:disabled){
-  background:var(--wt-hover)!important;color:var(--wt-primary)!important;
+.ant-messenger[data-theme] .wt-compose-attach-button.ant-btn:hover:not(:disabled),
+.ant-messenger[data-theme] .wt-compose-attach-button.ant-btn:active:not(:disabled){
+  background:transparent!important;color:var(--wt-primary)!important;
+  border:0!important;box-shadow:none!important;
+}
+.ant-messenger[data-theme] .wt-compose-attach-button.ant-btn:focus-visible{
+  outline:2px solid var(--wt-primary)!important;outline-offset:2px!important;
+}
+.ant-messenger[data-theme] .wt-compose-attach-button.ant-btn:disabled{
+  background:transparent!important;border:0!important;box-shadow:none!important;
 }
 .ant-messenger[data-theme] .wt-compose-tools .ant-compose-status{
   padding:0!important;margin:0!important;
