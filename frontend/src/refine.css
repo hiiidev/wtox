@@ -1637,3 +1637,21 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
   display:block;font-size:12px;line-height:1.6;
   color:var(--wt-muted)!important;
 }
+
+/* The WebSocket reconnect affordance lives between list title and actions.
+   A reconnect never masks existing friends or hides cached conversations. */
+.ant-messenger[data-theme] .wt-connection-indicator{
+  display:inline-flex;align-items:center;justify-content:center;
+  gap:5px;flex:0 0 auto;min-width:16px;margin-inline:auto 4px;
+  color:var(--wt-muted);font-size:15px;line-height:1;
+  pointer-events:none;white-space:nowrap;
+}
+.ant-messenger[data-theme] .wt-connection-indicator .wt-reconnect-label{
+  font-size:11px;line-height:1.3;font-weight:400;
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wt-connection-indicator{margin-inline:auto 2px;}
+  .ant-messenger[data-theme] .wt-connection-indicator .wt-reconnect-label{
+    max-width:60px;overflow:hidden;text-overflow:ellipsis;
+  }
+}
