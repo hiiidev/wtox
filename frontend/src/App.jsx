@@ -185,7 +185,6 @@ export default function App(){
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
   const [section,setSection]=useState("chats");
   const [friendRequests,setFriendRequests]=useState([]);
-  const [friendMessageApi,friendMessageContext]=message.useMessage({top:24,maxCount:2});
   const [friendNotificationApi,friendNotificationContext]=notification.useNotification({
     placement:"topRight",top:22,maxCount:2
   });
@@ -194,6 +193,11 @@ export default function App(){
   const notificationPromptShown=useRef(false);
   const [peerDetailsOpen,setPeerDetailsOpen]=useState(false);
   const [deleteFriendOpen,setDeleteFriendOpen]=useState(false);
+  const [conversationDeletePeer,setConversationDeletePeer]=useState(null);
+  const [deletingConversation,setDeletingConversation]=useState(false);
+  const conversationPress=useRef(null);
+  const conversationPressTimer=useRef(null);
+  const suppressConversationClick=useRef({peer:null,until:0});
   const [removingFriend,setRemovingFriend]=useState(false);
   const [seen,setSeen]=useState({});
   const seenHydration=useRef(null);
@@ -582,7 +586,6 @@ export default function App(){
   },[]);
   useEffect(()=>{
     if(!user?.public_key||!friendRequests.length){
-      friendMessageApi.destroy("friend-request-notice");
       friendNotificationApi.destroy("friend-request-notice");
       dismissedFriendIds.current=null;
       return;
@@ -592,7 +595,6 @@ export default function App(){
     const view=()=>{
       dismissedFriendIds.current=signature;
       friendNotificationApi.destroy("friend-request-notice");
-      friendMessageApi.destroy("friend-request-notice");
       setModal("requests");
     };
     if(window.matchMedia("(min-width:768px)").matches){
@@ -603,20 +605,22 @@ export default function App(){
         btn:<AntButton type="primary" size="small" onClick={view}>查看</AntButton>,
         onClose:()=>{dismissedFriendIds.current=signature;}
       });
-    }else{
-      friendMessageApi.open({
-        key:"friend-request-notice",type:"info",duration:0,
-        className:"wt-friend-request-message",
-        content:<span className="wt-request-message-content">
-          <span>收到 {friendRequests.length} 条好友请求</span>
-          <AntButton type="link" size="small" onClick={view}>查看</AntButton>
-          <AntButton type="text" size="small" aria-label="关闭好友请求提示"
-            onClick={()=>{dismissedFriendIds.current=signature;
-              friendMessageApi.destroy("friend-request-notice")}}>关闭</AntButton>
-        </span>
-      });
-    }
-  },[user?.public_key,friendRequests,friendMessageApi,friendNotificationApi]);
+    } // On mobile the persistent in-page request badge replaces AntD Message.
+  },[user?.public_key,friendRequests,friendNotificationApi]);
+  // Foreground PWA push is forwarded from the service worker to the
+  // existing encrypted inbox/requests UI; the worker skips OS notifications.
+  useEffect(()=>{
+    if(!("serviceWorker" in navigator)||!user?.public_key)return;
+    const foreground=event=>{
+      const data=event.data;
+      if(data?.type!=="wtox-foreground-push")return;
+      if(data.kind==="friend_request")refreshFriendRequests().catch(()=>{});
+      // Message payloads contain no plaintext; the live websocket and
+      // encrypted inbox polling already update unread counts inside the app.
+    };
+    navigator.serviceWorker.addEventListener("message",foreground);
+    return()=>navigator.serviceWorker.removeEventListener("message",foreground);
+  },[user?.public_key,refreshFriendRequests]);
   const refreshNetwork=useCallback(async()=>{
     const data=await getJson("/api/network");
     setNetwork(data.status??-1);
@@ -1087,6 +1091,7 @@ export default function App(){
   const unreadFor=useCallback(peer=>unreadByPeer.get(peer)||0,[unreadByPeer]);
   const totalUnread=useMemo(()=>totalUnreadForFriends(unreadByPeer,friends),
     [unreadByPeer,friends]);
+  const otherChatsUnread=Math.max(0,totalUnread-unreadFor(selected));
   const chatNavLabel=totalUnread>0?`聊天，${totalUnread} 条未读消息`:"聊天";
 
   // The extra in-app History entry allows native iOS back-swipe and the
@@ -1129,6 +1134,45 @@ export default function App(){
     const touch=event.changedTouches?.[0];
     if(origin&&touch&&touch.clientX-origin.x>90 &&
        Math.abs(touch.clientY-origin.y)<70)returnFromMobileChat();
+  }
+  function cancelConversationPress(){
+    if(conversationPressTimer.current)clearTimeout(conversationPressTimer.current);
+    conversationPressTimer.current=null;
+    conversationPress.current=null;
+  }
+  function startConversationPress(peer,event){
+    cancelConversationPress();
+    if(section!=="chats"||!historyReady||deletingConversation||event.button!==0)return;
+    conversationPress.current={peer,x:event.clientX,y:event.clientY};
+    conversationPressTimer.current=setTimeout(()=>{
+      suppressConversationClick.current={peer,until:Date.now()+1000};
+      setConversationDeletePeer(peer);
+      cancelConversationPress();
+    },550);
+  }
+  function moveConversationPress(event){
+    const start=conversationPress.current;
+    if(start&&(Math.abs(event.clientX-start.x)>12||
+               Math.abs(event.clientY-start.y)>12))cancelConversationPress();
+  }
+  useEffect(()=>()=>cancelConversationPress(),[]);
+  async function deleteConversationHistory(){
+    const peer=conversationDeletePeer;
+    const h=history.current;
+    if(!peer||!h?.ready()||deletingConversation)return;
+    setDeletingConversation(true);
+    try{
+      const removed=await h.deleteConversation(peer);
+      setMessages(previous=>previous.filter(item=>item.public_key!==peer));
+      setPendingFiles(previous=>previous.filter(item=>item.public_key!==peer));
+      setSelectedMessageIds(new Set());
+      setConversationDeletePeer(null);
+      await refreshHistory(h);
+      alert(`已删除当前浏览器中 ${removed} 条聊天记录`,"success");
+    }catch(error){
+      await refreshHistory(h).catch(()=>{});
+      alert("删除聊天记录失败："+error.message,"error");
+    }finally{setDeletingConversation(false)}
   }
   function selectFriend(key){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
@@ -1714,7 +1758,6 @@ export default function App(){
   return <ConfigProvider theme={{
     algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
   }}>
-  {friendMessageContext}
   {friendNotificationContext}
   {uiMessageContext}
   <PwaPushWelcome userId={user?.public_key}/>
@@ -1796,6 +1839,11 @@ export default function App(){
               onClick={()=>setModal("add")}/>
           </div>
         </div>
+        {friendRequests.length>0&&<button type="button"
+          className="wt-mobile-request-banner" onClick={()=>setModal("requests")}
+          aria-label={`查看 ${friendRequests.length} 条好友请求`}>
+          <UserAddOutlined/> 收到 {friendRequests.length} 条好友请求，点击查看
+        </button>}
         <div className="wechat-search">
           <Input allowClear value={filter} placeholder="搜索"
             prefix={<span className="wechat-search-icon" aria-hidden="true">
@@ -1825,19 +1873,41 @@ export default function App(){
             const unread=unreadFor(friend.public_key);
             return <button type="button" key={friend.public_key}
               className={"wechat-conversation "+(section==="chats"&&selected===friend.public_key?"is-selected":"")}
-              onClick={()=>selectFriend(friend.public_key)}>
-              <Avatar size={45} shape="square" gap={4} className="wechat-contact-avatar"
-                style={{backgroundColor:avatarColor(friend.public_key)}}>
-                {avatarLabel(friend.name,friend.public_key)}
-              </Avatar>
+              aria-label={`${friend.name||"Tox 好友"}，长按可删除本地聊天记录`}
+              onPointerDown={event=>startConversationPress(friend.public_key,event)}
+              onPointerMove={moveConversationPress}
+              onPointerUp={cancelConversationPress}
+              onPointerLeave={cancelConversationPress}
+              onPointerCancel={cancelConversationPress}
+              onContextMenu={event=>{
+                if(section==="chats"&&historyReady){
+                  event.preventDefault();
+                  suppressConversationClick.current={peer:friend.public_key,until:Date.now()+1000};
+                  setConversationDeletePeer(friend.public_key);
+                }
+              }}
+              onClick={event=>{
+                if(suppressConversationClick.current.peer===friend.public_key&&
+                   Date.now()<suppressConversationClick.current.until){
+                  event.preventDefault();return;
+                }
+                selectFriend(friend.public_key);
+              }}>
+              <span className="wt-conversation-avatar-wrap">
+                <Avatar size={45} shape="square" gap={4} className="wechat-contact-avatar"
+                  style={{backgroundColor:avatarColor(friend.public_key)}}>
+                  {avatarLabel(friend.name,friend.public_key)}
+                </Avatar>
+                <i aria-label={online(friend)?"在线":"离线"}
+                  className={"wechat-presence "+(online(friend)?"online":"")}/>
+              </span>
               <span className="wechat-conversation-text">
                 <span className="wechat-conversation-name">{friend.name||"Tox 好友 "+shortKey(friend.public_key)}</span>
                 <span className="wechat-conversation-preview">{preview}</span>
               </span>
               <span className="wechat-conversation-side">
                 <time>{clock}</time>
-                {unread>0?<span className="wechat-unread">{unread>99?"99+":unread}</span>
-                  :<i className={"wechat-presence "+(online(friend)?"online":"")} />}
+                {unread>0&&<span className="wechat-unread">{unread>99?"99+":unread}</span>}
               </span>
             </button>;
           })}
@@ -1892,8 +1962,12 @@ export default function App(){
         onTouchCancel={()=>{swipeStart.current=null}}>
         {selected&&<div className="ant-chat-toolbar">
           <div className="ant-chat-identity">
-            <AntButton className="ant-mobile-back" aria-label="返回联系人"
-              icon={<ArrowLeftOutlined/>} onClick={returnFromMobileChat}/>
+            <Badge count={otherChatsUnread} overflowCount={99}
+              className="wt-mobile-back-badge" size="small">
+              <AntButton className="ant-mobile-back"
+                aria-label={otherChatsUnread?`返回聊天，其他会话有 ${otherChatsUnread} 条未读消息`:"返回联系人"}
+                icon={<ArrowLeftOutlined/>} onClick={returnFromMobileChat}/>
+            </Badge>
             <AntButton type="text" className="wt-peer-avatar-button"
               aria-label="查看好友 Tox 资料" disabled={!selectedFriend}
               onClick={()=>setPeerDetailsOpen(true)}>
@@ -2143,6 +2217,21 @@ export default function App(){
       <Typography.Paragraph>确定删除这条聊天记录吗？</Typography.Paragraph>
       <Typography.Text type="secondary">
         只删除当前浏览器中的记录，不会撤回对方已收到的消息，也不会取消待发队列。
+      </Typography.Text>
+    </AntModal>
+
+    <AntModal open={!!conversationDeletePeer} title="删除聊天记录"
+      onCancel={()=>{if(!deletingConversation)setConversationDeletePeer(null)}}
+      onOk={deleteConversationHistory} okText="删除记录" cancelText="取消"
+      okButtonProps={{danger:true,loading:deletingConversation}}
+      cancelButtonProps={{disabled:deletingConversation}}
+      closable={!deletingConversation} maskClosable={!deletingConversation}>
+      <Typography.Paragraph>
+        确定清除与「{friends.find(item=>item.public_key===conversationDeletePeer)?.name||"该好友"}」的全部聊天记录吗？
+      </Typography.Paragraph>
+      <Typography.Text type="secondary">
+        仅删除当前浏览器中该好友的加密记录与图片缓存，不会删除好友、
+        撤回对方消息或取消服务器待发送队列。此操作无法恢复。
       </Typography.Text>
     </AntModal>
 
