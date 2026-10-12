@@ -119,10 +119,10 @@ assert.match(refined,/scrollbar-color:var\(--wt-scroll-hover\)/);
 assert.match(refined,/\.wt-chat-more-button\.ant-btn/);
 
 
-assert.match(app,/message\.useMessage\(\{top:24,maxCount:2\}\)/);
+assert.doesNotMatch(app,/friendMessageApi\.open\(/);\nassert.match(app,/className="wt-mobile-request-banner"/);
 assert.match(app,/duration:0/);
 assert.match(app,/dismissedFriendIds\.current=signature/);
-assert.match(app,/aria-label="关闭好友请求提示"/);
+assert.match(app,/friendRequests\.length>0&&<button type="button"/);
 assert.match(app,/color="#ef4444"/);
 assert.match(app,/kind="chats"/);
 assert.match(app,/kind="contacts"/);
