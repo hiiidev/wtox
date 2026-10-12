@@ -1573,3 +1573,67 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     overscroll-behavior:contain;
   }
 }
+
+/* Mobile long presses are app gestures. Disable native text selection / iOS
+   callouts only on action surfaces; text inputs and selectable profile IDs
+   remain untouched. Scrolling a contact list still works vertically. */
+@media(max-width:767px){
+  .ant-messenger .wechat-conversation,
+  .ant-messenger .wechat-conversation *,
+  .ant-messenger .wt-selectable-message,
+  .ant-messenger .wt-selectable-message *{
+    -webkit-user-select:none!important;
+    user-select:none!important;
+    -webkit-touch-callout:none!important;
+    -webkit-user-drag:none;
+  }
+  .ant-messenger .wechat-conversation{
+    touch-action:pan-y;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .ant-messenger .wt-selectable-message{touch-action:pan-y;}
+}
+
+/* Modal is portalled into document.body rather than the chat shell. Force
+   a true viewport-centered layout, not AntD's default top-offset placement.
+   Never override inline display:none on a closed modal. */
+@media(max-width:767px){
+  .ant-modal-root .ant-modal-wrap.ant-modal-centered{
+    display:flex;
+    align-items:center!important;
+    justify-content:center!important;
+    width:100%;height:100dvh;
+    padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom);
+    box-sizing:border-box;
+  }
+  .ant-modal-root .ant-modal-wrap.ant-modal-centered::before{display:none!important;}
+  .ant-modal-root .ant-modal-wrap.ant-modal-centered>.ant-modal{
+    top:auto!important;
+    margin:0 auto!important;
+    padding-bottom:0!important;
+    width:min(480px,100%)!important;
+    max-width:100%!important;
+    max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .ant-modal-root .ant-modal-wrap.ant-modal-centered .ant-modal-content{
+    max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 8px);
+    overflow:auto;
+    overscroll-behavior:contain;
+  }
+}
+
+/* The attachment send form is a real AntD Modal portalled to <body>. */
+.wt-attachment-modal .wt-send-file-preview{
+  width:100%;min-width:0;padding:2px 0 8px;
+  align-items:stretch;
+}
+.wt-attachment-modal .wt-send-file-preview .ant-x-file-card{
+  max-width:100%;
+}
+.wt-attachment-modal .wt-send-file-preview .ant-typography{
+  font-size:14px;
+}
+.wt-peer-last-online{
+  display:block;font-size:12px;line-height:1.6;
+  color:var(--wt-muted)!important;
+}

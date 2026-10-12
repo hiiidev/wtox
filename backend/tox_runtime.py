@@ -19,6 +19,7 @@ from .tox_message import decode_tox_message
 
 U8 = C.c_uint8
 U32 = C.c_uint32
+U64 = C.c_uint64
 P = C.c_void_p
 IP = C.POINTER(U8)
 ERR = C.POINTER(C.c_int)
@@ -148,6 +149,7 @@ class ToxSession:
         self.friend_status_message = bind("tox_friend_get_status_message",
                                           C.c_bool, P, U32, IP, ERR)
         self.friend_user_status = bind("tox_friend_get_status", C.c_int, P, U32, ERR)
+        self.friend_last_online = bind("tox_friend_get_last_online", U64, P, U32, ERR)
         self.get_name_size = bind("tox_self_get_name_size", C.c_size_t, P)
         self.get_name = bind("tox_self_get_name", None, P, IP)
         self.set_name_native = bind("tox_self_set_name", C.c_bool, P, IP, C.c_size_t, ERR)
@@ -346,9 +348,18 @@ class ToxSession:
                                                           C.byref(error)))
                 if error.value != 0 or user_status not in (0,1,2):
                     user_status = 0
+                # Toxcore exposes the last Unix time at which this friend
+                # was online (not the date the friend was added). Zero means
+                # no known online time, and native errors must not fabricate it.
+                error.value = 0
+                last_online = int(self.friend_last_online(
+                    self.tox, number, C.byref(error)))
+                if error.value != 0 or last_online <= 0:
+                    last_online = None
                 friends.append({"public_key": key, "name": name,
                                 "status": status, "status_message": status_message,
-                                "user_status": user_status})
+                                "user_status": user_status,
+                                "last_online": last_online})
             return friends
 
     def self_profile(self) -> dict:

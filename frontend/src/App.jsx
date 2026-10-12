@@ -6,7 +6,8 @@ import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
-  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled
+  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled,
+  LoadingOutlined, EyeOutlined, EyeInvisibleOutlined, RedoOutlined
   } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import PwaPushWelcome from "./PwaPushWelcome.jsx";
@@ -19,12 +20,14 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
-import {isNearBottom,countNewEntries} from "./thread_scroll.js";
+import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
+import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
+import {translationAction} from "./translation_action.js";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
-import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
+import {activeConversationPeer,unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
@@ -210,6 +213,12 @@ export default function App(){
   const [networkDiagnostics,setNetworkDiagnostics]=useState(null);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
   const [section,setSection]=useState("chats");
+  const [pageVisible,setPageVisible]=useState(()=>document.visibilityState==="visible");
+  useEffect(()=>{
+    const refresh=()=>setPageVisible(document.visibilityState==="visible");
+    document.addEventListener("visibilitychange",refresh);
+    return()=>document.removeEventListener("visibilitychange",refresh);
+  },[]);
   const [friendRequests,setFriendRequests]=useState([]);
   const [friendNotificationApi,friendNotificationContext]=notification.useNotification({
     placement:"topRight",top:22,maxCount:2
@@ -218,7 +227,7 @@ export default function App(){
   const dismissedFriendIds=useRef(null);
   const notificationPromptShown=useRef(false);
   const [peerDetailsOpen,setPeerDetailsOpen]=useState(false);
-  const [deleteFriendOpen,setDeleteFriendOpen]=useState(false);
+  const [deleteFriendPeer,setDeleteFriendPeer]=useState(null);
   const [conversationDeletePeer,setConversationDeletePeer]=useState(null);
   const [deletingConversation,setDeletingConversation]=useState(false);
   const conversationPress=useRef(null);
@@ -241,6 +250,7 @@ export default function App(){
   const followLatest=useRef(true);
   const previousThread=useRef({peer:null,ids:[]});
   const scrollIdleTimer=useRef(null);
+  const scrollFrameIds=useRef([]);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
   const [logoutOpen,setLogoutOpen]=useState(false);
@@ -453,11 +463,24 @@ export default function App(){
         translationRequests.current.delete(key);
     }
   }
+  const translationActionFor=item=>translationAction(
+    translations[selected+":"+String(item.id)],
+    String(item.text||"").trim(),resolvedTranslationLanguage
+  );
+  const translationActionIcon=action=>{
+    if(action.state==="loading")return <LoadingOutlined spin/>;
+    if(action.state==="shown")return <EyeInvisibleOutlined/>;
+    if(action.state==="hidden")return <EyeOutlined/>;
+    if(action.state==="error")return <RedoOutlined/>;
+    return <TranslateIcon size={16}/>;
+  };
   const messageMenu=item=>({
     items:[
       {key:"copy",label:item.type==="file"?"复制文件名":"复制",icon:<CopyOutlined/>},
       ...(item.type!=="file"&&String(item.text||"").trim()?[{
-        key:"translate",label:"翻译 / 收起译文",icon:<TranslateIcon/>
+        key:"translate",label:translationActionFor(item).label,
+        icon:translationActionIcon(translationActionFor(item)),
+        disabled:translationActionFor(item).disabled
       }]:[]),
       {type:"divider"},
       {key:"delete",label:"删除",icon:<DeleteOutlined/>,danger:true,
@@ -862,13 +885,6 @@ export default function App(){
     try{localStorage.setItem("wtox-seen-"+user.public_key,JSON.stringify(seen))}catch{}
   },[user?.public_key,seen]);
   useEffect(()=>{
-    if(selected&&mobileChat&&messages.length){
-      const last=Math.max(0,...messages.filter(m=>m.public_key===selected&&
-        m.direction==="incoming").map(m=>m.at||0));
-      if(last>(seen[selected]||0))setSeen(previous=>({...previous,[selected]:last}));
-    }
-  },[selected,mobileChat,messages,seen]);
-  useEffect(()=>{
     if(!user?.public_key)return;
     let dead=false;
     const previous=history.current;history.current=null;previous?.close();
@@ -1022,6 +1038,10 @@ export default function App(){
                   </span>
                 </div>
               </div>
+              {!online(selectedFriend)&&formatLastOnline(selectedFriend.last_online)&&
+                <Typography.Text type="secondary" className="wt-peer-last-online">
+                  最近在线时间：{formatLastOnline(selectedFriend.last_online)}
+                </Typography.Text>}
               <Divider/>
               <Typography.Text type="secondary">状态消息</Typography.Text>
               <Typography.Paragraph className="wt-peer-status-message">
@@ -1045,12 +1065,30 @@ export default function App(){
   // resolving. Merge the optimistic upload with the canonical transfer ID.
   const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
     .slice(-250),[selected,messages,pendingFiles]);
+  const settleThreadBottom=useCallback(()=>{
+    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
+    scrollFrameIds.current=[];
+    const scroll=()=>{
+      if(followLatest.current)scrollThreadToBottom(threadEl.current);
+    };
+    // The initial layout can precede the mobile chat panel becoming visible.
+    // Scroll now, after the next paint, and after the following layout pass.
+    scroll();
+    const first=requestAnimationFrame(()=>{
+      scroll();
+      const second=requestAnimationFrame(()=>{
+        scroll();
+        scrollFrameIds.current=[];
+      });
+      scrollFrameIds.current=[second];
+    });
+    scrollFrameIds.current=[first];
+  },[]);
   const scrollToLatest=useCallback(()=>{
-    const element=threadEl.current;
     followLatest.current=true;
     setNewBelowCount(0);
-    if(element)element.scrollTop=element.scrollHeight;
-  },[]);
+    settleThreadBottom();
+  },[settleThreadBottom]);
   const onThreadScroll=useCallback(()=>{
     const element=threadEl.current;
     if(!element)return;
@@ -1061,41 +1099,49 @@ export default function App(){
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
     scrollIdleTimer.current=setTimeout(()=>setThreadScrolling(false),950);
   },[]);
-  useEffect(()=>()=>{if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current)},[]);
+  useEffect(()=>()=> {
+    if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
+    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
+  },[]);
   useLayoutEffect(()=>{
-    const element=threadEl.current;
     const ids=thread.map(item=>item.id);
     const previous=previousThread.current;
     if(previous.peer!==selected){
       previousThread.current={peer:selected,ids};
       followLatest.current=true;
       setNewBelowCount(0);
-      if(element)element.scrollTop=element.scrollHeight;
+      settleThreadBottom();
       return;
     }
     const newlyAdded=countNewEntries(previous.ids,ids);
     previousThread.current={peer:selected,ids};
     if(followLatest.current){
-      if(element)element.scrollTop=element.scrollHeight;
+      settleThreadBottom();
       setNewBelowCount(count=>count===0?count:0);
     }else if(newlyAdded>0){
-      // Updating delivery receipts does not add IDs, so it cannot inflate
-      // this badge while the reader is looking at earlier messages.
+      // Status-only changes do not create a new message or inflate the badge.
       setNewBelowCount(count=>count+newlyAdded);
     }
-  },[selected,thread]);
+  },[selected,thread,mobileChat,settleThreadBottom]);
   useEffect(()=>{
     const element=threadEl.current;
     const content=element?.firstElementChild;
-    if(!content||typeof ResizeObserver==="undefined")return;
-    const observer=new ResizeObserver(()=>{
-      // Images and delayed attachment previews may change message height
-      // after the message itself was rendered.
-      if(followLatest.current)element.scrollTop=element.scrollHeight;
-    });
-    observer.observe(content);
-    return()=>observer.disconnect();
-  },[selected]);
+    if(!element||!content)return;
+    const ensureBottom=()=>{if(followLatest.current)settleThreadBottom()};
+    // Both text/footer growth and container resizing (mobile viewport,
+    // keyboard, toolbar) can change the real bottom after the first paint.
+    let observer;
+    if(typeof ResizeObserver!=="undefined"){
+      observer=new ResizeObserver(ensureBottom);
+      observer.observe(content);
+      observer.observe(element);
+    }
+    window.visualViewport?.addEventListener("resize",ensureBottom);
+    return()=>{
+      observer?.disconnect();
+      window.visualViewport?.removeEventListener("resize",ensureBottom);
+    };
+  },[selected,mobileChat,settleThreadBottom]);
 
   const latestByPeer=useMemo(()=>{
     const latest=new Map();
@@ -1114,7 +1160,23 @@ export default function App(){
       const right=latestByPeer.get(b.public_key)?.at||0;
       return right-left || Number(online(b))-Number(online(a));
     }),[friends,filter,latestByPeer,section]);
-  const unreadByPeer=useMemo(()=>unreadCountsByPeer(messages,seen),[messages,seen]);
+  const activeChatPeer=activeConversationPeer({
+    selected,section,isMobile,mobileChat,pageVisible
+  });
+  // A visible conversation is read on desktop as well as in an open mobile
+  // thread. Never silently read messages from a hidden browser tab.
+  useEffect(()=>{
+    if(!activeChatPeer)return;
+    const last=messages.reduce((latest,item)=>
+      item.type==="message"&&item.direction==="incoming"&&
+      item.public_key===activeChatPeer&&Number.isFinite(item.at)
+        ? Math.max(latest,item.at):latest,0);
+    if(last>0)setSeen(previous=>
+      (Number(previous[activeChatPeer])||0)>=last?previous:
+        {...previous,[activeChatPeer]:last});
+  },[activeChatPeer,messages]);
+  const unreadByPeer=useMemo(()=>
+    unreadCountsByPeer(messages,seen,activeChatPeer),[messages,seen,activeChatPeer]);
   const unreadFor=useCallback(peer=>unreadByPeer.get(peer)||0,[unreadByPeer]);
   const totalUnread=useMemo(()=>totalUnreadForFriends(unreadByPeer,friends),
     [unreadByPeer,friends]);
@@ -1169,11 +1231,13 @@ export default function App(){
   }
   function startConversationPress(peer,event){
     cancelConversationPress();
-    if(section!=="chats"||!historyReady||deletingConversation||event.button!==0)return;
+    if((section!=="contacts"&&section!=="chats")||deletingConversation||
+       (section==="chats"&&!historyReady)||event.button!==0)return;
     conversationPress.current={peer,x:event.clientX,y:event.clientY};
     conversationPressTimer.current=setTimeout(()=>{
       suppressConversationClick.current={peer,until:Date.now()+1000};
-      setConversationDeletePeer(peer);
+      if(section==="contacts")setDeleteFriendPeer(peer);
+      else setConversationDeletePeer(peer);
       cancelConversationPress();
     },550);
   }
@@ -1195,6 +1259,12 @@ export default function App(){
       setSelectedMessageIds(new Set());
       setConversationDeletePeer(null);
       await refreshHistory(h);
+      if(selectedRef.current===peer){
+        // More-menu delete closes the current thread on desktop and mobile.
+        if(window.history.state?.wtoxChat)
+          window.history.replaceState({...window.history.state,wtoxChat:false},"",window.location.href);
+        clearMobileConversation();
+      }
       alert(`已删除当前浏览器中 ${removed} 条聊天记录`,"success");
     }catch(error){
       await refreshHistory(h).catch(()=>{});
@@ -1205,14 +1275,15 @@ export default function App(){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
     selectedRef.current=key;setSelected(key);
     clearSelection();
-    setPeerDetailsOpen(false);setDeleteFriendOpen(false);
+    setPeerDetailsOpen(false);setDeleteFriendPeer(null);
     setDraft(drafts.current.get(key)||"");
     if(isMobile&&!mobileChat&&!(window.history.state?.wtoxChat)){
       window.history.pushState({...window.history.state,wtoxChat:true},"",window.location.href);
     }
     setMobileChat(true);
-    // Opening the same conversation again also restores bottom following.
-    requestAnimationFrame(scrollToLatest);
+    // The selected thread re-renders after this handler returns. The layout
+    // effect scrolls the new content, then retries after two animation frames.
+    scrollToLatest();
     setSeen(previous=>({...previous,[key]:Date.now()}));
   }
   useEffect(()=>{
@@ -1367,15 +1438,13 @@ export default function App(){
     }catch(error){alert(error.message)}
   }
   async function removeFriend(){
-    if(!selected||removingFriend)return;
-    const publicKey=selected;
+    const publicKey=deleteFriendPeer;
+    if(!publicKey||removingFriend)return;
     setRemovingFriend(true);
     try{
       await api("/api/friends/"+encodeURIComponent(publicKey),{method:"DELETE"});
-      setDeleteFriendOpen(false);
-      if(selectedRef.current===publicKey){
-        setSelected(null);selectedRef.current=null;setMobileChat(false);clearSelection();
-      }
+      setDeleteFriendPeer(null);
+      if(selectedRef.current===publicKey)clearMobileConversation();
       await refreshFriends();
       alert("已删除好友，本地聊天记录仍然保留");
     }catch(error){alert("删除好友失败："+error.message)}
@@ -1893,28 +1962,34 @@ export default function App(){
             const draftsText=drafts.current.get(friend.public_key)||"";
             const friendStatusMessage=friend.status_message?.trim()||"暂无状态消息";
             const preview=section==="contacts"
-              ?friendStatusMessage
+              ?contactPresenceText(friend)
               :draftsText?"[草稿] "+draftsText:
                 recent?.type==="file"?"[附件] "+(recent.file_name||"文件"):
                 recent?.text||friendStatusMessage;
-            const when=recent?.at?new Date(recent.at):null;
+            // Toxcore has last-online time, not a trustworthy friend-added
+            // timestamp. In Contacts, omit time rather than mislabel a chat date.
+            const when=section==="chats"&&recent?.at?new Date(recent.at):null;
             const clock=when ? (Date.now()-when.getTime()>86400000?
               when.toLocaleDateString("zh-CN",{month:"2-digit",day:"2-digit"}):
               when.toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})):"";
             const unread=unreadFor(friend.public_key);
             return <button type="button" key={friend.public_key}
               className={"wechat-conversation "+(section==="chats"&&selected===friend.public_key?"is-selected":"")}
-              aria-label={`${friend.name||"Tox 好友"}，长按可删除本地聊天记录`}
+              aria-label={`${friend.name||"Tox 好友"}，长按可${section==="contacts"?"删除好友":"删除本地聊天记录"}`}
               onPointerDown={event=>startConversationPress(friend.public_key,event)}
               onPointerMove={moveConversationPress}
               onPointerUp={cancelConversationPress}
               onPointerLeave={cancelConversationPress}
               onPointerCancel={cancelConversationPress}
+              onDragStart={event=>event.preventDefault()}
+              onSelectStart={event=>{if(isMobile)event.preventDefault()}}
               onContextMenu={event=>{
-                if(section==="chats"&&historyReady){
+                if(section==="contacts"||(section==="chats"&&historyReady)){
                   event.preventDefault();
+                  cancelConversationPress();
                   suppressConversationClick.current={peer:friend.public_key,until:Date.now()+1000};
-                  setConversationDeletePeer(friend.public_key);
+                  if(section==="contacts")setDeleteFriendPeer(friend.public_key);
+                  else setConversationDeletePeer(friend.public_key);
                 }
               }}
               onClick={event=>{
@@ -1936,10 +2011,10 @@ export default function App(){
                 <span className="wechat-conversation-name">{friend.name||"Tox 好友 "+shortKey(friend.public_key)}</span>
                 <span className="wechat-conversation-preview">{preview}</span>
               </span>
-              <span className="wechat-conversation-side">
-                <time>{clock}</time>
+              {section==="chats"&&<span className="wechat-conversation-side">
+                {clock&&<time>{clock}</time>}
                 {unread>0&&<span className="wechat-unread">{unread>99?"99+":unread}</span>}
-              </span>
+              </span>}
             </button>;
           })}
           {!visibleFriends.length&&<div className="wechat-no-contacts">
@@ -2016,8 +2091,8 @@ export default function App(){
               <div className="wt-peer-name-row">
                 <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
               </div>
-              <small title={selectedFriend?.status_message||""}>
-                {selectedFriend?.status_message?.trim()|| (selectedFriend?"暂无状态消息":"wTox")}
+              <small title={chatPresenceText(selectedFriend)}>
+                {chatPresenceText(selectedFriend)}
               </small>
             </div>
           </div>
@@ -2034,11 +2109,11 @@ export default function App(){
                 items:[
                   {key:"profile",icon:<UserOutlined/>,label:"查看好友资料"},
                   {type:"divider"},
-                  {key:"delete",icon:<DeleteOutlined/>,label:"删除好友",danger:true}
+                  {key:"delete",icon:<DeleteOutlined/>,label:"删除聊天记录",danger:true}
                 ],
                 onClick:({key})=>{
                   if(key==="profile")setPeerDetailsOpen(true);
-                  if(key==="delete")setDeleteFriendOpen(true);
+                  if(key==="delete")setConversationDeletePeer(selected);
                 }
               }}>
               <AntButton type="text" shape="circle" className="wt-chat-more-button"
@@ -2127,15 +2202,19 @@ export default function App(){
                         {chatTime(item.at)}
                         {item.direction==="outgoing"?" · "+stateText(item):""}
                       </span>
-                      {!selectedMessageIds.size&&
-                        <button type="button" className="wt-translate-button"
-                          title="翻译 / 收起译文" aria-label="翻译消息"
+                      {!selectedMessageIds.size&&(()=>{
+                        const action=translationActionFor(item);
+                        return <button type="button"
+                          className={"wt-translate-button state-"+action.state}
+                          title={action.label} aria-label={action.label}
+                          disabled={action.disabled}
                           onClick={event=>{
                             event.preventDefault();event.stopPropagation();
                             void translateMessage(item);
                           }}>
-                          <TranslateIcon size={16}/>
-                        </button>}
+                          {translationActionIcon(action)}
+                        </button>;
+                      })()}
                     </div>
                     {(()=>{
                       const translated=translations[selected+":"+String(item.id)];
@@ -2190,24 +2269,16 @@ export default function App(){
           </div>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
-            header={<Sender.Header title="准备发送附件" open={!!uploadFile}
-              onOpenChange={open=>{if(!open)setUploadFile(null)}}>
-              {uploadFile&&<Space orientation="vertical" size="small"
-                className="wt-send-file-preview">
-                <FileCard name={uploadFile.name} size="small"/>
-                <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
-                <Space>
-                  <AntButton type="primary" size="small" loading={busy}
-                    disabled={!online(selectedFriend)} onClick={sendFile}>
-                    发送附件
-                  </AntButton>
-                  <AntButton size="small" onClick={()=>setUploadFile(null)}>取消</AntButton>
-                </Space>
-              </Space>}
-            </Sender.Header>}
             onPasteFile={files=>{
               const file=files?.[0];
-              if(file)setUploadFile(file);
+              if(file){
+                if(file.size<1||file.size>MAX_ATTACHMENT_BYTES){
+                  alert("附件大小需要在 1 字节至 15 MB 之间","error");
+                  return;
+                }
+                if(!online(selectedFriend)){alert("附件要求双方在线","error");return}
+                setUploadFile(file);
+              }
             }}
             onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
             suffix={(_,info)=>{
@@ -2221,7 +2292,24 @@ export default function App(){
       </main>
     </div>
 
-    <AntModal open={logoutOpen} title="退出当前身份" footer={null} centered={isMobile}
+    <AntModal open={!!uploadFile} title="准备发送附件" centered
+      className="wt-attachment-modal" width={480} destroyOnHidden
+      closable={!busy} maskClosable={!busy}
+      onCancel={()=>{if(!busy)setUploadFile(null)}}
+      footer={<Space>
+        <AntButton onClick={()=>setUploadFile(null)} disabled={busy}>取消</AntButton>
+        <AntButton type="primary" loading={busy}
+          disabled={!selected||!online(selectedFriend)||!historyReady||busy}
+          onClick={sendFile}>发送附件</AntButton>
+      </Space>}>
+      {uploadFile&&<Space orientation="vertical" size="small"
+        className="wt-send-file-preview">
+        <FileCard name={uploadFile.name} size="small"/>
+        <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
+      </Space>}
+    </AntModal>
+
+    <AntModal open={logoutOpen} title="退出当前身份" footer={null} centered
       destroyOnHidden onCancel={()=>{if(!logoutBusy)setLogoutOpen(false)}}
       closable={!logoutBusy} maskClosable={!logoutBusy}>
       <Typography.Paragraph>
@@ -2247,7 +2335,7 @@ export default function App(){
       </Space>
     </AntModal>
 
-    <AntModal open={!!singleDeleteId} title="删除聊天记录" centered={isMobile}
+    <AntModal open={!!singleDeleteId} title="删除聊天记录" centered
       onCancel={()=>setSingleDeleteId(null)} onOk={deleteSingleMessage}
       okText="删除记录" cancelText="取消"
       okButtonProps={{danger:true,loading:deletingMessages}}
@@ -2259,7 +2347,7 @@ export default function App(){
       </Typography.Text>
     </AntModal>
 
-    <AntModal open={!!conversationDeletePeer} title="删除聊天记录" centered={isMobile}
+    <AntModal open={!!conversationDeletePeer} title="删除聊天记录" centered
       onCancel={()=>{if(!deletingConversation)setConversationDeletePeer(null)}}
       onOk={deleteConversationHistory} okText="删除记录" cancelText="取消"
       okButtonProps={{danger:true,loading:deletingConversation}}
@@ -2274,14 +2362,14 @@ export default function App(){
       </Typography.Text>
     </AntModal>
 
-    <AntModal open={deleteFriendOpen&&!!selectedFriend} title="删除好友" centered={isMobile}
-      destroyOnHidden onCancel={()=>setDeleteFriendOpen(false)}
+    <AntModal open={!!deleteFriendPeer} title="删除好友" centered
+      destroyOnHidden onCancel={()=>{if(!removingFriend)setDeleteFriendPeer(null)}}
       onOk={removeFriend} okText="删除好友" cancelText="取消"
       okButtonProps={{danger:true,loading:removingFriend}}
       cancelButtonProps={{disabled:removingFriend}} closable={!removingFriend}
       maskClosable={!removingFriend}>
       <Typography.Paragraph>
-        确定要删除「{selectedFriend?.name||"当前好友"}」吗？
+        确定要删除「{friends.find(f=>f.public_key===deleteFriendPeer)?.name||"该好友"}」吗？
       </Typography.Paragraph>
       <Typography.Text type="secondary">
         将从好友列表移除，当前浏览器保存的聊天记录不会被清除。
@@ -2294,12 +2382,12 @@ export default function App(){
             onClose={()=>setPeerDetailsOpen(false)} destroyOnHidden>
             {peerProfileContent}
           </Drawer>
-        : <AntModal open={peerDetailsOpen&&!!selectedFriend} title="好友资料" centered={isMobile}
+        : <AntModal open={peerDetailsOpen&&!!selectedFriend} title="好友资料" centered
             onCancel={()=>setPeerDetailsOpen(false)} footer={null}
             destroyOnHidden width={500}>
             {peerProfileContent}
           </AntModal>}
-    <AntModal open={modal==="profile"} title="我的 Tox 资料" centered={isMobile}
+    <AntModal open={modal==="profile"} title="我的 Tox 资料" centered
       onCancel={closeModal} footer={null} destroyOnHidden width={520}>
       <div className="wt-own-tox-id-heading">
         <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
@@ -2332,7 +2420,7 @@ export default function App(){
       </Form>
     </AntModal>
 
-    <AntModal open={modal==="qrcode"} title="我的 Tox ID 二维码" centered={isMobile}
+    <AntModal open={modal==="qrcode"} title="我的 Tox ID 二维码" centered
       onCancel={()=>setModal("profile")}
       footer={<AntButton onClick={()=>setModal("profile")}>返回我的资料</AntButton>}
       width={360} destroyOnHidden>
@@ -2355,7 +2443,7 @@ export default function App(){
       {settingsContent}
     </Drawer>
 
-    <AntModal open={modal==="add"} title={friendQrOpen?"扫描好友二维码":"添加 Tox 好友"} centered={isMobile}
+    <AntModal open={modal==="add"} title={friendQrOpen?"扫描好友二维码":"添加 Tox 好友"} centered
       onCancel={closeAddFriend} footer={null} destroyOnHidden
       className="wt-add-friend-modal" width={480}>
       {friendQrOpen
@@ -2393,7 +2481,7 @@ export default function App(){
           </Form>
         </div>}
     </AntModal>
-    <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`} centered={isMobile}
+    <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`} centered
       onCancel={closeModal} footer={null} destroyOnHidden>
       <List dataSource={friendRequests} locale={{emptyText:"暂无待处理的好友请求"}}
         renderItem={item=><List.Item actions={[
