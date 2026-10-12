@@ -749,7 +749,7 @@ export default function App(){
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         if(!dead){
-              retry=setTimeout(connect,3500);
+          retry=setTimeout(connect,3500);
         }
       };
     };
@@ -790,7 +790,7 @@ export default function App(){
       socket.current=null;
     };
   },[user?.public_key,onRealtime,recoverPending,refreshFriends,
-    refreshNetwork,refreshTransfers,alert,uiMessageApi]);
+    refreshNetwork,refreshTransfers,alert]);
 
   useEffect(()=>{
     if(!user?.public_key)return;
@@ -1761,10 +1761,6 @@ export default function App(){
                 icon={<PaperClipOutlined/>} aria-label="添加附件"
                 disabled={!selected||!online(selectedFriend)}/>
             </Upload>
-            {(!historyReady||!online(selectedFriend))&&
-              <p className="ant-compose-status">
-                {!historyReady?"本地加密历史尚未就绪":"对方离线"}
-              </p>}
           </div>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
