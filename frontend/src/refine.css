@@ -1655,3 +1655,27 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     max-width:60px;overflow:hidden;text-overflow:ellipsis;
   }
 }
+
+/* The pre-send photo preview uses a Blob URL for the actual prepared File.
+   Keep thumbnails contained on tiny iOS screens; never stretch the modal. */
+.wt-attachment-modal .wt-prepared-file{
+  display:flex;align-items:flex-start;flex-direction:column;
+  gap:10px;min-width:0;max-width:100%;width:100%;
+}
+.wt-attachment-modal .wt-prepared-image{
+  display:block;object-fit:contain;object-position:center;
+  max-width:100%;width:auto;max-height:min(42dvh,280px);
+  border-radius:10px;background:var(--wt-hover);
+}
+.wt-attachment-modal .wt-prepared-file-icon{
+  width:48px;height:48px;display:flex;align-items:center;
+  justify-content:center;border-radius:10px;
+  border:1px solid var(--wt-border);font-size:23px;
+}
+.wt-attachment-modal .wt-prepared-filename{
+  font-size:14px;line-height:1.5;overflow-wrap:anywhere;
+  max-width:100%;user-select:text;-webkit-user-select:text;
+}
+.wt-attachment-modal .wt-prepared-preview-error{
+  font-size:13px;line-height:1.5;color:var(--wt-muted);
+}
