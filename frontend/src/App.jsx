@@ -21,6 +21,7 @@ import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./att
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
+import {contactPresenceText,chatPresenceText} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
@@ -224,7 +225,7 @@ export default function App(){
   const dismissedFriendIds=useRef(null);
   const notificationPromptShown=useRef(false);
   const [peerDetailsOpen,setPeerDetailsOpen]=useState(false);
-  const [deleteFriendOpen,setDeleteFriendOpen]=useState(false);
+  const [deleteFriendPeer,setDeleteFriendPeer]=useState(null);
   const [conversationDeletePeer,setConversationDeletePeer]=useState(null);
   const [deletingConversation,setDeletingConversation]=useState(false);
   const conversationPress=useRef(null);
@@ -1211,11 +1212,13 @@ export default function App(){
   }
   function startConversationPress(peer,event){
     cancelConversationPress();
-    if(section!=="chats"||!historyReady||deletingConversation||event.button!==0)return;
+    if((section!=="contacts"&&section!=="chats")||deletingConversation||
+       (section==="chats"&&!historyReady)||event.button!==0)return;
     conversationPress.current={peer,x:event.clientX,y:event.clientY};
     conversationPressTimer.current=setTimeout(()=>{
       suppressConversationClick.current={peer,until:Date.now()+1000};
-      setConversationDeletePeer(peer);
+      if(section==="contacts")setDeleteFriendPeer(peer);
+      else setConversationDeletePeer(peer);
       cancelConversationPress();
     },550);
   }
@@ -1237,6 +1240,12 @@ export default function App(){
       setSelectedMessageIds(new Set());
       setConversationDeletePeer(null);
       await refreshHistory(h);
+      if(selectedRef.current===peer){
+        // More-menu delete closes the current thread on desktop and mobile.
+        if(window.history.state?.wtoxChat)
+          window.history.replaceState({...window.history.state,wtoxChat:false},"",window.location.href);
+        clearMobileConversation();
+      }
       alert(`已删除当前浏览器中 ${removed} 条聊天记录`,"success");
     }catch(error){
       await refreshHistory(h).catch(()=>{});
@@ -1247,7 +1256,7 @@ export default function App(){
     if(selectedRef.current)drafts.current.set(selectedRef.current,draft);
     selectedRef.current=key;setSelected(key);
     clearSelection();
-    setPeerDetailsOpen(false);setDeleteFriendOpen(false);
+    setPeerDetailsOpen(false);setDeleteFriendPeer(null);
     setDraft(drafts.current.get(key)||"");
     if(isMobile&&!mobileChat&&!(window.history.state?.wtoxChat)){
       window.history.pushState({...window.history.state,wtoxChat:true},"",window.location.href);
@@ -1410,15 +1419,13 @@ export default function App(){
     }catch(error){alert(error.message)}
   }
   async function removeFriend(){
-    if(!selected||removingFriend)return;
-    const publicKey=selected;
+    const publicKey=deleteFriendPeer;
+    if(!publicKey||removingFriend)return;
     setRemovingFriend(true);
     try{
       await api("/api/friends/"+encodeURIComponent(publicKey),{method:"DELETE"});
-      setDeleteFriendOpen(false);
-      if(selectedRef.current===publicKey){
-        setSelected(null);selectedRef.current=null;setMobileChat(false);clearSelection();
-      }
+      setDeleteFriendPeer(null);
+      if(selectedRef.current===publicKey)clearMobileConversation();
       await refreshFriends();
       alert("已删除好友，本地聊天记录仍然保留");
     }catch(error){alert("删除好友失败："+error.message)}
@@ -1936,7 +1943,7 @@ export default function App(){
             const draftsText=drafts.current.get(friend.public_key)||"";
             const friendStatusMessage=friend.status_message?.trim()||"暂无状态消息";
             const preview=section==="contacts"
-              ?friendStatusMessage
+              ?contactPresenceText(friend)
               :draftsText?"[草稿] "+draftsText:
                 recent?.type==="file"?"[附件] "+(recent.file_name||"文件"):
                 recent?.text||friendStatusMessage;
@@ -1949,17 +1956,21 @@ export default function App(){
             const unread=unreadFor(friend.public_key);
             return <button type="button" key={friend.public_key}
               className={"wechat-conversation "+(section==="chats"&&selected===friend.public_key?"is-selected":"")}
-              aria-label={`${friend.name||"Tox 好友"}，长按可删除本地聊天记录`}
+              aria-label={`${friend.name||"Tox 好友"}，长按可${section==="contacts"?"删除好友":"删除本地聊天记录"}`}
               onPointerDown={event=>startConversationPress(friend.public_key,event)}
               onPointerMove={moveConversationPress}
               onPointerUp={cancelConversationPress}
               onPointerLeave={cancelConversationPress}
               onPointerCancel={cancelConversationPress}
+              onDragStart={event=>event.preventDefault()}
+              onSelectStart={event=>{if(isMobile)event.preventDefault()}}
               onContextMenu={event=>{
-                if(section==="chats"&&historyReady){
+                if(section==="contacts"||(section==="chats"&&historyReady)){
                   event.preventDefault();
+                  cancelConversationPress();
                   suppressConversationClick.current={peer:friend.public_key,until:Date.now()+1000};
-                  setConversationDeletePeer(friend.public_key);
+                  if(section==="contacts")setDeleteFriendPeer(friend.public_key);
+                  else setConversationDeletePeer(friend.public_key);
                 }
               }}
               onClick={event=>{
@@ -2061,8 +2072,8 @@ export default function App(){
               <div className="wt-peer-name-row">
                 <strong>{selectedFriend?.name|| (selected?"好友 "+shortKey(selected):"选择好友开始聊天")}</strong>
               </div>
-              <small title={selectedFriend?.status_message||""}>
-                {selectedFriend?.status_message?.trim()|| (selectedFriend?"暂无状态消息":"wTox")}
+              <small title={chatPresenceText(selectedFriend)}>
+                {chatPresenceText(selectedFriend)}
               </small>
             </div>
           </div>
@@ -2079,11 +2090,11 @@ export default function App(){
                 items:[
                   {key:"profile",icon:<UserOutlined/>,label:"查看好友资料"},
                   {type:"divider"},
-                  {key:"delete",icon:<DeleteOutlined/>,label:"删除好友",danger:true}
+                  {key:"delete",icon:<DeleteOutlined/>,label:"删除聊天记录",danger:true}
                 ],
                 onClick:({key})=>{
                   if(key==="profile")setPeerDetailsOpen(true);
-                  if(key==="delete")setDeleteFriendOpen(true);
+                  if(key==="delete")setConversationDeletePeer(selected);
                 }
               }}>
               <AntButton type="text" shape="circle" className="wt-chat-more-button"
@@ -2266,7 +2277,7 @@ export default function App(){
       </main>
     </div>
 
-    <AntModal open={logoutOpen} title="退出当前身份" footer={null} centered={isMobile}
+    <AntModal open={logoutOpen} title="退出当前身份" footer={null} centered
       destroyOnHidden onCancel={()=>{if(!logoutBusy)setLogoutOpen(false)}}
       closable={!logoutBusy} maskClosable={!logoutBusy}>
       <Typography.Paragraph>
@@ -2292,7 +2303,7 @@ export default function App(){
       </Space>
     </AntModal>
 
-    <AntModal open={!!singleDeleteId} title="删除聊天记录" centered={isMobile}
+    <AntModal open={!!singleDeleteId} title="删除聊天记录" centered
       onCancel={()=>setSingleDeleteId(null)} onOk={deleteSingleMessage}
       okText="删除记录" cancelText="取消"
       okButtonProps={{danger:true,loading:deletingMessages}}
@@ -2304,7 +2315,7 @@ export default function App(){
       </Typography.Text>
     </AntModal>
 
-    <AntModal open={!!conversationDeletePeer} title="删除聊天记录" centered={isMobile}
+    <AntModal open={!!conversationDeletePeer} title="删除聊天记录" centered
       onCancel={()=>{if(!deletingConversation)setConversationDeletePeer(null)}}
       onOk={deleteConversationHistory} okText="删除记录" cancelText="取消"
       okButtonProps={{danger:true,loading:deletingConversation}}
@@ -2319,14 +2330,14 @@ export default function App(){
       </Typography.Text>
     </AntModal>
 
-    <AntModal open={deleteFriendOpen&&!!selectedFriend} title="删除好友" centered={isMobile}
-      destroyOnHidden onCancel={()=>setDeleteFriendOpen(false)}
+    <AntModal open={!!deleteFriendPeer} title="删除好友" centered
+      destroyOnHidden onCancel={()=>{if(!removingFriend)setDeleteFriendPeer(null)}}
       onOk={removeFriend} okText="删除好友" cancelText="取消"
       okButtonProps={{danger:true,loading:removingFriend}}
       cancelButtonProps={{disabled:removingFriend}} closable={!removingFriend}
       maskClosable={!removingFriend}>
       <Typography.Paragraph>
-        确定要删除「{selectedFriend?.name||"当前好友"}」吗？
+        确定要删除「{friends.find(f=>f.public_key===deleteFriendPeer)?.name||"该好友"}」吗？
       </Typography.Paragraph>
       <Typography.Text type="secondary">
         将从好友列表移除，当前浏览器保存的聊天记录不会被清除。
@@ -2339,12 +2350,12 @@ export default function App(){
             onClose={()=>setPeerDetailsOpen(false)} destroyOnHidden>
             {peerProfileContent}
           </Drawer>
-        : <AntModal open={peerDetailsOpen&&!!selectedFriend} title="好友资料" centered={isMobile}
+        : <AntModal open={peerDetailsOpen&&!!selectedFriend} title="好友资料" centered
             onCancel={()=>setPeerDetailsOpen(false)} footer={null}
             destroyOnHidden width={500}>
             {peerProfileContent}
           </AntModal>}
-    <AntModal open={modal==="profile"} title="我的 Tox 资料" centered={isMobile}
+    <AntModal open={modal==="profile"} title="我的 Tox 资料" centered
       onCancel={closeModal} footer={null} destroyOnHidden width={520}>
       <div className="wt-own-tox-id-heading">
         <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
@@ -2377,7 +2388,7 @@ export default function App(){
       </Form>
     </AntModal>
 
-    <AntModal open={modal==="qrcode"} title="我的 Tox ID 二维码" centered={isMobile}
+    <AntModal open={modal==="qrcode"} title="我的 Tox ID 二维码" centered
       onCancel={()=>setModal("profile")}
       footer={<AntButton onClick={()=>setModal("profile")}>返回我的资料</AntButton>}
       width={360} destroyOnHidden>
@@ -2400,7 +2411,7 @@ export default function App(){
       {settingsContent}
     </Drawer>
 
-    <AntModal open={modal==="add"} title={friendQrOpen?"扫描好友二维码":"添加 Tox 好友"} centered={isMobile}
+    <AntModal open={modal==="add"} title={friendQrOpen?"扫描好友二维码":"添加 Tox 好友"} centered
       onCancel={closeAddFriend} footer={null} destroyOnHidden
       className="wt-add-friend-modal" width={480}>
       {friendQrOpen
@@ -2438,7 +2449,7 @@ export default function App(){
           </Form>
         </div>}
     </AntModal>
-    <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`} centered={isMobile}
+    <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`} centered
       onCancel={closeModal} footer={null} destroyOnHidden>
       <List dataSource={friendRequests} locale={{emptyText:"暂无待处理的好友请求"}}
         renderItem={item=><List.Item actions={[
