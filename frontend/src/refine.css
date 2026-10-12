@@ -1621,3 +1621,19 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     overscroll-behavior:contain;
   }
 }
+
+/* The attachment send form is a real AntD Modal portalled to <body>. */
+.wt-attachment-modal .wt-send-file-preview{
+  width:100%;min-width:0;padding:2px 0 8px;
+  align-items:stretch;
+}
+.wt-attachment-modal .wt-send-file-preview .ant-x-file-card{
+  max-width:100%;
+}
+.wt-attachment-modal .wt-send-file-preview .ant-typography{
+  font-size:14px;
+}
+.ant-messenger[data-theme] .wt-peer-last-online{
+  display:block;font-size:12px;line-height:1.6;
+  color:var(--wt-muted)!important;
+}
