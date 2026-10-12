@@ -6,8 +6,10 @@ import {runInNewContext} from "node:vm";
 const handlers=new Map();
 const sent=[];
 const opened=[];
+let skippedWaiting=0,claimed=0;
 const self={
   location:{origin:"https://tox.example.test"},
+  skipWaiting:async()=>{skippedWaiting++},
   addEventListener:(name,handler)=>handlers.set(name,handler),
   registration:{
     showNotification:async(title,options)=>sent.push({
@@ -16,10 +18,21 @@ const self={
   },
   clients:{
     matchAll:async()=>[],
-    openWindow:async path=>opened.push(path)
+    openWindow:async path=>opened.push(path),
+    claim:async()=>{claimed++}
   }
 };
 runInNewContext(readFileSync("frontend/public/sw.js","utf8"),{self,URL});
+
+for(const kind of ["install","activate"]){
+  let promise;
+  const event={waitUntil:task=>{promise=task}};
+  handlers.get(kind)(event);
+  assert.ok(promise,`${kind} handler must wait for SW takeover`);
+  await promise;
+}
+assert.equal(skippedWaiting,1,"An updated worker should activate without a PWA reinstall");
+assert.equal(claimed,1,"An updated worker should claim open PWA windows");
 
 async function push(kind){
   let pending;
