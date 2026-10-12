@@ -998,8 +998,13 @@ export default function App(){
     try{
       try{await disablePushBeforeLogout()}
       catch(error){pushError=error}
-      // The server's Tox identity (and its friend list) is deliberately kept.
-      await postJson("/api/logout");
+      // Both choices permanently remove the server-side private key, friends,
+      // outbox messages, files and device push subscriptions. Only local
+      // browser history differs between the two choices.
+      await api("/api/profile",{
+        method:"DELETE",
+        headers:{"X-WTox-Delete":"delete-current-identity"}
+      });
       // Close this identity's IndexedDB before issuing deleteDatabase().
       history.current?.close();history.current=null;
       let cleanupError=null;
@@ -1777,22 +1782,33 @@ export default function App(){
       <Typography.Paragraph>
         你希望如何处理当前身份保存在此浏览器中的聊天记录和图片缓存？
       </Typography.Paragraph>
-      <Typography.Paragraph type="secondary">
-        两种方式都会结束当前登录并尝试取消本设备的离线推送。
-        均不会删除 VPS 上的 Tox 身份、好友列表或服务器中的待发消息。
+      <Typography.Paragraph type="warning">
+        退出将永久删除服务器上的当前 Tox 身份、好友列表、待发送消息和附件。
+        如需以后恢复身份，请先导出并保存 .tox 备份。
       </Typography.Paragraph>
       <Space orientation="vertical" size="middle" style={{width:"100%"}}>
-        <AntButton block loading={logoutBusy} onClick={()=>logout(false)}>
-          保留本地数据并退出
-        </AntButton>
-        <AntButton block danger type="primary" loading={logoutBusy}
-          onClick={()=>logout(true)}>
-          清除当前身份本地数据并退出
-        </AntButton>
+        <Popconfirm
+          title="确认永久删除服务器身份？"
+          description="服务器数据会被删除，请确认已备份 .tox 文件。"
+          okText="确认删除并退出" okButtonProps={{danger:true}}
+          cancelText="取消" onConfirm={()=>logout(false)}>
+          <AntButton block loading={logoutBusy}>
+            保留本地数据并退出
+          </AntButton>
+        </Popconfirm>
+        <Popconfirm
+          title="确认永久删除服务器及本地数据？"
+          description="服务器身份、好友、待发送消息及附件均将清除。"
+          okText="永久删除并退出" okButtonProps={{danger:true}}
+          cancelText="取消" onConfirm={()=>logout(true)}>
+          <AntButton block danger type="primary" loading={logoutBusy}>
+            清除当前身份本地数据并退出
+          </AntButton>
+        </Popconfirm>
         <Typography.Text type="secondary" className="wt-settings-footnote">
-          清除会永久删除当前浏览器中该身份的加密消息、图片缓存、
-          已读记录与头像颜色；其他身份的数据及全局主题不受影响。
-          删除前请先备份需要保留的聊天记录。
+          清除本地数据会永久删除当前身份在此浏览器中的加密消息、
+          图片缓存、已读记录、头像颜色与其他身份关联数据。
+          服务器数据无论选择哪项都会删除；请提前备份。
         </Typography.Text>
       </Space>
     </AntModal>
