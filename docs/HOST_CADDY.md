@@ -82,7 +82,7 @@ docker compose rm -f caddy
 tox.example.com {
     encode zstd gzip
     request_body {
-        max_size 9MB
+        max_size 16MB
     }
     reverse_proxy 127.0.0.1:6066
     header {
