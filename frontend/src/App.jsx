@@ -37,36 +37,66 @@ function Button({children,onClick,kind="",disabled=false}){
   return <AntButton type={kind==="primary"?"primary":"default"}
     onClick={onClick} disabled={disabled} className="wtox-ant-btn">{children}</AntButton>;
 }
-function AttachmentBubble({file,accept,reject,download,historyHandle}){
+async function decodedImage(blob){
+  // A filename extension is not proof that arbitrary bytes are a JPEG/PNG.
+  // Verify decodability before displaying or caching a thumbnail.
+  if(typeof createImageBitmap==="function"){
+    try{
+      const image=await createImageBitmap(blob);
+      image.close();return true;
+    }catch{return false}
+  }
+  const url=URL.createObjectURL(blob);
+  try{
+    const image=new globalThis.Image();
+    image.src=url;
+    await image.decode();
+    return true;
+  }catch{return false}
+  finally{URL.revokeObjectURL(url)}
+}
+
+function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheRevision}){
   const [preview,setPreview]=useState("");
-  const isPicture=/\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
+  const [previewMissing,setPreviewMissing]=useState(false);
+  const isPicture=/\\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
   const completed=file.file_state==="completed";
   const canDownload=file.direction==="incoming"&&completed;
   useEffect(()=>{
-    if(!isPicture||!file.file_id)return;
+    if(!isPicture)return;
     let alive=true,url="";
+    setPreview("");setPreviewMissing(false);
     (async()=>{
       try{
-        let blob=historyHandle?.ready()?await historyHandle.cachedImage(file.file_id):null;
+        let blob=file.previewBlob||(
+          file.file_id&&historyHandle?.ready()
+            ? await historyHandle.cachedImage(file.file_id):null);
         if(!blob&&canDownload){
-          blob=await(await api("/api/files/"+encodeURIComponent(file.file_id)+"/download")).blob();
+          const response=await api("/api/files/"+encodeURIComponent(file.file_id)+"/download");
+          blob=await response.blob();
           if(blob.size>5*1024*1024)return;
-          const mime=/\.png$/i.test(file.file_name)?"image/png":
-            /\.webp$/i.test(file.file_name)?"image/webp":
-            /\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
+          const mime=/\\.png$/i.test(file.file_name)?"image/png":
+            /\\.webp$/i.test(file.file_name)?"image/webp":
+            /\\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
           blob=new Blob([blob],{type:mime});
+          if(!await decodedImage(blob))throw new Error("附件不是可解码的图片");
           if(historyHandle?.ready())await historyHandle.cacheImage(file.file_id,blob);
         }
-        if(!blob)return;
+        if(!blob){
+          if(alive&&completed)setPreviewMissing(true);
+          return;
+        }
+        if(!await decodedImage(blob))throw new Error("图片解码失败");
+        if(!alive)return;
         url=URL.createObjectURL(blob);
-        if(alive)setPreview(url);
-        else URL.revokeObjectURL(url);
+        setPreview(url);
       }catch{
-        // Attachment may have expired from encrypted server storage.
+        if(alive)setPreviewMissing(true);
       }
     })();
     return()=>{alive=false;if(url)URL.revokeObjectURL(url)};
-  },[canDownload,isPicture,file.file_id,file.file_name,historyHandle]);
+  },[canDownload,isPicture,file.file_id,file.file_name,file.previewBlob,
+     historyHandle,imageCacheRevision]);
   const percentage=file.file_size>0?Math.min(100,Math.floor(
     (file.file_progress||0)/file.file_size*100)):0;
   const mine=file.direction==="outgoing";
@@ -74,10 +104,15 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
   return <div className={"wtox-attachment-row "+(mine?"out":"")} role="group"
      aria-label={"附件 "+file.file_name}>
     <Card size="small" className="wtox-attachment-bubble">
-      {preview&&<Image className="wtox-attachment-image" src={preview}
-        alt={file.file_name} loading="lazy" width={220}
-        preview={{mask:"查看图片"}}/>}
-      <FileCard name={file.file_name} byte={file.file_size} size="small"/>
+      {isPicture
+        ? <>
+            {preview&&<Image className="wtox-attachment-image" src={preview}
+              alt={file.file_name} width={220} preview={{mask:"查看图片"}}/>}
+            <Typography.Text className="wt-attachment-filename" title={file.file_name}>
+              {file.file_name}
+            </Typography.Text>
+          </>
+        : <FileCard name={file.file_name} byte={file.file_size} size="small"/>}
       <Typography.Text type="secondary">
         {state}{percentage>0&&percentage<100?" · "+percentage+"%":""}
       </Typography.Text>
@@ -89,12 +124,11 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
       {canDownload&&<Button onClick={()=>download({id:file.file_id,name:file.file_name})}>
         下载文件
       </Button>}
-      {completed&&mine&&<small>已由 Toxcore 完成文件传输</small>}
-      {completed&&!preview&&isPicture&&<Typography.Text type="secondary">
+      {completed&&!preview&&previewMissing&&isPicture&&<Typography.Text type="secondary">
         图片预览不可用或已过期
       </Typography.Text>}
     </Card>
-    <time>{new Date(file.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</time>
+    <time>{chatTime(file.at)}</time>
   </div>;
 }
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
