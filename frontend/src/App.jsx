@@ -1,6 +1,6 @@
 import React, {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
 import { ConfigProvider, theme as antdTheme, Button as AntButton, Input,
-  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Spin, Modal as AntModal, notification,
+  Space, Tooltip, Segmented, Avatar, Divider, Popconfirm, Modal as AntModal, notification,
   Dropdown, Badge, List, Typography, Form, Select, Drawer, Grid, Card, Image, Upload, QRCode, message } from "antd";
 import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
@@ -1348,7 +1348,7 @@ export default function App(){
     <AntButton danger block className="wt-settings-signout" onClick={()=>setLogoutOpen(true)}>退出当前身份</AntButton>
   </div>;
 
-  if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><Spin size="large"/></div>;
+  if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><span className="wtox-boot-ring" aria-hidden="true"/></div>;
   if(bootstrapError)return <div className="wtox-error-page" role="alert">
     <p>{bootstrapError}</p><AntButton type="primary" onClick={loadIdentity}>重试</AntButton>
   </div>;
