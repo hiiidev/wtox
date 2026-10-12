@@ -211,3 +211,12 @@ assert.match(refined,/\.wt-chat-sender button:disabled/);
 const logo=readFileSync("frontend/public/logo.svg","utf8");
 assert.match(logo,/<svg[\s\S]*?<path/);
 assert.doesNotMatch(logo,/<image|data:image\//);
+
+assert.match(app,/<main className="wtox-auth-layout" data-theme=\{effectiveTheme\}>/);
+assert.match(app,/<section className="wtox-auth-card" aria-label="进入 wTox">/);
+assert.doesNotMatch(app,/wtox-auth-intro|wtox-auth-form-panel|wtox-auth-eyebrow/);
+assert.match(refined,/display:grid;place-items:center/);
+assert.match(refined,/background:#f5f5f5;color:#222326;color-scheme:light/);
+assert.match(refined,/background:#1e1e1f;color:#f3f3f3;color-scheme:dark/);
+assert.match(refined,/\[data-theme="dark"\] \.wtox-auth-card/);
+assert.doesNotMatch(refined,/linear-gradient\(143deg|\.wtox-auth-intro\{/);

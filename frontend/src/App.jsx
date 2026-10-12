@@ -1135,28 +1135,14 @@ export default function App(){
   }}>
     {uiMessageContext}
     <main className="wtox-auth-layout" data-theme={effectiveTheme}>
-      <section className="wtox-auth-intro" aria-label="wTox 欢迎页">
-        <div className="wtox-auth-brand">
-          <img className="wtox-auth-mark" src="/logo.svg" alt="" />
-          <span>wTox</span>
+      <section className="wtox-auth-card" aria-label="进入 wTox">
+        <div className="wtox-auth-card-header">
+          <img src="/logo.svg" className="wtox-auth-small-mark" alt="" />
+          <strong>wTox</strong>
         </div>
-        <div className="wtox-auth-intro-copy">
-          <span className="wtox-auth-eyebrow">TOX · PRIVATE MESSAGING</span>
-          <h1>自在连接，<br/>安心聊天。</h1>
-          <p>把聊天交给开放的 Tox 网络。创建一个新身份，或导入已有的 .tox 文件继续使用。</p>
-        </div>
-        <div className="wtox-auth-intro-footer">以 Tox 身份为凭证 · 无需网站账号</div>
-      </section>
-      <section className="wtox-auth-form-panel" aria-label="进入 wTox">
-        <div className="wtox-auth-card">
-          <div className="wtox-auth-card-header">
-            <img src="/logo.svg" className="wtox-auth-small-mark" alt="" />
-            <span className="wtox-auth-card-brand">wTox</span>
-          </div>
-          <Typography.Title level={3} className="wtox-auth-heading">欢迎使用 wTox</Typography.Title>
-          <Typography.Paragraph type="secondary" className="wtox-auth-subtitle">
-            选择开始方式即可，无需注册网站账号。
-          </Typography.Paragraph>
+        <Typography.Paragraph type="secondary" className="wtox-auth-subtitle">
+          创建新身份，或导入已有的 .tox 文件。
+        </Typography.Paragraph>
           <Segmented block size="large" className="wtox-auth-switch"
             value={authMode} onChange={mode=>setAuthMode(mode)}
             options={[
@@ -1165,12 +1151,9 @@ export default function App(){
             ]}/>
           {authMode==="create"?
             <Form layout="vertical" className="wtox-auth-form" onFinish={createIdentity}>
-              <div className="wtox-auth-step-note">
-                <strong>创建 Tox 身份</strong>
-                <Typography.Text type="secondary">
-                  创建后自动下载加密的 .tox 文件，请妥善保管文件和密码。
-                </Typography.Text>
-              </div>
+              <Typography.Paragraph type="secondary" className="wtox-auth-step-note">
+                创建后会下载加密的 .tox 文件，请保管好文件和密码。
+              </Typography.Paragraph>
               <Form.Item label="密码" required>
                 <Input.Password autoComplete="new-password"
                   size="large" value={createPassword}
@@ -1186,12 +1169,9 @@ export default function App(){
               </Typography.Text>
             </Form>:
             <Form layout="vertical" className="wtox-auth-form" onFinish={loginIdentity}>
-              <div className="wtox-auth-step-note">
-                <strong>导入 Tox 身份</strong>
-                <Typography.Text type="secondary">
-                  可导入其他兼容 Tox 客户端的 .tox 文件。
-                </Typography.Text>
-              </div>
+              <Typography.Paragraph type="secondary" className="wtox-auth-step-note">
+                选择其他 Tox 客户端导出的 .tox 文件。
+              </Typography.Paragraph>
               <Form.Item label=".tox 文件" required>
                 <Upload.Dragger accept=".tox,application/octet-stream"
                   maxCount={1} multiple={false} className="wtox-auth-upload"
@@ -1220,8 +1200,6 @@ export default function App(){
                 导入并进入聊天
               </AntButton>
             </Form>}
-          <div className="wtox-auth-card-bottom">消息与好友由你的 Tox 身份管理</div>
-        </div>
       </section>
     </main>
   </ConfigProvider>;
