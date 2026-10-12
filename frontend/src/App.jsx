@@ -19,12 +19,12 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
-import {isNearBottom,countNewEntries} from "./thread_scroll.js";
+import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
-import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
+import {activeConversationPeer,unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
 import {MAX_HISTORY_IMPORT,toWtoxJson,fromWtoxJson} from "../history_io.js";
 
 const online=friend=>friend && (friend.status===1||friend.status===2);
@@ -210,6 +210,12 @@ export default function App(){
   const [networkDiagnostics,setNetworkDiagnostics]=useState(null);
   const [selected,setSelected]=useState(null),[mobileChat,setMobileChat]=useState(false);
   const [section,setSection]=useState("chats");
+  const [pageVisible,setPageVisible]=useState(()=>document.visibilityState==="visible");
+  useEffect(()=>{
+    const refresh=()=>setPageVisible(document.visibilityState==="visible");
+    document.addEventListener("visibilitychange",refresh);
+    return()=>document.removeEventListener("visibilitychange",refresh);
+  },[]);
   const [friendRequests,setFriendRequests]=useState([]);
   const [friendNotificationApi,friendNotificationContext]=notification.useNotification({
     placement:"topRight",top:22,maxCount:2
@@ -241,6 +247,7 @@ export default function App(){
   const followLatest=useRef(true);
   const previousThread=useRef({peer:null,ids:[]});
   const scrollIdleTimer=useRef(null);
+  const scrollFrameIds=useRef([]);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
   const [logoutOpen,setLogoutOpen]=useState(false);
@@ -862,13 +869,6 @@ export default function App(){
     try{localStorage.setItem("wtox-seen-"+user.public_key,JSON.stringify(seen))}catch{}
   },[user?.public_key,seen]);
   useEffect(()=>{
-    if(selected&&mobileChat&&messages.length){
-      const last=Math.max(0,...messages.filter(m=>m.public_key===selected&&
-        m.direction==="incoming").map(m=>m.at||0));
-      if(last>(seen[selected]||0))setSeen(previous=>({...previous,[selected]:last}));
-    }
-  },[selected,mobileChat,messages,seen]);
-  useEffect(()=>{
     if(!user?.public_key)return;
     let dead=false;
     const previous=history.current;history.current=null;previous?.close();
@@ -1045,12 +1045,30 @@ export default function App(){
   // resolving. Merge the optimistic upload with the canonical transfer ID.
   const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
     .slice(-250),[selected,messages,pendingFiles]);
+  const settleThreadBottom=useCallback(()=>{
+    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
+    scrollFrameIds.current=[];
+    const scroll=()=>{
+      if(followLatest.current)scrollThreadToBottom(threadEl.current);
+    };
+    // The initial layout can precede the mobile chat panel becoming visible.
+    // Scroll now, after the next paint, and after the following layout pass.
+    scroll();
+    const first=requestAnimationFrame(()=>{
+      scroll();
+      const second=requestAnimationFrame(()=>{
+        scroll();
+        scrollFrameIds.current=[];
+      });
+      scrollFrameIds.current=[second];
+    });
+    scrollFrameIds.current=[first];
+  },[]);
   const scrollToLatest=useCallback(()=>{
-    const element=threadEl.current;
     followLatest.current=true;
     setNewBelowCount(0);
-    if(element)element.scrollTop=element.scrollHeight;
-  },[]);
+    settleThreadBottom();
+  },[settleThreadBottom]);
   const onThreadScroll=useCallback(()=>{
     const element=threadEl.current;
     if(!element)return;
@@ -1061,41 +1079,49 @@ export default function App(){
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
     scrollIdleTimer.current=setTimeout(()=>setThreadScrolling(false),950);
   },[]);
-  useEffect(()=>()=>{if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current)},[]);
+  useEffect(()=>()=> {
+    if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
+    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
+  },[]);
   useLayoutEffect(()=>{
-    const element=threadEl.current;
     const ids=thread.map(item=>item.id);
     const previous=previousThread.current;
     if(previous.peer!==selected){
       previousThread.current={peer:selected,ids};
       followLatest.current=true;
       setNewBelowCount(0);
-      if(element)element.scrollTop=element.scrollHeight;
+      settleThreadBottom();
       return;
     }
     const newlyAdded=countNewEntries(previous.ids,ids);
     previousThread.current={peer:selected,ids};
     if(followLatest.current){
-      if(element)element.scrollTop=element.scrollHeight;
+      settleThreadBottom();
       setNewBelowCount(count=>count===0?count:0);
     }else if(newlyAdded>0){
-      // Updating delivery receipts does not add IDs, so it cannot inflate
-      // this badge while the reader is looking at earlier messages.
+      // Status-only changes do not create a new message or inflate the badge.
       setNewBelowCount(count=>count+newlyAdded);
     }
-  },[selected,thread]);
+  },[selected,thread,mobileChat,settleThreadBottom]);
   useEffect(()=>{
     const element=threadEl.current;
     const content=element?.firstElementChild;
-    if(!content||typeof ResizeObserver==="undefined")return;
-    const observer=new ResizeObserver(()=>{
-      // Images and delayed attachment previews may change message height
-      // after the message itself was rendered.
-      if(followLatest.current)element.scrollTop=element.scrollHeight;
-    });
-    observer.observe(content);
-    return()=>observer.disconnect();
-  },[selected]);
+    if(!element||!content)return;
+    const ensureBottom=()=>{if(followLatest.current)settleThreadBottom()};
+    // Both text/footer growth and container resizing (mobile viewport,
+    // keyboard, toolbar) can change the real bottom after the first paint.
+    let observer;
+    if(typeof ResizeObserver!=="undefined"){
+      observer=new ResizeObserver(ensureBottom);
+      observer.observe(content);
+      observer.observe(element);
+    }
+    window.visualViewport?.addEventListener("resize",ensureBottom);
+    return()=>{
+      observer?.disconnect();
+      window.visualViewport?.removeEventListener("resize",ensureBottom);
+    };
+  },[selected,mobileChat,settleThreadBottom]);
 
   const latestByPeer=useMemo(()=>{
     const latest=new Map();
@@ -1114,7 +1140,23 @@ export default function App(){
       const right=latestByPeer.get(b.public_key)?.at||0;
       return right-left || Number(online(b))-Number(online(a));
     }),[friends,filter,latestByPeer,section]);
-  const unreadByPeer=useMemo(()=>unreadCountsByPeer(messages,seen),[messages,seen]);
+  const activeChatPeer=activeConversationPeer({
+    selected,section,isMobile,mobileChat,pageVisible
+  });
+  // A visible conversation is read on desktop as well as in an open mobile
+  // thread. Never silently read messages from a hidden browser tab.
+  useEffect(()=>{
+    if(!activeChatPeer)return;
+    const last=messages.reduce((latest,item)=>
+      item.type==="message"&&item.direction==="incoming"&&
+      item.public_key===activeChatPeer&&Number.isFinite(item.at)
+        ? Math.max(latest,item.at):latest,0);
+    if(last>0)setSeen(previous=>
+      (Number(previous[activeChatPeer])||0)>=last?previous:
+        {...previous,[activeChatPeer]:last});
+  },[activeChatPeer,messages]);
+  const unreadByPeer=useMemo(()=>
+    unreadCountsByPeer(messages,seen,activeChatPeer),[messages,seen,activeChatPeer]);
   const unreadFor=useCallback(peer=>unreadByPeer.get(peer)||0,[unreadByPeer]);
   const totalUnread=useMemo(()=>totalUnreadForFriends(unreadByPeer,friends),
     [unreadByPeer,friends]);
@@ -1211,8 +1253,9 @@ export default function App(){
       window.history.pushState({...window.history.state,wtoxChat:true},"",window.location.href);
     }
     setMobileChat(true);
-    // Opening the same conversation again also restores bottom following.
-    requestAnimationFrame(scrollToLatest);
+    // The selected thread re-renders after this handler returns. The layout
+    // effect scrolls the new content, then retries after two animation frames.
+    scrollToLatest();
     setSeen(previous=>({...previous,[key]:Date.now()}));
   }
   useEffect(()=>{
@@ -1897,7 +1940,9 @@ export default function App(){
               :draftsText?"[草稿] "+draftsText:
                 recent?.type==="file"?"[附件] "+(recent.file_name||"文件"):
                 recent?.text||friendStatusMessage;
-            const when=recent?.at?new Date(recent.at):null;
+            // Toxcore has last-online time, not a trustworthy friend-added
+            // timestamp. In Contacts, omit time rather than mislabel a chat date.
+            const when=section==="chats"&&recent?.at?new Date(recent.at):null;
             const clock=when ? (Date.now()-when.getTime()>86400000?
               when.toLocaleDateString("zh-CN",{month:"2-digit",day:"2-digit"}):
               when.toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})):"";
@@ -1936,10 +1981,10 @@ export default function App(){
                 <span className="wechat-conversation-name">{friend.name||"Tox 好友 "+shortKey(friend.public_key)}</span>
                 <span className="wechat-conversation-preview">{preview}</span>
               </span>
-              <span className="wechat-conversation-side">
-                <time>{clock}</time>
+              {section==="chats"&&<span className="wechat-conversation-side">
+                {clock&&<time>{clock}</time>}
                 {unread>0&&<span className="wechat-unread">{unread>99?"99+":unread}</span>}
-              </span>
+              </span>}
             </button>;
           })}
           {!visibleFriends.length&&<div className="wechat-no-contacts">
