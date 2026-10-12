@@ -1272,12 +1272,16 @@ export default function App(){
       <Typography.Paragraph type="secondary">
         .tox 文件包含身份私钥，请妥善保管，切勿分享。
       </Typography.Paragraph>
-      <Typography.Text type="secondary">密码</Typography.Text>
+      <Typography.Text type="secondary">新备份的加密密码</Typography.Text>
       <Input.Password autoComplete="new-password" value={backupPassword}
-        placeholder="密码" aria-label="密码"
+        placeholder="为这份 .tox 备份设置密码" aria-label="新备份的加密密码"
         onChange={e=>setBackupPassword(e.target.value)}/>
+      <Typography.Paragraph type="secondary" className="wt-settings-footnote">
+        此处设置的是本次导出文件的新密码，并非验证创建身份时的旧密码。
+        已登录的身份可以重新加密导出；请妥善保护登录设备。
+      </Typography.Paragraph>
       <AntButton block onClick={async()=>{
-        if(!backupPassword){alert("请先输入用于加密备份的密码");return}
+        if(!backupPassword){alert("请设置这份备份的新密码");return}
         try{
           const response=await api("/api/profile/export/encrypted",{
             method:"POST",body:JSON.stringify({password:backupPassword})});
