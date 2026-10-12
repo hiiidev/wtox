@@ -1,10 +1,17 @@
 {$SITE_DOMAIN} {
     encode zstd gzip
+    # Require Caddy 2.10+ for the edge request body cap.
+    request_body {
+        max_size 9MB
+    }
     reverse_proxy web:6066
 
     header {
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
+        X-Frame-Options "DENY"
+        Permissions-Policy "camera=(self), microphone=(self), geolocation=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' wss:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
     }
 }

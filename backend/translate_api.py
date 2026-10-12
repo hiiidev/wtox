@@ -68,10 +68,14 @@ def _google_segments(payload):
 
 
 def _fetch_google(text: str, target: str):
-    query = urlencode({"client": "gtx", "sl": "auto", "tl": target, "dt": "t", "q": text})
-    req = UrlRequest(_trusted_endpoint() + "?" + query, headers={
-        "Accept": "application/json", "User-Agent": "wTox-Translate/1.0",
-    })
+    # Never place plaintext messages in URL query parameters or proxy logs.
+    query = urlencode({"client": "gtx", "sl": "auto", "tl": target, "dt": "t"})
+    req = UrlRequest(_trusted_endpoint() + "?" + query,
+        data=urlencode({"q": text}).encode("utf-8"), headers={
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+        "User-Agent": "wTox-Translate/1.0",
+    }, method="POST")
     try:
         with build_opener(_NoRedirect).open(req, timeout=8) as upstream:
             if upstream.status != 200:

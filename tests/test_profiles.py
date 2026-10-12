@@ -74,14 +74,14 @@ class ToxLoginTests(unittest.TestCase):
             self.assertEqual(created.headers["x-tox-id"],self.alice.address)
             self.assertTrue(self.client.cookies.get("wtox_tox_session"))
             self.assertEqual(self.client.get("/api/me").json()["public_key"],"A"*64)
-            self.assertEqual(self.client.get("/api/profile/export").content,self.alice.savedata)
+            self.assertEqual(self.client.get("/api/profile/export").status_code,410)
             self.client.post("/api/logout")
             self.assertEqual(self.client.get("/api/me").status_code,401)
             logged=self.client.post("/api/tox/login",content=self.alice.savedata,
                                     headers={"content-type":"application/octet-stream"})
             self.assertEqual(logged.status_code,200,logged.text)
             self.assertFalse(logged.json()["imported"])
-            self.assertEqual(self.client.get("/api/profile/export").content,self.alice.savedata)
+            self.assertEqual(self.client.get("/api/profile/export").status_code,410)
 
     def test_import_other_key_never_exposes_first_profile(self):
         with patch("backend.profile_api.core",return_value=self.native()), patch("backend.profile_api.activate",return_value=True):
@@ -90,10 +90,10 @@ class ToxLoginTests(unittest.TestCase):
             imported=self.client.post("/api/tox/login",content=self.bob.savedata)
             self.assertEqual(imported.status_code,200)
             self.assertTrue(imported.json()["imported"])
-            self.assertEqual(self.client.get("/api/profile/export").content,self.bob.savedata)
+            self.assertEqual(self.client.get("/api/profile/export").status_code,410)
             self.client.post("/api/logout")
             self.client.post("/api/tox/login",content=self.alice.savedata)
-            self.assertEqual(self.client.get("/api/profile/export").content,self.alice.savedata)
+            self.assertEqual(self.client.get("/api/profile/export").status_code,410)
 
     def test_public_tox_id_without_private_key_cannot_login(self):
         with patch("backend.profile_api.core",return_value=self.native()), patch("backend.profile_api.activate",return_value=True):
@@ -102,6 +102,17 @@ class ToxLoginTests(unittest.TestCase):
             result=self.client.post("/api/tox/login", content=b"fake-public-key-only")
             self.assertEqual(result.status_code,403)
             self.assertEqual(self.client.get("/api/me").status_code,401)
+
+    def test_password_prefix_cannot_expand_upload_limit(self):
+        for header in ("999999999999", "1025", "1000000000000", "-1"):
+            with self.subTest(header=header):
+                result = self.client.post("/api/tox/login", content=b"tiny",
+                    headers={"X-Tox-Password-Bytes": header})
+                self.assertIn(result.status_code, (400, 413))
+        oversized = self.client.post("/api/tox/login",
+            content=b"a" * (profile_api.MAX_TOX_UPLOAD + 1),
+            headers={"X-Tox-Password-Bytes": "1024"})
+        self.assertEqual(oversized.status_code, 413)
 
     def test_invalid_savedata_and_upload_size(self):
         with patch("backend.profile_api.core",return_value=self.native()):
@@ -131,7 +142,13 @@ class ToxLoginTests(unittest.TestCase):
                       (hashlib.sha256(old_cookie.encode()).hexdigest(), uid, int(time.time())+86400))
         pending_id=store.append_pending(uid,{"type":"message","text":"stored-before-upgrade"})
         self.client.cookies.set("wtox_session",old_cookie)
-        self.assertEqual(self.client.get("/api/legacy/export").content,self.alice.savedata)
+        self.assertEqual(self.client.get("/api/legacy/export").status_code,410)
+        with patch("backend.main.encrypt_savedata", return_value=b"encrypted-legacy") as backup:
+            legacy=self.client.post("/api/legacy/export/encrypted",
+                                    json={"password":"new-legacy-backup-password"})
+        self.assertEqual(legacy.status_code,200)
+        self.assertEqual(legacy.content,b"encrypted-legacy")
+        backup.assert_called_once_with(self.alice.savedata,"new-legacy-backup-password")
         self.assertTrue(store.needs_legacy_migration())
         native=self.native()
         store.migrate_legacy_identities(native)
@@ -141,7 +158,7 @@ class ToxLoginTests(unittest.TestCase):
             self.assertEqual(response.status_code,200)
             self.assertFalse(response.json()["imported"])
         self.assertEqual(store.get_pending(uid)[0]["id"], pending_id)
-        self.assertEqual(self.client.get("/api/profile/export").content,self.alice.savedata)
+        self.assertEqual(self.client.get("/api/profile/export").status_code,410)
 
 
     def test_create_requires_nonempty_password(self):

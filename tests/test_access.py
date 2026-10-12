@@ -1,5 +1,6 @@
 """Optional site password protects API and websocket, with persistent cookies."""
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +14,13 @@ from backend.main import app, _SITE_LOGIN_ATTEMPTS
 class AccessTest(unittest.TestCase):
     def setUp(self):
         _SITE_LOGIN_ATTEMPTS.clear()
+        self.site_db_dir = tempfile.TemporaryDirectory()
+        self.site_db_env = patch.dict(os.environ, {"WTOX_DATA_DIR": self.site_db_dir.name})
+        self.site_db_env.start()
+
+    def tearDown(self):
+        self.site_db_env.stop()
+        self.site_db_dir.cleanup()
 
     def test_cookie_security_keeps_https_by_default(self):
         with patch.dict(os.environ,{},clear=True):
@@ -48,12 +56,18 @@ class AccessTest(unittest.TestCase):
             "WTOX_MASTER_KEY":"e3"*32
         }):
             token=access.issue_access_cookie(access.site_password())
-            self.assertTrue(token.startswith("v2."))
+            self.assertTrue(token.startswith("v3."))
             self.assertEqual(len(token.split(".")),3)
             self.assertTrue(access.gate_authorized(token))
             self.assertFalse(access.gate_authorized(token[:-1]+"x"))
             self.assertFalse(access.gate_authorized(None))
             self.assertGreaterEqual(access.REMEMBER_SECONDS,365*86400)
+            renewed = access.renew_access_cookie(token)
+            self.assertIsNotNone(renewed)
+            self.assertTrue(access.gate_authorized(renewed))
+            device = next(d for d in access.access_devices(renewed) if d["current"])
+            access.revoke_device(device["id"])
+            self.assertFalse(access.gate_authorized(renewed))
             with patch.dict(os.environ,{"WTOX_ACCESS_PASSWORD":"changed secret"}):
                 self.assertFalse(access.gate_authorized(token))
 
@@ -101,6 +115,20 @@ class AccessTest(unittest.TestCase):
                 self.assertIn("max-age=",again.headers["set-cookie"].lower(),
                     "Each normal visit should transparently renew remembered access")
                 self.assertNotEqual(first,client.cookies.get(access.COOKIE_NAME))
+                fresh=client.cookies.get(access.COOKIE_NAME)
+                devices=client.get("/api/gate/devices").json()["devices"]
+                self.assertTrue(any(d["current"] for d in devices))
+                current=next(d for d in devices if d["current"])
+                self.assertEqual(client.post("/api/gate/devices/"+current["id"]+"/revoke",
+                    json={"password":"invalid"}).status_code,403)
+                removed=client.post("/api/gate/devices/"+current["id"]+"/revoke",
+                    json={"password":"good password 123"})
+                self.assertEqual(removed.status_code,200)
+                self.assertTrue(removed.json()["current_revoked"])
+                self.assertFalse(access.gate_authorized(fresh))
+                self.assertEqual(client.get("/api/me").status_code,403)
+                self.assertEqual(client.post("/api/gate/login",
+                    json={"password":"good password 123"}).status_code,200)
                 with patch.dict(os.environ,{"WTOX_ACCESS_PASSWORD":"changed password"}):
                     self.assertEqual(client.get("/api/me").status_code,403)
                     self.assertFalse(client.get("/api/gate/status").json()["authorized"])

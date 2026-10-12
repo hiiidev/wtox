@@ -1,7 +1,7 @@
 """Translation gateway: origin/auth, bounds, no-open-proxy and parsing."""
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -68,6 +68,24 @@ class TranslateTests(unittest.TestCase):
                     json={"text":"hi","target":"en"}).status_code,200)
             self.assertEqual(CLIENT.post("/api/translate",
                 json={"text":"hi","target":"en"}).status_code,429)
+
+    def test_plaintext_sent_only_in_https_post_body(self):
+        import urllib.parse
+        payload = [[["bonjour", "hello"]], None, "en"]
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = __import__("json").dumps(payload).encode()
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = response
+        with patch.object(tr, "build_opener", return_value=opener):
+            translated, language = tr._fetch_google("secret chat text", "fr")
+        request = opener.open.call_args.args[0]
+        self.assertEqual(request.get_method(), "POST")
+        self.assertNotIn("secret chat text", request.full_url)
+        self.assertNotIn("q=", request.full_url)
+        self.assertEqual(urllib.parse.parse_qs(request.data.decode())["q"], ["secret chat text"])
+        self.assertEqual(translated, "bonjour")
+        self.assertEqual(language, "en")
 
     def test_only_https_operator_configured_upstream(self):
         with patch.dict(os.environ,{"WTOX_TRANSLATE_UPSTREAM":"https://translate.example.org"}):

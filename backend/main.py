@@ -13,6 +13,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import access, store
+from .tox_backup import encrypt_savedata
+from .tox_identity import ToxIdentityError
+from .body_limit import RequestBodyLimitMiddleware
 from .profile_api import router as profile_router, COOKIE_NAME as TOX_SESSION_COOKIE
 from .tox_api import router as tox_router
 from .session_manager import manager
@@ -51,6 +54,7 @@ class NoStoreMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(NoStoreMiddleware)
+app.add_middleware(RequestBodyLimitMiddleware)
 
 # Do not expose identity, file, push or translation endpoints before the
 # optional site password has been entered. JS/CSS/manifest remain public so
@@ -59,7 +63,7 @@ class SiteGateMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         if (path.startswith("/api/") and path not in
-                ("/api/gate/status", "/api/gate/login") and
+                ("/api/gate/status", "/api/gate/login", "/api/gate/logout") and
                 not access.gate_authorized(request.cookies.get(access.COOKIE_NAME))):
             return JSONResponse(
                 {"detail":"需要先输入网站访问密码","access_required":True},
@@ -97,12 +101,13 @@ def site_gate_status(request: Request, response: Response):
     if required and authorized:
         # Refresh the persistent first-party cookie whenever the app opens;
         # no fixed 30-day deadline. Browser storage policies still apply.
-        password=access.site_password()
-        response.set_cookie(
-            access.COOKIE_NAME,access.issue_access_cookie(password),
-            max_age=access.REMEMBER_SECONDS,path="/",httponly=True,
-            secure=access.secure_cookies(),samesite="strict",
-        )
+        renewed = access.renew_access_cookie(request.cookies.get(access.COOKIE_NAME))
+        if renewed:
+            response.set_cookie(
+                access.COOKIE_NAME, renewed,
+                max_age=access.REMEMBER_SECONDS,path="/",httponly=True,
+                secure=access.secure_cookies(),samesite="strict",
+            )
     return {"required":required,"authorized":authorized}
 
 
@@ -122,6 +127,44 @@ def site_gate_login(body: SitePasswordBody, request: Request, response: Response
         secure=access.secure_cookies(),samesite="strict"
     )
     return {"ok":True}
+
+
+@app.post("/api/gate/logout")
+def site_gate_logout(request: Request, response: Response):
+    from .profile_api import require_same_origin
+    require_same_origin(request)
+    access.revoke_access_cookie(request.cookies.get(access.COOKIE_NAME))
+    response.delete_cookie(access.COOKIE_NAME, path="/")
+    return {"ok": True}
+
+
+@app.get("/api/gate/devices")
+def site_gate_devices(request: Request):
+    if not access.site_gate_enabled():
+        return {"devices": []}
+    return {"devices": access.access_devices(request.cookies.get(access.COOKIE_NAME))}
+
+
+class RevokeDeviceBody(BaseModel):
+    password: str = Field(min_length=1, max_length=512)
+
+
+@app.post("/api/gate/devices/{device_id}/revoke")
+def site_gate_revoke_device(device_id: str, body: RevokeDeviceBody, request: Request,
+                            response: Response):
+    from .profile_api import require_same_origin
+    require_same_origin(request)
+    if not access.password_matches(body.password):
+        raise HTTPException(403, "访问密码错误")
+    devices = access.access_devices(request.cookies.get(access.COOKIE_NAME))
+    current = any(item["current"] and item["id"] == device_id for item in devices)
+    try:
+        access.revoke_device(device_id)
+    except ValueError as exc:
+        raise HTTPException(400, "设备 ID 无效") from exc
+    if current:
+        response.delete_cookie(access.COOKIE_NAME, path="/")
+    return {"ok": True, "current_revoked": current}
 
 
 app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets"), check_dir=False), name="assets")
@@ -193,21 +236,30 @@ def me(request: Request):
     return store.tox_identity_info(uid)
 
 @app.get("/api/legacy/export")
-def export_legacy_profile(request: Request):
-    """One-way recovery for an already valid OLD login cookie.
+def export_legacy_profile():
+    # Unencrypted Tox savedata exposes a portable identity private key.
+    raise HTTPException(410, "原始旧身份导出已禁用，请改用加密导出")
 
-    Cannot sign in to the new site with a username/password; this endpoint
-    only downloads an existing profile before the legacy cookie expires.
-    """
+
+@app.post("/api/legacy/export/encrypted")
+def export_legacy_profile_encrypted(body: SitePasswordBody, request: Request):
+    """Legacy recovery remains possible without releasing plaintext private keys."""
+    from .profile_api import require_same_origin, rate_check
+    require_same_origin(request)
+    rate_check(request)
     legacy_uid = store.legacy_session_user(request.cookies.get("wtox_session"))
     if not legacy_uid:
         raise HTTPException(401, "旧会话已过期，请使用之前备份的 .tox 文件")
     saved = store.read_profile(legacy_uid)
     if saved is None:
         raise HTTPException(404, "旧账号未创建 Tox 身份")
+    try:
+        encrypted = encrypt_savedata(saved, body.password)
+    except ToxIdentityError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return Response(
-        saved, media_type="application/octet-stream",
-        headers={"Content-Disposition":'attachment; filename="wtox-legacy-backup.tox"',
+        encrypted, media_type="application/octet-stream",
+        headers={"Content-Disposition":'attachment; filename="wtox-legacy-encrypted.tox"',
                  "Cache-Control":"no-store", "X-Content-Type-Options":"nosniff"}
     )
 

@@ -81,13 +81,24 @@ docker compose rm -f caddy
 ```caddyfile
 tox.example.com {
     encode zstd gzip
+    request_body {
+        max_size 9MB
+    }
     reverse_proxy 127.0.0.1:6066
     header {
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        Permissions-Policy "camera=(self), microphone=(self), geolocation=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' wss:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
     }
 }
 ```
+
+此 `request_body` 指令需要 **Caddy 2.10 或更新版本**。请先确认
+`caddy version`；如果版本过旧，先升级 Caddy 再应用该片段。
+宿主机模式**不会**自动加载仓库根目录 `Caddyfile`。
 
 `reverse_proxy` 原生支持 WebSocket Upgrade，**不用额外写 /ws 的代理规则**。如果域名对应的站点块已经存在，就在现有块内添加 `reverse_proxy`，不要再创建重复的域名块或覆盖其他网站路由。没有单独域名时建议新建子域名以避免现有网站路径冲突。
 

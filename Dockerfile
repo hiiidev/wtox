@@ -1,20 +1,22 @@
 # Build the React/Ant Design X UI. Only compiled static assets reach runtime.
 FROM node:22-bookworm-slim AS frontendbuild
 WORKDIR /frontend
-COPY frontend/package.json ./
+COPY frontend/package.json frontend/package-lock.json ./
 COPY tests/check_npm_peers.mjs /checks/check_npm_peers.mjs
 RUN node /checks/check_npm_peers.mjs \
- && npm install --no-audit --no-fund \
+ && npm ci --no-audit --no-fund \
  && npm ls antd @ant-design/x @ant-design/icons --depth=0
 COPY frontend/ ./
 RUN npm run build
 
 FROM ubuntu:24.04 AS toxbuild
 ARG TOXCORE_REF=v0.2.23
+ARG TOXCORE_SHA=d9ca3c577e5abd4303d180eb5270167b4133ea4c
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates build-essential cmake pkg-config libsodium-dev && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch "${TOXCORE_REF}" --recurse-submodules https://github.com/TokTok/c-toxcore.git /src/toxcore \
+ && test "$(git -C /src/toxcore rev-parse HEAD)" = "${TOXCORE_SHA}" \
  && cmake -S /src/toxcore -B /tmp/toxbuild -DCMAKE_BUILD_TYPE=Release -DBOOTSTRAP_DAEMON=OFF -DUNITTEST=OFF -DAUTOTEST=OFF -DENABLE_SHARED=ON -DENABLE_STATIC=OFF -DBUILD_TOXAV=OFF -DDHT_BOOTSTRAP=OFF \
  && cmake --build /tmp/toxbuild -j2 \
  && cmake --install /tmp/toxbuild
@@ -40,4 +42,4 @@ RUN useradd --uid 10001 --create-home wtox && mkdir /data && chown -R wtox:wtox 
 USER wtox
 ENV PYTHONUNBUFFERED=1
 EXPOSE 6066
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "6066", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "6066", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1,172.16.0.0/12"]

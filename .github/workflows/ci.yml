@@ -13,6 +13,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements.txt httpx==0.28.1
+      - name: Audit Python dependencies (including resolved transitive packages)
+        run: |
+          python -m pip install pip-audit==2.10.1
+          python -m pip_audit -r requirements.txt --strict
       - name: Check Python source syntax
         run: python -m compileall -q backend tests
       - uses: actions/setup-node@v4
@@ -21,7 +25,10 @@ jobs:
       - name: Verify Ant Design peer versions before install
         run: node tests/check_npm_peers.mjs
       - name: Install exact frontend dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Audit production npm dependency graph
+        run: npm audit --omit=dev --audit-level=high
         working-directory: frontend
       - name: Verify npm dependency tree
         run: npm ls antd @ant-design/x @ant-design/icons --depth=0
@@ -63,11 +70,21 @@ jobs:
           done
       - run: cp .env.example .env && docker compose config -q
   native-smoke:
-    # Run on demand, and once for commits explicitly marked [native-check].
-    # This exercises real c-toxcore and ToxEncryptSave in Docker.
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[native-check]')
+    # Mandatory on PRs to verify native Toxcore and encrypted savedata.
+    timeout-minutes: 35
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[native-check]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t wtox-native-smoke .
 
+  caddy-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Caddy body cap and browser protection headers
+        run: |
+          docker run --rm -e SITE_DOMAIN=chat.example.test \
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
