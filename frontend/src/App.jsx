@@ -307,6 +307,7 @@ export default function App(){
   const avatarColor=useCallback(key=>avatarColors[key]||avatarFallbackColor(key),[avatarColors]);
   const longPressTimer=useRef(null);
   const suppressSelectionClick=useRef(false);
+  const suppressSelectionAt=useRef(0);
   const cancelLongPress=()=>{if(longPressTimer.current)clearTimeout(longPressTimer.current);longPressTimer.current=null};
   const clearSelection=()=>{
     cancelLongPress();
@@ -340,6 +341,7 @@ export default function App(){
        event?.target?.closest?.("button,a,input,textarea,[role=button]"))return;
     longPressTimer.current=setTimeout(()=>{
       suppressSelectionClick.current=true;
+      suppressSelectionAt.current=Date.now();
       if(isMobile){
         // A long press opens the action/info menu. Multi-select is a
         // deliberate choice inside it, not the consequence of holding.
@@ -352,7 +354,10 @@ export default function App(){
   }
   function messageSelectionClick(event,id){
     if(suppressSelectionClick.current){
-      suppressSelectionClick.current=false;event.preventDefault();event.stopPropagation();return;
+      suppressSelectionClick.current=false;
+      if(Date.now()-suppressSelectionAt.current<1000){
+        event.preventDefault();event.stopPropagation();return;
+      }
     }
     if(selectedMessageIds.size){
       event.preventDefault();event.stopPropagation();
