@@ -7,6 +7,8 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
   ArrowDownOutlined, CopyOutlined, CheckSquareOutlined } from "@ant-design/icons";
+import PushSettings from "./PushSettings.jsx";
+import {disablePushBeforeLogout} from "./push_client.js";
 import {api,getJson,postJson,downloadBlob,shortKey} from "./api.js";
 import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
@@ -848,6 +850,7 @@ export default function App(){
   }
   async function logout(){
     try{
+      await disablePushBeforeLogout();
       await postJson("/api/logout");
       history.current?.close();history.current=null;
       drafts.current.clear();setUser(null);setMessages([]);setFriends([]);
@@ -1084,6 +1087,7 @@ export default function App(){
         </Typography.Text>
       </Space>
     </Card>
+    <PushSettings userId={user?.public_key}/>
     <Card size="small" title="Tox 身份备份" className="wt-settings-card">
       <Typography.Paragraph type="secondary">
         .tox 文件包含身份私钥，请妥善保管，切勿分享。
