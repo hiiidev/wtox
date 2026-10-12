@@ -7,6 +7,7 @@ const values=new Map([
   ["wtox-avatar-colors-"+other,"peer-color"],
   ["wtox-seen-"+own,"my-read"],
   ["wtox-pwa-push-prompt-"+own,"1"],
+  ["wtox-pwa-push-attempt-"+own,"1"],
   ["wtox-seen-"+other,"peer-read"],
   ["wtox-visual-style","dark"]
 ]);
@@ -26,6 +27,7 @@ assert.deepEqual(deleted,["wtox-local-"+own]);
 assert.ok(!values.has("wtox-avatar-colors-"+own));
 assert.ok(!values.has("wtox-seen-"+own));
 assert.ok(!values.has("wtox-pwa-push-prompt-"+own));
+assert.ok(!values.has("wtox-pwa-push-attempt-"+own));
 assert.equal(values.get("wtox-avatar-colors-"+other),"peer-color");
 assert.equal(values.get("wtox-seen-"+other),"peer-read");
 assert.equal(values.get("wtox-visual-style"),"dark");
