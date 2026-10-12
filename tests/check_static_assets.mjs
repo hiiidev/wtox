@@ -33,7 +33,7 @@ assert.match(uiLogo, /fill="#07C160"/, "UI SVG should be the provided green outl
 assert.ok(!uiLogo.includes("<rect"), "UI SVG must be transparent (no app-icon background)");
 assert.match(pwaArt, /<rect[^>]*fill="#07C160"/, "PWA source must have the green square background");
 assert.match(pwaArt, /fill="#fff"/, "PWA icon must use the white-filled speech balloon");
-assert.match(generator, /scripts\\/pwa-icon-source\\.svg/, "PNG generation must use PWA artwork, not the UI SVG");
+assert.ok(generator.includes('scripts/pwa-icon-source.svg'), "PNG generation must use PWA artwork, not the UI SVG");
 assert.ok(!generator.includes('public/logo.svg'), "Do not generate app PNGs from favicon SVG");
 const manifest=JSON.parse(readFileSync("frontend/dist/manifest.webmanifest","utf8"));
 assert.deepEqual(manifest.icons.map(icon=>icon.type),["image/png","image/png"]);
