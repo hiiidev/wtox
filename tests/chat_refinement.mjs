@@ -30,7 +30,7 @@ assert.doesNotMatch(app,/\{modal==="settings"&&<Drawer/);
 assert.match(app,/\{selected&&<div className="ant-chat-toolbar">/);
 assert.match(app,/\{selected&&<div className="ant-compose-area">/);
 assert.doesNotMatch(app,/wt-settings-overview|WTOX \/ PREFERENCES|你的聊天，由你掌控/);
-assert.equal(app.split("centered={isMobile}").length-1,9,
+assert.equal((app.match(/<AntModal[^\n]*\bcentered\b/g)||[]).length,9,
   "All mobile modals should use centered positioning");
 assert.doesNotMatch(app,/<Tooltip title="好友请求"|<Tooltip title="添加好友"/);
 assert.ok(refined.includes("width:40px!important;height:40px!important;min-width:40px!important;"),
@@ -84,7 +84,7 @@ console.log("System themes, settings, Sender attachments, timeline images and to
 
 assert.match(app,/aria-label="好友请求"/);
 assert.match(app,/onClick=\{\(\)=>setModal\("requests"\)\}/);
-assert.match(app,/friend\.status_message\?\.trim\(\)/);
+assert.match(app,/contactPresenceText\(friend\)/);
 assert.match(app,/selfAvatarText=avatarLabel\(ownProfile\.name\?\.trim\(\)\|\|"我",user\?\.public_key\)/);
 assert.equal((app.match(/\{selfAvatarText\}/g)||[]).length,2);
 assert.match(app,/selectedMessageIds\.size>0/);
@@ -109,8 +109,9 @@ assert.match(refined,/max-width:none!important;\s*margin-inline:0!important/);
 assert.match(refined,/background:var\(--wt-chat\)!important/);
 
 assert.match(app,/aria-label="更多操作"/);
-assert.match(app,/label:"删除好友",danger:true/);
-assert.match(app,/open=\{deleteFriendOpen&&!!selectedFriend\}/);
+assert.match(app,/if\(key==="delete"\)setConversationDeletePeer\(selected\)/);
+assert.match(app,/label:"删除聊天记录",danger:true/);
+assert.match(app,/open=\{!!deleteFriendPeer\} title="删除好友"/);
 assert.match(app,/okButtonProps=\{\{danger:true,loading:removingFriend\}\}/);
 assert.doesNotMatch(app,/if\(!selected\|\|!confirm\(/);
 assert.match(app,/--wt-scroll-thumb/);
