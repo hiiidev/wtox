@@ -899,12 +899,28 @@ export default function App(){
 
   // The extra in-app History entry allows native iOS back-swipe and the
   // physical/software back button to return to the conversation list.
+  // Returning to the conversation list must clear selection so no friend
+  // retains the desktop-style highlighted card on iOS/Android.
+  function clearMobileConversation(){
+    selectedRef.current=null;
+    setSelected(null);
+    setMobileChat(false);
+    setPeerDetailsOpen(false);
+    clearSelection();
+  }
   function returnFromMobileChat(){
     if(window.history.state?.wtoxChat)window.history.back();
-    else setMobileChat(false);
+    else clearMobileConversation();
   }
   useEffect(()=>{
-    const onPop=()=>setMobileChat(false);
+    const onPop=()=>{
+      if(!window.matchMedia("(max-width:767px)").matches)return;
+      selectedRef.current=null;
+      setSelected(null);
+      setMobileChat(false);
+      setPeerDetailsOpen(false);
+      clearSelection();
+    };
     window.addEventListener("popstate",onPop);
     return()=>window.removeEventListener("popstate",onPop);
   },[]);
