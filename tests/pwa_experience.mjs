@@ -22,7 +22,7 @@ assert.ok(!welcome.includes("<Modal")&&!welcome.includes("开启离线通知</")
 assert.ok(welcome.includes("wtox-pwa-push-attempt-"),
   "Prompt the user only once per identity and device");
 assert.match(welcome,/if\(!userId\|\|!isStandalone\(\)\)/);
-assert.ok(welcome.includes('document.addEventListener("pointerdown",onFirstGesture,true)'),
+assert.ok(welcome.includes('document.addEventListener("click",onFirstGesture,true)'),
   "Native iOS permission requires a first user gesture");
 assert.ok(welcome.includes('document.addEventListener("keydown",onFirstGesture,true)'),
   "Keyboard access must trigger the same native permission flow");
