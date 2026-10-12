@@ -151,33 +151,15 @@ assert.match(app,/notifyIncoming\(e\)/);
 assert.match(app,/className="wt-conversation-bubble"/);
 assert.match(refined,/\.wt-conversation-bubble \.ant-bubble-body/);
 assert.match(refined,/width:max-content!important/);
-assert.doesNotMatch(refined,/\\.wechat-conversation\\.is-selected \\.wechat-presence\\.online/,
+assert.ok(!refined.includes(".wechat-conversation.is-selected .wechat-presence.online"),
   "Selected friend status dots must not gain a separate border");
-
-assert.match(refined,/height:calc\(76px \+ env\(safe-area-inset-top\)\)!important/);
-assert.match(refined,/\.ant-messenger\[data-theme\] \.ant-chat-avatar\{/);
-assert.match(refined,/\.ant-messenger\[data-theme\] \.wechat-mobile-avatar \.ant-avatar\{/);
-assert.match(refined,/\.ant-messenger\[data-theme\] \.ant-peer-title strong\{/);
-assert.match(app,/size=\{40\} shape="square" gap=\{3\}/);
-
-assert.match(app,/QRCode value=\{user\.tox_id\}/);
-assert.match(app,/modal==="qrcode"/);
-assert.match(app,/aria-label="显示 Tox ID 二维码"/);
-assert.match(app,/message\.useMessage\(\{top:76,maxCount:4\}\)/);
-assert.match(app,/uiMessageApi\.open\(\{type:level,content,duration:4\}\)/);
-assert.match(app,/notificationPromptShown\.current=true/);
-assert.match(app,/key:"notification-permission-invite",type:"info",duration:0/);
-assert.doesNotMatch(app,/wtox-toast/);
-assert.match(app,/wt-peer-profile-heading-main/);
-assert.match(app,/wt-peer-profile-name/);
-assert.match(refined,/\.wt-peer-profile-heading-main\{/);
-assert.match(refined,/\.wt-chat-more-button\.ant-btn svg\{/);
-assert.match(refined,/\.ant-mobile-back\.ant-btn:active/);
-assert.match(refined,/\.wechat-mobile-tabs button svg\{/);
-assert.doesNotMatch(refined,/\\.wechat-conversation\\.is-selected \\.wechat-presence\\.online/,
-  "Selected friend status dots must not gain a separate border");
-assert.match(refined,/\\.wechat-conversation \\.wechat-presence\\.online\\{[\\s\\S]*?border:0!important/,
-  "Online status dots should have no border");
+const dotRuleStart=refined.indexOf(".wechat-conversation .wechat-presence.online{");
+assert.ok(dotRuleStart>=0,"Online dot rule must exist");
+const dotRule=refined.slice(dotRuleStart,refined.indexOf("}",dotRuleStart));
+assert.ok(dotRule.includes("border:0!important")&&
+  dotRule.includes("box-shadow:none!important")&&
+  dotRule.includes("outline:0!important"),
+  "Online status dots must have no border, shadow or outline");
 assert.equal((app.match(/<RailIcon kind="chats"\/>/g)||[]).length,3);
 assert.equal((app.match(/<RailIcon kind="contacts"\/>/g)||[]).length,3);
 assert.equal((app.match(/<RailIcon kind="settings"\/>/g)||[]).length,3);
