@@ -65,7 +65,7 @@ assert.ok(!python.includes('@router.put("/api/settings")'),
   "Queue toggle endpoint must be removed");
 assert.ok(app.includes('saveOwnProfile')&&app.includes('/api/profile/self'),
   "Native Tox nickname and status must be editable");
-assert.ok(app.includes('modal==="settings"') && app.includes('<Drawer open title="设置"') &&
+assert.ok(app.includes('modal==="settings"') && app.includes('<Drawer open={modal==="settings"} title="设置"') &&
   !app.includes('<AntModal open title="设置与备份"'),
   "Desktop settings must render in an Ant Design drawer");
 assert.ok(app.includes('AttachmentBubble') && app.includes('wtox-attachment-image'),
@@ -98,7 +98,7 @@ assert.ok(app.includes('aria-label="查看好友 Tox 资料"') &&
   app.includes('wt-peer-avatar-button'),"Chat header should open peer details");
 assert.ok(!app.includes('className="wt-message-peer-avatar"'),
   "Incoming message bubbles should not have peer avatars");
-assert.ok(app.includes('placement="bottom"')&&app.includes('<Drawer open={peerDetailsOpen}'),
+assert.ok(app.includes('placement="bottom"')&&app.includes('<Drawer open={peerDetailsOpen&&!!selectedFriend}'),
   "Touch layout should use native Ant Design bottom Drawer for friend details");
 assert.ok(app.includes('copyable={{')&&app.includes('selectedFriend.tox_id||selectedFriend.public_key'),
   "Copyable full Tox ID should fall back to explicitly labeled public key");
