@@ -1163,3 +1163,40 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     }
   }
 }
+
+/* Consistent filled navigation silhouettes. AntD Badge is a wrapper with its
+   own default text color; explicitly inherit the selected/hover state from the
+   button or the chat glyph remains gray regardless of the active section. */
+.ant-messenger[data-theme] .wechat-rail-button .wt-nav-chat-badge.ant-badge,
+.ant-messenger[data-theme] .wechat-mobile-tabs button .wt-nav-chat-badge.ant-badge,
+.ant-messenger[data-theme] .wt-mobile-me-page .wechat-mobile-tabs button .wt-nav-chat-badge.ant-badge{
+  color:inherit!important;
+}
+.ant-messenger[data-theme] .wechat-rail-button .wt-rail-glyph,
+.ant-messenger[data-theme] .wechat-mobile-tabs button .wt-rail-glyph{
+  color:inherit!important;fill:currentColor!important;flex:none;
+}
+@media(min-width:768px){
+  /* Chat path has internal 2px padding in its 24px viewBox, unlike settings. */
+  .ant-messenger[data-theme] .wechat-rail-button .wt-rail-glyph-chats{
+    width:30px!important;height:30px!important;
+  }
+  /* Supplied contacts illustration is 640:512, keep its 1.25:1 ratio. */
+  .ant-messenger[data-theme] .wechat-rail-button .wt-rail-glyph-contacts{
+    width:31px!important;height:25px!important;
+  }
+  .ant-messenger[data-theme] .wechat-rail-button .wt-rail-glyph-settings.anticon{
+    width:25px!important;height:25px!important;font-size:25px!important;
+  }
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wechat-mobile-tabs button .wt-rail-glyph-chats{
+    width:28px!important;height:28px!important;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button .wt-rail-glyph-contacts{
+    width:30px!important;height:24px!important;
+  }
+  .ant-messenger[data-theme] .wechat-mobile-tabs button .wt-rail-glyph-settings.anticon{
+    width:24px!important;height:24px!important;
+  }
+}
