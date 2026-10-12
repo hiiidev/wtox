@@ -10,6 +10,8 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import PwaPushWelcome from "./PwaPushWelcome.jsx";
+import ToxQRScanner from "./ToxQRScanner.jsx";
+import {parseScannedToxId} from "./tox_qr.js";
 import {isStandalone} from "./push_client.js";
 import {LOGO_URL} from "./versioned_assets.js";
 import {disablePushBeforeLogout} from "./push_client.js";
@@ -259,7 +261,8 @@ export default function App(){
   const [loginPassword,setLoginPassword]=useState("");
   const [backupPassword,setBackupPassword]=useState("");
   const [friendId,setFriendId]=useState("");
-  const [requestText,setRequestText]=useState("你好，我想添加你为 Tox 好友");
+  const [requestText,setRequestText]=useState("");
+  const [friendQrOpen,setFriendQrOpen]=useState(false);
   const [historyFile,setHistoryFile]=useState(null);
   const [uploadFile,setUploadFile]=useState(null),[transfers,setTransfers]=useState([]);
   const [pendingFiles,setPendingFiles]=useState([]);
@@ -424,6 +427,16 @@ export default function App(){
     }catch(error){alert("无法启用浏览器通知："+error.message)}
   }
   const closeModal=useCallback(()=>setModal(""),[]);
+  const closeAddFriend=useCallback(()=>{
+    setModal("");
+    setFriendId("");
+    setRequestText("");
+    setFriendQrOpen(false);
+  },[]);
+  const handleFriendQrScanned=useCallback(toxId=>{
+    setFriendId(toxId);
+    setFriendQrOpen(false);
+  },[]);
   const alert=useCallback((text,type)=>{
     const content=String(text||"");
     const level=type||(/失败|错误|无效|拒绝|不可|无法|超出|超过|未就绪/.test(content)?"error":
@@ -1097,11 +1110,18 @@ export default function App(){
     }finally{sendBusy.current=false;setSending(false)}
   }
   async function addFriend(){
+    const address=friendId.trim().toUpperCase();
+    if(!parseScannedToxId(address)){
+      alert("请输入有效的 76 位 Tox ID","error");
+      return;
+    }
     try{
-      const data=await postJson("/api/friends",{address:friendId.trim(),
-        message:requestText});
-      await refreshFriends();selectFriend(data.public_key);
-      setModal("");alert("好友请求已保存，请等待对方接受");
+      const data=await postJson("/api/friends",{address,
+        message:requestText.trim()||"你好，我想添加你为 Tox 好友"});
+      await refreshFriends();
+      closeAddFriend();
+      selectFriend(data.public_key);
+      alert("好友请求已保存，请等待对方接受");
     }catch(error){alert(error.message)}
   }
   async function acceptRequest(item){
@@ -1913,18 +1933,43 @@ export default function App(){
       {settingsContent}
     </Drawer>
 
-    <AntModal open={modal==="add"} title="添加 Tox 好友" onCancel={closeModal}
-      footer={null} destroyOnHidden>
-      <Form layout="vertical" onFinish={addFriend}>
-        <Form.Item label="好友 Tox ID（76 位）" required>
-          <Input.TextArea rows={3} value={friendId} onChange={e=>setFriendId(e.target.value)}
-            placeholder="输入好友完整 Tox ID"/>
-        </Form.Item>
-        <Form.Item label="附言">
-          <Input value={requestText} onChange={e=>setRequestText(e.target.value)}/>
-        </Form.Item>
-        <AntButton type="primary" htmlType="submit" block>发送好友请求</AntButton>
-      </Form>
+    <AntModal open={modal==="add"} title={friendQrOpen?"扫描好友二维码":"添加 Tox 好友"}
+      onCancel={closeAddFriend} footer={null} destroyOnHidden
+      className="wt-add-friend-modal" width={480}>
+      {friendQrOpen
+        ? <ToxQRScanner onScan={handleFriendQrScanned}
+            onBack={()=>setFriendQrOpen(false)}/>
+        : <div className="wt-add-friend-content">
+          <Typography.Paragraph type="secondary" className="wt-add-friend-description">
+            输入好友完整的 Tox ID，发送好友请求。
+          </Typography.Paragraph>
+          {(isMobile||installedPwa)&&
+            <AntButton block icon={<QrcodeOutlined/>} className="wt-add-friend-scan"
+              onClick={()=>setFriendQrOpen(true)}>
+              扫描好友二维码
+            </AntButton>}
+          <Form layout="vertical" className="wt-add-friend-form" onFinish={addFriend}>
+            <Form.Item label="好友 Tox ID" required>
+              <Input.TextArea rows={2} autoSize={{minRows:2,maxRows:3}}
+                value={friendId}
+                onChange={e=>setFriendId(e.target.value)}
+                placeholder="粘贴好友的 76 位 Tox ID" autoComplete="off"
+                spellCheck={false}/>
+              <Typography.Text type="secondary" className="wt-add-friend-counter">
+                {friendId.trim().length} / 76 位
+              </Typography.Text>
+            </Form.Item>
+            <Form.Item label="好友申请附言（选填）">
+              <Input value={requestText} maxLength={256}
+                onChange={e=>setRequestText(e.target.value)}
+                placeholder="留空将使用默认好友申请问候"/>
+            </Form.Item>
+            <AntButton type="primary" htmlType="submit" block size="large"
+              disabled={!parseScannedToxId(friendId)}>
+              发送好友请求
+            </AntButton>
+          </Form>
+        </div>}
     </AntModal>
     <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`}
       onCancel={closeModal} footer={null} destroyOnHidden>

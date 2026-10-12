@@ -515,13 +515,9 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
   background:#0bbd70!important;
   opacity:1!important;
   width:9px;height:9px;
-  box-shadow:0 0 0 2px var(--wt-sidebar);
-  outline:1px solid color-mix(in srgb,var(--wt-text) 27%,transparent);
-  outline-offset:2px;
-}
-.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-presence.online{
-  box-shadow:0 0 0 2px var(--wt-selected);
-  outline-color:color-mix(in srgb,var(--wt-text) 38%,transparent);
+  border:0!important;
+  box-shadow:none!important;
+  outline:0!important;
 }
 .ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-unread{
   background:#ee5757!important;color:white!important;
@@ -655,20 +651,6 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
 }
 
 
-/* Online presence stays clean on inactive chat/contact cards.
-   Only the selected card receives a contrasting ring around the status dot. */
-.ant-messenger[data-theme] .wechat-conversation .wechat-presence.online{
-  background:#0bbd70!important;
-  opacity:1!important;
-  width:9px;height:9px;
-  outline:none!important;
-  box-shadow:none!important;
-}
-.ant-messenger[data-theme] .wechat-conversation.is-selected .wechat-presence.online{
-  outline:1.5px solid color-mix(in srgb,var(--wt-text) 65%,transparent)!important;
-  outline-offset:2px!important;
-  box-shadow:0 0 0 2px var(--wt-selected)!important;
-}
 /* Header action: clearer filled ellipsis rather than a tiny thin stroke. */
 .ant-messenger[data-theme] .wt-chat-more-button.ant-btn{
   width:42px!important;min-width:42px!important;height:42px!important;
@@ -1222,5 +1204,86 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
 @media(max-width:767px){
   .ant-messenger[data-theme] .wt-thread-content::after{
     content:"";display:block;flex:none;height:15px;
+  }
+}
+
+/* Mobile/PWA add friend: QR entry, better spacing and compact 76-digit input. */
+.wt-add-friend-modal .wt-add-friend-description.ant-typography{
+  margin:0 0 17px!important;line-height:1.65;
+  font-size:13px;
+}
+.wt-add-friend-modal .wt-add-friend-scan.ant-btn{
+  height:44px!important;min-height:44px!important;
+  margin-bottom:18px!important;
+  border-radius:10px!important;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.wt-add-friend-modal .wt-add-friend-form .ant-form-item{
+  margin-bottom:18px;
+}
+.wt-add-friend-modal .wt-add-friend-form textarea.ant-input{
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  letter-spacing:.045em;line-height:1.6;
+  overflow-wrap:anywhere;resize:none;
+  font-size:13px;
+}
+.wt-add-friend-modal .wt-add-friend-counter.ant-typography{
+  display:block;text-align:right;font-size:11px;
+  margin-top:5px;
+}
+.wt-add-friend-modal .wt-add-friend-form button[type="submit"]{
+  margin-top:4px;
+}
+.wt-add-friend-modal .wt-qr-video-frame{
+  position:relative;overflow:hidden;isolation:isolate;
+  background:#15181c;border-radius:14px;
+  aspect-ratio:1;max-height:min(58dvh,380px);
+  width:min(100%,380px);margin:0 auto;
+}
+.wt-add-friend-modal .wt-qr-video{
+  width:100%;height:100%;object-fit:cover;display:block;
+}
+.wt-add-friend-modal .wt-qr-focus{
+  position:absolute;inset:16%;pointer-events:none;
+}
+.wt-add-friend-modal .wt-qr-focus span{
+  position:absolute;width:24px;height:24px;
+  border:3px solid #07c160;
+}
+.wt-add-friend-modal .wt-qr-focus span:nth-child(1){
+  top:0;left:0;border-right:0;border-bottom:0;
+}
+.wt-add-friend-modal .wt-qr-focus span:nth-child(2){
+  top:0;right:0;border-left:0;border-bottom:0;
+}
+.wt-add-friend-modal .wt-qr-focus span:nth-child(3){
+  bottom:0;left:0;border-right:0;border-top:0;
+}
+.wt-add-friend-modal .wt-qr-focus span:nth-child(4){
+  bottom:0;right:0;border-left:0;border-top:0;
+}
+.wt-add-friend-modal .wt-qr-progress{
+  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  border-radius:30px;padding:7px 13px;
+  color:#fff;background:rgba(0,0,0,.64);white-space:nowrap;
+  font-size:12px;
+}
+.wt-add-friend-modal .wt-qr-instruction.ant-typography{
+  margin:16px 0 7px;text-align:center;
+}
+.wt-add-friend-modal .wt-qr-hint.ant-typography{
+  text-align:center;overflow-wrap:anywhere;
+}
+.wt-add-friend-modal .wt-qr-privacy.ant-typography{
+  display:block;text-align:center;font-size:12px;margin:0 0 16px;
+}
+.wt-add-friend-modal .wt-qr-back.ant-btn{
+  height:42px!important;margin-top:15px;
+}
+@media(max-width:767px){
+  .wt-add-friend-modal.ant-modal{max-width:calc(100vw - 24px)!important;}
+  .wt-add-friend-modal .ant-modal-body{
+    max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 130px);
+    overflow-y:auto;
   }
 }
