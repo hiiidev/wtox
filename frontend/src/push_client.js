@@ -24,10 +24,10 @@ function base64Key(encoded) {
 }
 
 export async function preparePush() {
-  if (!supportsWebPush()) throw new Error("此浏览器不支持 Web Push");
-  if (isIPhoneOrIPad() && !isStandalone()) {
-    throw new Error("请先在 Safari 中将 wTox 添加到主屏幕，再从主屏幕打开");
+  if (!isStandalone()) {
+    throw new Error("请先安装 wTox PWA，并从主屏幕上的图标打开");
   }
+  if (!supportsWebPush()) throw new Error("当前 PWA 环境不支持 Web Push");
   const registration = await navigator.serviceWorker.register("/sw.js", {scope: "/"});
   const {public_key} = await getJson("/api/push/public-key");
   const subscription = await registration.pushManager.getSubscription();
