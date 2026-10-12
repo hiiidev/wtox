@@ -41,7 +41,10 @@ body:has(.ant-messenger){background:var(--wt-bg)!important}
 .ant-messenger .ant-chat-toolbar{flex-shrink:0;min-width:0!important}
 .ant-messenger .ant-thread{background:var(--wt-bg)!important;
   overflow-x:hidden!important;min-height:0;padding:18px 14px!important;
-  scrollbar-gutter:stable;scrollbar-color:transparent transparent}
+  scrollbar-gutter:stable;scrollbar-color:transparent transparent;
+  /* The app, not browser scroll anchoring/restoration, owns this exact
+     scrollTop. Smooth scrolling would defer initial alignment past paint. */
+  overflow-anchor:none!important;scroll-behavior:auto!important}
 .ant-messenger .wt-thread-shell{min-height:0;min-width:0;overflow:hidden!important;
   background:var(--wt-bg)!important}
 .ant-messenger .wt-thread-content{width:100%!important;max-width:none!important;
