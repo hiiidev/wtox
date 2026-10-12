@@ -6,7 +6,8 @@ import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
-  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled
+  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled,
+  LoadingOutlined, EyeOutlined, EyeInvisibleOutlined, RedoOutlined
   } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import PwaPushWelcome from "./PwaPushWelcome.jsx";
@@ -21,8 +22,9 @@ import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./att
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
-import {contactPresenceText,chatPresenceText} from "./friend_presence.js";
+import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
+import {translationAction} from "./translation_action.js";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {activeConversationPeer,unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
@@ -461,11 +463,24 @@ export default function App(){
         translationRequests.current.delete(key);
     }
   }
+  const translationActionFor=item=>translationAction(
+    translations[selected+":"+String(item.id)],
+    String(item.text||"").trim(),resolvedTranslationLanguage
+  );
+  const translationActionIcon=action=>{
+    if(action.state==="loading")return <LoadingOutlined spin/>;
+    if(action.state==="shown")return <EyeInvisibleOutlined/>;
+    if(action.state==="hidden")return <EyeOutlined/>;
+    if(action.state==="error")return <RedoOutlined/>;
+    return <TranslateIcon size={16}/>;
+  };
   const messageMenu=item=>({
     items:[
       {key:"copy",label:item.type==="file"?"复制文件名":"复制",icon:<CopyOutlined/>},
       ...(item.type!=="file"&&String(item.text||"").trim()?[{
-        key:"translate",label:"翻译 / 收起译文",icon:<TranslateIcon/>
+        key:"translate",label:translationActionFor(item).label,
+        icon:translationActionIcon(translationActionFor(item)),
+        disabled:translationActionFor(item).disabled
       }]:[]),
       {type:"divider"},
       {key:"delete",label:"删除",icon:<DeleteOutlined/>,danger:true,
@@ -1023,6 +1038,10 @@ export default function App(){
                   </span>
                 </div>
               </div>
+              {!online(selectedFriend)&&formatLastOnline(selectedFriend.last_online)&&
+                <Typography.Text type="secondary" className="wt-peer-last-online">
+                  最近在线时间：{formatLastOnline(selectedFriend.last_online)}
+                </Typography.Text>}
               <Divider/>
               <Typography.Text type="secondary">状态消息</Typography.Text>
               <Typography.Paragraph className="wt-peer-status-message">
@@ -2183,15 +2202,19 @@ export default function App(){
                         {chatTime(item.at)}
                         {item.direction==="outgoing"?" · "+stateText(item):""}
                       </span>
-                      {!selectedMessageIds.size&&
-                        <button type="button" className="wt-translate-button"
-                          title="翻译 / 收起译文" aria-label="翻译消息"
+                      {!selectedMessageIds.size&&(()=>{
+                        const action=translationActionFor(item);
+                        return <button type="button"
+                          className={"wt-translate-button state-"+action.state}
+                          title={action.label} aria-label={action.label}
+                          disabled={action.disabled}
                           onClick={event=>{
                             event.preventDefault();event.stopPropagation();
                             void translateMessage(item);
                           }}>
-                          <TranslateIcon size={16}/>
-                        </button>}
+                          {translationActionIcon(action)}
+                        </button>;
+                      })()}
                     </div>
                     {(()=>{
                       const translated=translations[selected+":"+String(item.id)];
@@ -2246,24 +2269,16 @@ export default function App(){
           </div>
           <Sender className="wt-chat-sender" value={draft}
             placeholder="输入消息…" autoSize={{minRows:2,maxRows:5}}
-            header={<Sender.Header title="准备发送附件" open={!!uploadFile}
-              onOpenChange={open=>{if(!open)setUploadFile(null)}}>
-              {uploadFile&&<Space orientation="vertical" size="small"
-                className="wt-send-file-preview">
-                <FileCard name={uploadFile.name} size="small"/>
-                <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
-                <Space>
-                  <AntButton type="primary" size="small" loading={busy}
-                    disabled={!online(selectedFriend)} onClick={sendFile}>
-                    发送附件
-                  </AntButton>
-                  <AntButton size="small" onClick={()=>setUploadFile(null)}>取消</AntButton>
-                </Space>
-              </Space>}
-            </Sender.Header>}
             onPasteFile={files=>{
               const file=files?.[0];
-              if(file)setUploadFile(file);
+              if(file){
+                if(file.size<1||file.size>MAX_ATTACHMENT_BYTES){
+                  alert("附件大小需要在 1 字节至 15 MB 之间","error");
+                  return;
+                }
+                if(!online(selectedFriend)){alert("附件要求双方在线","error");return}
+                setUploadFile(file);
+              }
             }}
             onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
             suffix={(_,info)=>{
@@ -2276,6 +2291,23 @@ export default function App(){
         </div>}
       </main>
     </div>
+
+    <AntModal open={!!uploadFile} title="准备发送附件" centered
+      className="wt-attachment-modal" width={480} destroyOnHidden
+      closable={!busy} maskClosable={!busy}
+      onCancel={()=>{if(!busy)setUploadFile(null)}}
+      footer={<Space>
+        <AntButton onClick={()=>setUploadFile(null)} disabled={busy}>取消</AntButton>
+        <AntButton type="primary" loading={busy}
+          disabled={!selected||!online(selectedFriend)||!historyReady||busy}
+          onClick={sendFile}>发送附件</AntButton>
+      </Space>}>
+      {uploadFile&&<Space orientation="vertical" size="small"
+        className="wt-send-file-preview">
+        <FileCard name={uploadFile.name} size="small"/>
+        <Typography.Text type="secondary">{formatAttachmentSize(uploadFile.size)}</Typography.Text>
+      </Space>}
+    </AntModal>
 
     <AntModal open={logoutOpen} title="退出当前身份" footer={null} centered
       destroyOnHidden onCancel={()=>{if(!logoutBusy)setLogoutOpen(false)}}
