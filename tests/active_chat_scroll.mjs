@@ -71,7 +71,8 @@ assert.ok(!app.includes("selected&&mobileChat&&messages.length"),
 assert.ok(app.includes('document.addEventListener("visibilitychange",refresh)'));
 assert.ok(app.includes("observer.observe(content)")&&app.includes("observer.observe(element)"));
 assert.ok(app.includes('window.visualViewport?.addEventListener("resize",ensureBottom)'));
-assert.ok(app.includes("scrollThreadToBottom(threadEl.current)"));
+assert.ok(app.includes("alignFullThreadBottom(element)"),
+  "Actual full-container bottom is measured before the new viewport is shown");
 assert.ok(!app.includes("setTimeout(scroll,650)") && !app.includes("const second=requestAnimationFrame("),
   "Initial bottom alignment must happen synchronously before first paint");
 assert.ok(!app.includes("requestAnimationFrame(scrollToLatest)"),
