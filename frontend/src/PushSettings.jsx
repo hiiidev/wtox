@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
-import {Button, Card, Space, Typography} from "antd";
+import {Badge, Button, Card, Space, Typography} from "antd";
 import {postJson} from "./api.js";
 import {
   preparePush, savePushSubscription, disablePush,
@@ -94,7 +94,9 @@ export default function PushSettings({userId}) {
   // Keep ordinary browser settings uncluttered: show Web Push only when
   // launched as an installed iOS / Android (or desktop) PWA.
   if (!userId || !isStandalone()) return null;
-  return <Card size="small" title="离线推送（PWA）" className="wt-settings-card">
+  return <Card size="small" title="离线推送（PWA）" className="wt-settings-card"
+    extra={<Badge status={enabled?"success":ready?"default":"warning"}
+      text={enabled?"已启用":ready?"未启用":"未就绪"}/>}>
     <Typography.Paragraph type="secondary">
       {isIPhoneOrIPad() ? "iPhone / iPad 已在主屏幕模式运行。" : "已安装的 PWA 可在此启用通知。"}
       VPS 上的 Toxcore 收到新消息或好友请求时，可以在锁屏或关闭应用后发送提醒。
@@ -108,9 +110,6 @@ export default function PushSettings({userId}) {
         {enabled ? "关闭离线推送" : "开启离线推送"}
       </Button>
       {enabled && <Button onClick={test} disabled={busy}>发送测试通知</Button>}
-      <Typography.Text type="secondary">
-        {enabled ? "已订阅" : ready ? "尚未订阅" : "尚未就绪"}
-      </Typography.Text>
     </Space>
     {!!detail && <Typography.Paragraph type="secondary" style={{marginTop:10,marginBottom:0}}>
       {detail}
