@@ -56,7 +56,7 @@ function AttachmentBubble({file,accept,reject,download,historyHandle}){
         if(alive)setPreview(url);
         else URL.revokeObjectURL(url);
       }catch{
-        // File may already have expired from the VPS memory.
+        // Attachment may have expired from encrypted server storage.
       }
     })();
     return()=>{alive=false;if(url)URL.revokeObjectURL(url)};
@@ -190,6 +190,7 @@ export default function App(){
   },[visualStyle,effectiveTheme]);
   const [modal,setModal]=useState("");
   const [loginFile,setLoginFile]=useState(null),[busy,setBusy]=useState(false);
+  const [authMode,setAuthMode]=useState("create");
   const [createPassword,setCreatePassword]=useState("");
   const [loginPassword,setLoginPassword]=useState("");
   const [backupPassword,setBackupPassword]=useState("");
@@ -428,7 +429,7 @@ export default function App(){
     if(await h.applyOutboxStatuses(result.messages||[]))await refreshHistory(h);
   },[refreshHistory]);
   // Legacy-only migration for old, browser-owned messages. New messages are
-  // always encrypted into the VPS outbox by POST /api/messages.
+  // always encrypted into the server outbox by POST /api/messages.
   // Run this once when the local identity history unlocks, not in timers.
   const migrateLegacyBrowserQueue=useCallback(async(h=history.current)=>{
     if(!h?.ready())return;
@@ -474,7 +475,7 @@ export default function App(){
     if(!h?.ready())return;
     const data=await getJson("/api/pending");
     // Match durable send IDs before applying delayed Tox receipt callbacks.
-    // This matters when the VPS sends and receives a receipt while the
+    // This matters when the server sends and receives a receipt while the
     // browser is closed: the local queued message has no native ID yet.
     await refreshOutbox(h);
     for(const row of data.pending||[]){
@@ -599,7 +600,7 @@ export default function App(){
           await h.expireImages();
           await recoverPending(h);
           // Native Toxcore could receive attachments while this browser was
-          // closed. Completed encrypted files are listed persistently by VPS.
+          // closed. Completed encrypted files are listed by the service.
           await refreshTransfers();
           await migrateLegacyBrowserQueue(h);
         }
@@ -817,7 +818,7 @@ export default function App(){
     }
   },[selected,friends]);
   async function createIdentity(){
-    if(!createPassword){alert("请先设置 .tox 备份密码");return}
+    if(!createPassword){alert("请输入密码");return}
     setBusy(true);
     try{
       const response=await api("/api/tox/create",{method:"POST",
@@ -836,7 +837,7 @@ export default function App(){
     try{
       const magic=new TextDecoder().decode(await loginFile.slice(0,8).arrayBuffer());
       const encrypted=magic==="toxEsave";
-      if(encrypted&&!loginPassword)throw Error("这个 .tox 已加密，请输入备份密码");
+      if(encrypted&&!loginPassword)throw Error("这是加密的 .tox 文件，请输入密码");
       const secret=encrypted?new TextEncoder().encode(loginPassword):new Uint8Array();
       const upload=secret.length?new Blob([secret,loginFile]):loginFile;
       await api("/api/tox/login",{method:"POST",raw:true,
@@ -864,7 +865,7 @@ export default function App(){
     const client_id=crypto.randomUUID().replaceAll("-","");
     sendBusy.current=true;setSending(true);
     try{
-      // Every send enters the encrypted VPS outbox, even if the peer is
+      // Every send enters the encrypted server outbox, even if the peer is
       // already online. The native worker sends asynchronously.
       const res=await postJson("/api/messages",{public_key:peer,text,client_id});
       drafts.current.set(peer,"");
@@ -877,7 +878,7 @@ export default function App(){
           delivery_status:res.status==="sent"?"sent":"queued"
         });
         await recoverPending(h);
-      }catch(error){alert("消息已加入 VPS 队列，但本地历史保存失败："+error.message)}
+      }catch(error){alert("消息已加入待发队列，但本地历史保存失败："+error.message)}
     }catch(error){
       drafts.current.set(peer,text);
       if(selectedRef.current===peer)setDraft(text);
@@ -1033,14 +1034,13 @@ export default function App(){
     }catch(error){alert(error.message)}
   }
 
-  // Shared Ant Design settings, rendered as a full mobile "Me" page or
-  // a desktop modal; do not duplicate form state or export controls.
+  // Shared Ant Design settings: mobile full page and desktop side drawer.
   const settingsContent=<div className="wt-settings-content">
-    <Card size="small" title="VPS Tox 网络与消息队列" className="wt-settings-card">
+    <Card size="small" title="连接与消息队列" className="wt-settings-card">
       <Space orientation="vertical" size="small" style={{width:"100%"}}>
         <Typography.Text>
-          VPS Tox 网络：{network===2?"UDP 已连接":network===1?"TCP 已连接":
-            network===0?"未连接（好友无法向 VPS 发送消息）":"正在启动或检查"}
+          Tox 网络：{network===2?"UDP 已连接":network===1?"TCP 已连接":
+            network===0?"未连接（暂时无法接收消息）":"正在启动或检查"}
         </Typography.Text>
         <Typography.Text type="secondary">
           在线好友：{networkDiagnostics?.online_friends??"-"}/
@@ -1053,8 +1053,8 @@ export default function App(){
             有 {networkDiagnostics.uncertain} 条消息发送结果待确认，请避免重复发送
           </Typography.Text>}
         <Typography.Paragraph type="secondary" style={{marginBottom:0}}>
-          浏览器关闭不应影响 VPS 上的 Tox 身份。对方离线时，文字消息先进入 VPS 待发队列；
-          网络连接恢复且好友在线后才尝试发送。
+          关闭浏览器不影响后台的 Tox 连接。好友离线时，文字会进入加密待发队列；
+          好友上线并恢复连接后自动尝试发送。
         </Typography.Paragraph>
         <AntButton onClick={()=>refreshNetwork().catch(error=>alert(error.message))}>
           刷新网络状态
@@ -1089,8 +1089,9 @@ export default function App(){
       <Typography.Paragraph type="secondary">
         .tox 文件包含身份私钥，请妥善保管，切勿分享。
       </Typography.Paragraph>
+      <Typography.Text type="secondary">密码</Typography.Text>
       <Input.Password autoComplete="new-password" value={backupPassword}
-        placeholder="设置本次 .tox 备份密码" aria-label="导出备份密码"
+        placeholder="密码" aria-label="密码"
         onChange={e=>setBackupPassword(e.target.value)}/>
       <AntButton block onClick={async()=>{
         if(!backupPassword){alert("请先输入用于加密备份的密码");return}
@@ -1129,36 +1130,102 @@ export default function App(){
   </div>;
 
   if(loading)return <div className="wtox-loading">正在加载 wTox…</div>;
-  if(!user)return <div className="wtox-auth-layout">
+  if(!user)return <ConfigProvider theme={{
+    algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm,
+    token:{colorPrimary:"#16ac71",borderRadius:12}
+  }}>
     {uiMessageContext}
-    <div className="wtox-auth-card"><img className="wtox-logo" src="/logo.svg" alt="wtox"/>
-      <h1>wTox</h1>
-      <p>使用原始 .tox 配置文件登录，无需创建额外的网站账号。</p>
-      <label>新身份备份密码（与 aTox 兼容）
-        <input type="password" autoComplete="new-password" value={createPassword}
-          onChange={e=>setCreatePassword(e.target.value)}
-          placeholder="设置 .tox 加密密码（不限位数）"/>
-      </label>
-      <Button kind="primary" onClick={createIdentity} disabled={busy||!createPassword}>＋ 创建 Tox 身份并下载加密备份</Button>
-      <div className="wtox-separator">已有身份</div>
-      <label>选择 .tox 私钥文件
-        <input type="file" accept=".tox,application/octet-stream"
-          onChange={e=>{setLoginFile(e.target.files?.[0]||null);setLoginPassword("")}}/></label>
-      <label>备份密码（仅加密的 .tox 文件需要）
-        <input type="password" autoComplete="current-password" value={loginPassword}
-          onChange={e=>setLoginPassword(e.target.value)}
-          placeholder="输入原客户端设置的密码"/>
-      </label>
-      <Button kind="primary" disabled={!loginFile||busy} onClick={loginIdentity}>使用 .tox 配置登录</Button>
-      <details><summary>旧版账号迁移</summary><p>如果旧 Cookie 尚未过期，可以下载原来的 .tox 身份备份。</p>
-        <Button onClick={async()=>{
-          try{downloadBlob(await(await api("/api/legacy/export")).blob(),"wtox-old-backup.tox")}
-          catch(error){alert(error.message)}
-        }}>下载旧身份备份</Button></details>
-      <small>新建的 .tox 备份采用标准 ToxEncryptSave 加密。备份密码丢失后无法恢复。</small>
-    </div>
-
-  </div>;
+    <main className="wtox-auth-layout" data-theme={effectiveTheme}>
+      <section className="wtox-auth-intro" aria-label="wTox 欢迎页">
+        <div className="wtox-auth-brand">
+          <img className="wtox-auth-mark" src="/logo.svg" alt="" />
+          <span>wTox</span>
+        </div>
+        <div className="wtox-auth-intro-copy">
+          <span className="wtox-auth-eyebrow">TOX · PRIVATE MESSAGING</span>
+          <h1>自在连接，<br/>安心聊天。</h1>
+          <p>把聊天交给开放的 Tox 网络。创建一个新身份，或导入已有的 .tox 文件继续使用。</p>
+        </div>
+        <div className="wtox-auth-intro-footer">以 Tox 身份为凭证 · 无需网站账号</div>
+      </section>
+      <section className="wtox-auth-form-panel" aria-label="进入 wTox">
+        <div className="wtox-auth-card">
+          <div className="wtox-auth-card-header">
+            <img src="/logo.svg" className="wtox-auth-small-mark" alt="" />
+            <span className="wtox-auth-card-brand">wTox</span>
+          </div>
+          <Typography.Title level={3} className="wtox-auth-heading">欢迎使用 wTox</Typography.Title>
+          <Typography.Paragraph type="secondary" className="wtox-auth-subtitle">
+            选择开始方式即可，无需注册网站账号。
+          </Typography.Paragraph>
+          <Segmented block size="large" className="wtox-auth-switch"
+            value={authMode} onChange={mode=>setAuthMode(mode)}
+            options={[
+              {label:"创建身份",value:"create"},
+              {label:"导入身份",value:"import"}
+            ]}/>
+          {authMode==="create"?
+            <Form layout="vertical" className="wtox-auth-form" onFinish={createIdentity}>
+              <div className="wtox-auth-step-note">
+                <strong>创建 Tox 身份</strong>
+                <Typography.Text type="secondary">
+                  创建后自动下载加密的 .tox 文件，请妥善保管文件和密码。
+                </Typography.Text>
+              </div>
+              <Form.Item label="密码" required>
+                <Input.Password autoComplete="new-password"
+                  size="large" value={createPassword}
+                  onChange={e=>setCreatePassword(e.target.value)}
+                  placeholder="请输入密码（不限位数）"/>
+              </Form.Item>
+              <AntButton htmlType="submit" type="primary" block size="large"
+                loading={busy} disabled={busy||!createPassword}>
+                创建身份并下载 .tox 文件
+              </AntButton>
+              <Typography.Text type="secondary" className="wtox-auth-hint">
+                密码只用于加密 .tox 身份文件；丢失文件或密码将无法通过该备份恢复。
+              </Typography.Text>
+            </Form>:
+            <Form layout="vertical" className="wtox-auth-form" onFinish={loginIdentity}>
+              <div className="wtox-auth-step-note">
+                <strong>导入 Tox 身份</strong>
+                <Typography.Text type="secondary">
+                  可导入其他兼容 Tox 客户端的 .tox 文件。
+                </Typography.Text>
+              </div>
+              <Form.Item label=".tox 文件" required>
+                <Upload.Dragger accept=".tox,application/octet-stream"
+                  maxCount={1} multiple={false} className="wtox-auth-upload"
+                  beforeUpload={file=>{
+                    if(file.size>8*1024*1024+80){
+                      alert("配置文件不能超过 8 MiB","error");
+                      return Upload.LIST_IGNORE;
+                    }
+                    setLoginFile(file);setLoginPassword("");
+                    return false;
+                  }}
+                  onRemove={()=>{setLoginFile(null);setLoginPassword("")}}
+                  fileList={loginFile?[{uid:"login-tox",name:loginFile.name,status:"done"}]:[]}>
+                  <div className="wtox-auth-upload-symbol"><PaperClipOutlined/></div>
+                  <p>点击或拖拽选择 .tox 文件</p>
+                  <Typography.Text type="secondary">最大 8 MiB · 原始或加密的 Tox Savedata</Typography.Text>
+                </Upload.Dragger>
+              </Form.Item>
+              <Form.Item label="密码" extra="未设置密码的 .tox 文件可留空">
+                <Input.Password autoComplete="current-password" size="large"
+                  value={loginPassword} onChange={e=>setLoginPassword(e.target.value)}
+                  placeholder="密码（可选）"/>
+              </Form.Item>
+              <AntButton htmlType="submit" type="primary" block size="large"
+                disabled={busy||!loginFile} loading={busy}>
+                导入并进入聊天
+              </AntButton>
+            </Form>}
+          <div className="wtox-auth-card-bottom">消息与好友由你的 Tox 身份管理</div>
+        </div>
+      </section>
+    </main>
+  </ConfigProvider>;
 
   return <ConfigProvider theme={{
     algorithm:effectiveTheme==="dark"?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm
@@ -1384,7 +1451,7 @@ export default function App(){
             </AntButton>
             <AntButton size="small" onClick={clearSelection}>取消</AntButton>
             <Popconfirm title={`删除选中的 ${selectedMessageIds.size} 条记录？`}
-              description="仅删除此浏览器中的记录，不能撤回消息或取消 VPS 队列。"
+              description="仅删除此浏览器中的记录，不能撤回消息或取消待发队列。"
               okText="删除" cancelText="取消" okButtonProps={{danger:true}}
               onConfirm={requestDelete}>
               <AntButton size="small" danger loading={deletingMessages}>删除</AntButton>
@@ -1482,7 +1549,12 @@ export default function App(){
               if(file)setUploadFile(file);
             }}
             onChange={value=>{setDraft(value);if(selected)drafts.current.set(selected,value)}}
-            onSubmit={text=>sendText("",text,text)}
+            suffix={(_,info)=>{
+              const SendButton=info.components.SendButton;
+              return <SendButton disabled={!draft.trim()||!selected||!historyReady||sending}
+                aria-label="发送消息"/>;
+            }}
+            onSubmit={text=>{if(text.trim())sendText("",text,text)}}
             disabled={!selected||!historyReady||sending} submitType="enter"/>
         </div>
       </main>
@@ -1496,7 +1568,7 @@ export default function App(){
       closable={!deletingMessages} maskClosable={!deletingMessages}>
       <Typography.Paragraph>确定删除这条聊天记录吗？</Typography.Paragraph>
       <Typography.Text type="secondary">
-        只删除当前浏览器中的记录，不会撤回对方已经收到的消息，也不会取消 VPS 待发队列。
+        只删除当前浏览器中的记录，不会撤回对方已收到的消息，也不会取消待发队列。
       </Typography.Text>
     </AntModal>
 
@@ -1578,9 +1650,11 @@ export default function App(){
       </div>
     </AntModal>}
 
-    {modal==="settings"&&<AntModal open title="设置与备份" onCancel={closeModal} footer={null} centered destroyOnHidden width={640}>
+    {modal==="settings"&&<Drawer open title="设置" placement="right"
+      onClose={closeModal} width={460} destroyOnHidden
+      className="wt-settings-drawer">
       {settingsContent}
-    </AntModal>}
+    </Drawer>}
 
     {modal==="add"&&<AntModal open title="添加 Tox 好友" onCancel={closeModal}
       footer={null} centered destroyOnHidden>

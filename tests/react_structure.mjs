@@ -65,15 +65,16 @@ assert.ok(!python.includes('@router.put("/api/settings")'),
   "Queue toggle endpoint must be removed");
 assert.ok(app.includes('saveOwnProfile')&&app.includes('/api/profile/self'),
   "Native Tox nickname and status must be editable");
-assert.ok(app.includes('modal==="settings"') && !app.includes('modal==="identity"') &&
-  !app.includes('modal==="history"'),"Account and chat-history management must be in one settings modal");
+assert.ok(app.includes('modal==="settings"') && app.includes('<Drawer open title="设置"') &&
+  !app.includes('<AntModal open title="设置与备份"'),
+  "Desktop settings must render in an Ant Design drawer");
 assert.ok(app.includes('AttachmentBubble') && app.includes('wtox-attachment-image'),
   "Native Tox files should appear in chat bubbles with image preview");
 assert.ok(!app.includes("MainContainer"),"Legacy ChatScope layout must not remain");
 assert.ok(app.includes('className="wechat-rail"') &&
   app.includes('className="wechat-mobile-tabs"') &&
   app.includes('"wechat-conversation "+') &&
-  app.includes("onSubmit={text=>sendText"),
+  app.includes("onSubmit={text=>{if(text.trim())sendText"),
   "WeChat-style navigation, conversation list and Ant Design X sender must be active");
 const wechatStyles=readFileSync("frontend/src/wechat-style.css","utf8");
 assert.ok(wechatStyles.includes("grid-template-columns:70px") &&

@@ -18,7 +18,7 @@ class ErrorBoundary extends React.Component {
       <h1>聊天界面加载失败</h1>
       <p>React 组件出现异常，现有 Tox 身份和本地聊天记录不会因此被清除。</p>
       <button onClick={()=>location.reload()}>重新载入</button>
-      <p>如果持续失败，请检查浏览器开发者工具的 Console 和 Network，以及服务器容器日志。</p>
+      <p>如果持续失败，请检查浏览器开发者工具的 Console 和 Network，并查看服务日志。</p>
     </div>;
   }
 }

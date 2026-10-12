@@ -885,3 +885,97 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     color:inherit;
   }
 }
+
+
+/* Full-screen identity flow shares application green/neutral theme tokens. */
+.wtox-auth-layout{
+  --auth-green:#16ac71;--auth-focus:#37c58a;
+  display:grid;grid-template-columns:minmax(320px,.94fr) minmax(390px,1.06fr);
+  min-height:100dvh;height:100dvh;width:100%;
+  padding:0!important;place-items:stretch!important;
+  background:#f5f5f5;color:#202422;
+}
+.wtox-auth-layout[data-theme="dark"]{background:#1e1e1f;color:#f4f5f4}
+.wtox-auth-intro{
+  min-width:0;min-height:0;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:space-between;
+  background:linear-gradient(143deg,#0c382c 0%,#164d3a 50%,#092d27 100%);
+  color:#eafff2;padding:clamp(28px,4vw,66px);
+  position:relative;
+}
+.wtox-auth-intro::after{
+  content:"";pointer-events:none;position:absolute;
+  width:460px;height:460px;right:-190px;bottom:-205px;border-radius:50%;
+  border:75px solid #ffffff0b;box-shadow:0 0 0 70px #ffffff08;
+}
+.wtox-auth-brand,.wtox-auth-card-header{
+  display:flex;align-items:center;gap:13px;
+  font-size:25px;font-weight:750;letter-spacing:-.5px;
+}
+.wtox-auth-mark{height:54px;width:54px;flex:none}
+.wtox-auth-intro-copy{max-width:530px;position:relative;z-index:1;margin-block:60px}
+.wtox-auth-eyebrow{font-size:11px;letter-spacing:2.3px;font-weight:750;color:#9fe4c3}
+.wtox-auth-intro-copy h1{
+  margin:23px 0;font-size:clamp(36px,4.4vw,66px);
+  font-weight:750;line-height:1.18;letter-spacing:-1.5px;color:#fff;
+}
+.wtox-auth-intro-copy p{font-size:15px;line-height:1.9;color:#c3e6d3;max-width:440px}
+.wtox-auth-intro-footer{position:relative;z-index:1;color:#b0d9c4;font-size:12px}
+.wtox-auth-form-panel{
+  display:flex;justify-content:center;align-items:center;
+  padding:38px clamp(22px,5vw,85px);overflow-y:auto;
+  background:#f5f5f5;color:#252a27;
+}
+[data-theme="dark"] .wtox-auth-form-panel{background:#1e1e1f;color:#f4f5f4}
+.wtox-auth-card{
+  display:flex;flex-direction:column;gap:0;width:min(100%,455px);
+  max-height:none;overflow:visible;background:transparent;box-shadow:none;
+  border:0;border-radius:0;padding:0;color:inherit;
+}
+.wtox-auth-card-header{display:none}
+.wtox-auth-small-mark{width:38px;height:38px}
+.wtox-auth-heading.ant-typography{margin:0 0 10px!important;font-size:28px;color:inherit}
+.wtox-auth-subtitle.ant-typography{margin:0 0 28px!important;font-size:14px;line-height:1.7}
+.wtox-auth-switch.ant-segmented{margin-bottom:31px;padding:5px;border-radius:12px}
+.wtox-auth-switch .ant-segmented-item{min-height:43px;line-height:43px;border-radius:9px}
+.wtox-auth-form{display:flex;flex-direction:column}
+.wtox-auth-step-note{display:flex;flex-direction:column;gap:9px;margin-bottom:25px}
+.wtox-auth-step-note strong{font-size:17px}
+.wtox-auth-step-note .ant-typography{line-height:1.6;font-size:13px}
+.wtox-auth-form .ant-form-item{margin-bottom:24px}
+.wtox-auth-form .ant-form-item-label label{font-weight:600;font-size:14px}
+.wtox-auth-form .ant-input-affix-wrapper{padding:7px 13px;border-radius:11px}
+.wtox-auth-form .ant-input-affix-wrapper input{box-shadow:none!important;border:0!important}
+.wtox-auth-form .ant-btn-primary{height:48px;font-size:15px;font-weight:650}
+.wtox-auth-hint{display:block;text-align:center;margin-top:16px;font-size:12px;line-height:1.7}
+.wtox-auth-upload .ant-upload-drag{border-radius:13px!important;padding:14px 7px}
+.wtox-auth-upload-symbol{font-size:30px;color:var(--auth-green);margin-bottom:9px}
+.wtox-auth-upload p{font-size:14px;font-weight:600;margin:0 0 6px}
+.wtox-auth-upload .ant-typography{font-size:12px}
+.wtox-auth-card-bottom{
+  margin-top:35px;padding-top:17px;border-top:1px solid #83918a26;
+  text-align:center;color:#8d9691;font-size:12px;
+}
+/* Dark and light send control: grey for blank or unavailable text. */
+.ant-messenger[data-theme] .wt-chat-sender .ant-sender-actions-btn:disabled,
+.ant-messenger[data-theme] .wt-chat-sender button:disabled,
+.ant-messenger[data-theme] .wt-chat-sender .ant-btn-primary:disabled{
+  background:#a7afb0!important;border-color:#a7afb0!important;
+  color:#f5f5f5!important;opacity:.78!important;box-shadow:none!important;
+  cursor:not-allowed!important;
+}
+@media(max-width:767px){
+  .wtox-auth-layout{display:flex!important;flex-direction:column;height:100dvh;
+    min-height:100dvh;overflow-y:auto}
+  .wtox-auth-intro{min-height:115px;flex:none;padding:17px 24px;
+    background:#164d3a}
+  .wtox-auth-brand{font-size:22px;gap:10px}
+  .wtox-auth-mark{height:42px;width:42px}
+  .wtox-auth-intro-copy,.wtox-auth-intro-footer{display:none}
+  .wtox-auth-form-panel{flex:1;min-height:max-content;align-items:flex-start;
+    overflow:visible;padding:36px 22px 46px;background:#f5f5f5}
+  .wtox-auth-card{width:100%;max-width:460px;margin:auto}
+  .wtox-auth-heading.ant-typography{font-size:24px}
+  .wtox-auth-card-bottom{margin-top:32px}
+  .wtox-auth-form .ant-input-affix-wrapper input{font-size:16px!important}
+}

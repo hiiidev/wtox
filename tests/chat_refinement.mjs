@@ -195,3 +195,18 @@ assert.doesNotMatch(app,/aria-label="设置与备份" title="设置"/);
 assert.match(refined,/button\.active \.wt-nav-chat-badge\.ant-badge/);
 assert.match(refined,/height:calc\(74px \+ env\(safe-area-inset-bottom\)\)!important/);
 assert.match(refined,/\.wechat-mobile-tabs button svg\{[\s\S]*?width:28px!important/);
+
+assert.match(app,/<Drawer open title="设置" placement="right"/);
+assert.match(app,/authMode==="create"/);
+assert.match(app,/options=\{\[[\s\S]*?label:"创建身份"[\s\S]*?label:"导入身份"/);
+assert.match(app,/<Upload\.Dragger accept="\.tox,application\/octet-stream"/);
+assert.match(app,/<Form\.Item label="密码" required>/);
+assert.match(app,/<Form\.Item label="密码" extra="未设置密码的 \.tox 文件可留空">/);
+assert.doesNotMatch(app,/旧版账号迁移|wtox-old-backup\.tox|备份密码/);
+assert.doesNotMatch(app,/VPS/);
+assert.match(app,/suffix=\{\(_,info\)=>\{/);
+assert.match(app,/SendButton disabled=\{!draft\.trim\(\)/);
+assert.match(refined,/\.wt-chat-sender button:disabled/);
+const logo=readFileSync("frontend/public/logo.svg","utf8");
+assert.match(logo,/<svg[\s\S]*?<path/);
+assert.doesNotMatch(logo,/<image|data:image\//);
