@@ -59,7 +59,7 @@ def issue_session(response: Response, uid: str):
     response.set_cookie(
         COOKIE_NAME, store.create_tox_session(uid),
         httponly=True, secure=access.secure_cookies(),
-        samesite="strict", max_age=7*86400, path="/"
+        samesite="strict", max_age=store.TOX_SESSION_IDLE_SECONDS, path="/"
     )
 
 

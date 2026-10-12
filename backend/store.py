@@ -20,6 +20,11 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 _LOCK = threading.RLock()
 
+# Active Tox identity sessions are renewable indefinitely, with an inactivity
+# timeout. Renewal is throttled to avoid writes on each polling request.
+TOX_SESSION_IDLE_SECONDS = 30 * 86400
+TOX_SESSION_RENEW_BEFORE_SECONDS = 15 * 86400
+
 def data_root() -> Path:
     root = Path(os.environ.get("WTOX_DATA_DIR", "/data"))
     root.mkdir(parents=True, exist_ok=True)
@@ -145,6 +150,7 @@ def init():
             account_id TEXT NOT NULL REFERENCES accounts(id),
             expires INTEGER NOT NULL
         )""")
+        c.execute("CREATE INDEX IF NOT EXISTS ix_tox_sessions_expires ON tox_sessions(expires)")
 
 def legacy_session_user(token: str | None) -> str | None:
     """Recognize only an already-issued OLD session, for one-way .tox export."""
@@ -322,12 +328,37 @@ def login_or_import_tox(identity, toxcore) -> tuple[str, bool]:
 
 def create_tox_session(uid: str) -> str:
     token = secrets.token_urlsafe(48)
+    now = int(time.time())
     with db() as c:
+        # Expired tokens cannot authenticate; prune them when issuing sessions.
+        c.execute("DELETE FROM tox_sessions WHERE expires<=?", (now,))
         c.execute(
             "INSERT INTO tox_sessions(token_hash,account_id,expires) VALUES(?,?,?)",
-            (hashlib.sha256(token.encode()).hexdigest(), uid, int(time.time()) + 7*86400)
+            (hashlib.sha256(token.encode()).hexdigest(), uid, now + TOX_SESSION_IDLE_SECONDS)
         )
     return token
+
+
+def renew_tox_session_if_needed(token: str | None) -> bool:
+    """Extend a still-valid Tox session only as its idle deadline approaches.
+
+    Does not recreate expired or revoked sessions, and does not put an absolute
+    lifetime cap on sessions which continue to be used.
+    """
+    if not token or len(token) > 512:
+        return False
+    now = int(time.time())
+    with db() as c:
+        changed = c.execute(
+            "UPDATE tox_sessions SET expires=? "
+            "WHERE token_hash=? AND expires>? AND expires<=? "
+            "AND EXISTS (SELECT 1 FROM accounts WHERE id=tox_sessions.account_id "
+            "AND profile IS NOT NULL)",
+            (now + TOX_SESSION_IDLE_SECONDS,
+             hashlib.sha256(token.encode()).hexdigest(),
+             now, now + TOX_SESSION_RENEW_BEFORE_SECONDS),
+        )
+        return changed.rowcount == 1
 
 
 def tox_session_user(token: str | None) -> str | None:
