@@ -204,7 +204,7 @@ assert.match(refined,/button\.active \.wt-nav-chat-badge\.ant-badge/);
 assert.match(refined,/height:calc\(74px \+ env\(safe-area-inset-bottom\)\)!important/);
 assert.match(refined,/\.wechat-mobile-tabs button svg\{[\s\S]*?width:28px!important/);
 
-assert.match(app,/<Drawer open title="设置" placement="right"/);
+assert.match(app,/<Drawer open={modal==="settings"} title="设置" placement="right"/);
 assert.match(app,/authMode==="create"/);
 assert.match(app,/options=\{\[[\s\S]*?label:"创建身份"[\s\S]*?label:"导入身份"/);
 assert.match(app,/<Upload\.Dragger accept="\.tox,application\/octet-stream"/);
