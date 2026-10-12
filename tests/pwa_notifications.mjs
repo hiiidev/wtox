@@ -61,7 +61,8 @@ notification=await push("unexpected");
 assert.equal(notification.title,"你收到了一条新消息",
   "Unknown push kinds must not reveal unexpected content");
 
-// Foreground clients get an in-page event; never send a phone OS banner.
+// Foreground clients get an in-page event for real events; test pushes
+// always show a system banner even when the PWA is open.
 visibleClients=[{
   url:"https://tox.example.test/",
   visibilityState:"visible",
@@ -75,19 +76,25 @@ assert.deepEqual(forwarded,[
   {type:"wtox-foreground-push",kind:"message"},
   {type:"wtox-foreground-push",kind:"friend_request"},
 ]);
+notification=await push("test");
+assert.equal(sent.length,before+1,
+  "Explicit test must show a real OS notification even when PWA is visible");
+assert.equal(notification.title,"wTox · 测试离线通知");
+assert.deepEqual(Object.keys(notification.options).sort(),["data","tag"]);
+assert.equal(forwarded.length,2,"Test push must bypass foreground forwarding");
 // Hidden, closed, and cross-origin clients cannot suppress real background push.
 visibleClients=[{
   url:"https://tox.example.test/",visibilityState:"hidden",
   postMessage:()=>{throw Error("Must not send to hidden client")}
 }];
 await push("message");
-assert.equal(sent.length,before+1,"Background PWA still receives native notification");
+assert.equal(sent.length,before+2,"Background PWA still receives native notification");
 visibleClients=[{
   url:"https://other.example/",visibilityState:"visible",
   postMessage:()=>{throw Error("Must not send to foreign origin")}
 }];
 await push("friend_request");
-assert.equal(sent.length,before+2,"Cross-origin pages cannot suppress our push");
+assert.equal(sent.length,before+3,"Cross-origin pages cannot suppress our push");
 visibleClients=[];
 
 
