@@ -9,7 +9,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from backend import store, profile_api
-from backend.attachment_disk import DiskAttachmentStore
+from backend.attachment_disk import DiskAttachmentStore, MAX_FILE
 from backend.main import app
 from backend.session_manager import manager
 
@@ -95,6 +95,16 @@ class DiskAttachmentAPITests(unittest.TestCase):
         path=self.disk.folder(self.uid,ident)/"00000000.bin"
         self.assertTrue(path.exists())
         self.assertNotIn(b"payload",path.read_bytes())
+
+    def test_oversized_file_rejected_before_disk_allocated(self):
+        self.assertEqual(MAX_FILE, 15_000_000)
+        response=self.client.post(
+            "/api/files/send?peer="+("A"*64)+"&name=oversized.txt",
+            content=b"x"*(MAX_FILE+1))
+        self.assertEqual(response.status_code,413)
+        with store.db() as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM disk_attachments").fetchone()[0],0)
 
     def test_native_send_error_discards_uploaded_disk_file(self):
         def send(*_):

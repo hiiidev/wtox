@@ -1526,3 +1526,50 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     background:#ef4444!important;box-shadow:0 0 0 1px var(--wt-chat);
   }
 }
+
+/* Only the visible text bubble / file card owns a context-menu trigger.
+   Timeline rows remain full width for alignment but are not interactive. */
+.ant-messenger[data-theme] .wt-text-context-target{
+  display:inline-flex;flex:0 1 auto;width:fit-content;min-width:0;
+  max-width:100%;vertical-align:top;
+}
+.ant-messenger[data-theme] .wt-text-context-target .wt-conversation-bubble.ant-bubble{
+  display:inline-flex!important;width:fit-content!important;
+  max-width:100%!important;min-width:0!important;
+}
+.ant-messenger[data-theme] .wt-message-main-stack.out>.wt-text-context-target{
+  align-self:flex-end!important;margin-left:auto!important;
+}
+.ant-messenger[data-theme] .wt-message-main-stack.in>.wt-text-context-target{
+  align-self:flex-start!important;margin-right:auto!important;
+}
+.ant-messenger[data-theme] .wt-file-context-target{
+  display:inline-block;width:fit-content;max-width:100%;
+  min-width:0;vertical-align:top;
+}
+.ant-messenger[data-theme] .wt-file-context-target .wtox-attachment-bubble.ant-card{
+  width:min(330px,100%)!important;max-width:100%!important;
+}
+.ant-messenger[data-theme] .wt-attachment-size{
+  font-size:13px!important;color:var(--wt-muted)!important;
+  font-variant-numeric:tabular-nums;
+}
+
+/* AntD renders dialogs in a body portal. Center all real mobile modals and
+   keep long request/profile forms reachable between the safe-area insets. */
+@media(max-width:767px){
+  .ant-modal-wrap.ant-modal-centered{
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .ant-modal-wrap.ant-modal-centered .ant-modal{
+    width:min(480px,calc(100vw - 24px))!important;
+    max-width:calc(100vw - 24px)!important;
+    margin:auto;
+    padding-bottom:0!important;
+  }
+  .ant-modal-wrap.ant-modal-centered .ant-modal-body{
+    max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 185px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+}

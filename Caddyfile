@@ -2,7 +2,7 @@
     encode zstd gzip
     # Require Caddy 2.10+ for the edge request body cap.
     request_body {
-        max_size 9MB
+        max_size 16MB  # 15 MB attachment + existing 8 MiB Tox profile uploads
     }
     reverse_proxy web:6066
 

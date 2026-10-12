@@ -30,7 +30,8 @@ assert.doesNotMatch(app,/\{modal==="settings"&&<Drawer/);
 assert.match(app,/\{selected&&<div className="ant-chat-toolbar">/);
 assert.match(app,/\{selected&&<div className="ant-compose-area">/);
 assert.doesNotMatch(app,/wt-settings-overview|WTOX \/ PREFERENCES|你的聊天，由你掌控/);
-assert.doesNotMatch(app,/<AntModal[^>]*\bcentered\b/);
+assert.equal(app.split("centered={isMobile}").length-1,9,
+  "All mobile modals should use centered positioning");
 assert.doesNotMatch(app,/<Tooltip title="好友请求"|<Tooltip title="添加好友"/);
 assert.ok(refined.includes("width:40px!important;height:40px!important;min-width:40px!important;"),
   "Desktop chat header buttons should use the compact 40px control size");

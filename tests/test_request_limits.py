@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.body_limit import MAX_JSON_BODY, MAX_LOGIN_BODY
+from backend.body_limit import MAX_JSON_BODY, MAX_LOGIN_BODY, MAX_FILE_BODY
 
 
 class RequestBodyLimitTests(unittest.TestCase):
@@ -33,6 +33,11 @@ class RequestBodyLimitTests(unittest.TestCase):
 
     def test_binary_login_has_separate_limit(self):
         response = self.client.post("/api/tox/login", content=b"x" * (MAX_LOGIN_BODY + 1))
+        self.assertEqual(response.status_code, 413)
+
+    def test_binary_attachment_has_15mb_edge_limit(self):
+        self.assertEqual(MAX_FILE_BODY, 15_000_000)
+        response = self.client.post("/api/files/send", content=b"x" * (MAX_FILE_BODY + 1))
         self.assertEqual(response.status_code, 413)
 
     def test_normal_json_request_is_unchanged(self):

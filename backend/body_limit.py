@@ -4,10 +4,11 @@ Binary identity/attachment uploads already have streaming caps in their
 handlers. Content-Length is rejected early for all routes.
 """
 from starlette.responses import JSONResponse
+from .attachment_disk import MAX_FILE
 
 MAX_JSON_BODY = 64 * 1024
 MAX_LOGIN_BODY = 8 * 1024 * 1024 + 80 + 1024
-MAX_FILE_BODY = 5 * 1024 * 1024
+MAX_FILE_BODY = MAX_FILE
 
 
 class RequestBodyLimitMiddleware:

@@ -101,6 +101,20 @@ class DiskAttachmentTests(unittest.TestCase):
         writer.abort()
         self.assertFalse(writer.folder.exists())
 
+    def test_new_15mb_size_boundary(self):
+        self.assertEqual(MAX_FILE, 15_000_000)
+        with self.assertRaisesRegex(ValueError, "附件大小"):
+            self.disk.begin(self.uid, "too-large.bin", expected=MAX_FILE+1)
+        # Use small writes to exercise encrypted streaming at exactly 15 MB.
+        writer=self.disk.begin(self.uid,"new-limit.bin",expected=MAX_FILE)
+        block=b"x"*BLOCK
+        for _ in range(MAX_FILE//BLOCK):
+            writer.write(block)
+        writer.write(b"x"*(MAX_FILE%BLOCK))
+        writer.finish()
+        self.assertEqual(writer.size,MAX_FILE)
+        self.assertTrue(writer.complete)
+
     def test_upload_bounds_and_complete_only_download(self):
         writer=self.disk.begin(self.uid,"out.bin",direction="outgoing")
         with self.assertRaises(ValueError):

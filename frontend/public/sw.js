@@ -28,7 +28,7 @@ self.addEventListener("push", event => {
     }
     // Background-only OS notification: never include plaintext message data.
     await self.registration.showNotification(
-      kind === "friend_request" ? "你有好友请求。" : "你收到了一条新消息。",
+      kind === "friend_request" ? "你有好友请求" : "你收到了一条新消息",
       {
         tag: "wtox-push-" + kind,
         data: {url: "/"}

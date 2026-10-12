@@ -221,7 +221,7 @@ async def send_file(request: Request, peer: str, name: str, uid: str = Depends(r
         except ValueError as exc:
             raise HTTPException(400, "Content-Length 错误") from exc
         if declared > MAX_FILE:
-            raise HTTPException(413, "附件不能超过 5 MiB")
+            raise HTTPException(413, "附件不能超过 15 MB")
     if manager.disk is None:
         raise HTTPException(503, "附件磁盘存储未就绪")
     try:

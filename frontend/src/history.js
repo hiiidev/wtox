@@ -190,8 +190,8 @@ export async function openIdentityHistory(owner){
       requireKey();
       if(typeof id!=="string"||!/^[a-f0-9]{32}$/i.test(id))
         throw new Error("无效附件 ID");
-      if(!blob||blob.size<=0||blob.size>5*1024*1024)
-        throw new Error("图片缓存不能超过 5 MiB");
+      if(!blob||blob.size<=0||blob.size>15_000_000)
+        throw new Error("图片缓存不能超过 15 MB");
       const iv=crypto.getRandomValues(new Uint8Array(12));
       const bytes=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,await blob.arrayBuffer());
       const item={id,iv:Array.from(iv),cipher:new Uint8Array(bytes),

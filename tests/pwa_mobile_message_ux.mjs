@@ -30,7 +30,8 @@ assert.ok(press.includes("setMobileMessageMenuId(String(item.id))"));
 assert.ok(!press.includes("setSelectedMessageIds(previous=>new Set([...previous,item.id]));") ||
   press.indexOf("setSelectedMessageIds(previous")>press.indexOf("}else{"),
   "Only desktop legacy long-press may enter selection directly");
-assert.equal((app.match(/open=\{isMobile\?mobileMessageMenuId===String\(item\.id\):undefined\}/g)||[]).length,2);
+assert.equal((app.match(/open=\{isMobile\?mobileMessageMenuId===String\(item\.id\):undefined\}/g)||[]).length,1);
+assert.ok(app.includes('contextOpen={isMobile?mobileMessageMenuId===String(item.id):undefined}'));
 assert.ok(app.includes('onContextMenu={event=>{') &&
   app.includes("event.preventDefault();setMobileMessageMenuId(String(item.id));"));
 assert.ok(app.includes('if(key==="multi")setSelectedMessageIds('),
