@@ -16,7 +16,7 @@ export default function PwaPushWelcome({userId}){
     let applicationServerKey=null;
     const attemptKey="wtox-pwa-push-attempt-"+userId;
     const removeListeners=()=>{
-      document.removeEventListener("pointerdown",onFirstGesture,true);
+      document.removeEventListener("click",onFirstGesture,true);
       document.removeEventListener("keydown",onFirstGesture,true);
     };
     const save=async subscription=>{
@@ -60,7 +60,7 @@ export default function PwaPushWelcome({userId}){
         // Default permission: the OS requires a user gesture (especially iOS).
         // No wTox modal appears, just the native system prompt on first tap.
         if(localStorage.getItem(attemptKey)==="1")return;
-        document.addEventListener("pointerdown",onFirstGesture,true);
+        document.addEventListener("click",onFirstGesture,true);
         document.addEventListener("keydown",onFirstGesture,true);
       }catch(error){
         console.warn("PWA push auto-setup is unavailable:",error);
