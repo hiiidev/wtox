@@ -23,6 +23,12 @@ jobs:
       - name: Install exact frontend dependencies
         run: npm install --no-audit --no-fund
         working-directory: frontend
+      - name: Archive npm lockfile for reproducible builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-lockfile
+          path: frontend/package-lock.json
+          if-no-files-found: error
       - name: Verify npm dependency tree
         run: npm ls antd @ant-design/x @ant-design/icons --depth=0
         working-directory: frontend
