@@ -238,6 +238,36 @@ export async function openIdentityHistory(owner){
       tx.objectStore("meta").put({id:"deleted-"+id,at:Date.now()});
       await completed(tx);
     }
+    async function deleteConversation(peer){
+      requireKey();
+      if(typeof peer!=="string"||!/^[0-9a-f]{64}$/i.test(peer))
+        throw new Error("好友公钥无效");
+      // Encrypted event rows cannot be indexed by peer without leaking peer
+      // metadata. Decrypt first, then commit all deletions atomically.
+      const rows=await allEncrypted(db);
+      const remove=[];
+      const cachedFiles=new Set();
+      for(const encrypted of rows){
+        const plain=await cryptoOpen(encrypted,key);
+        if(plain.public_key!==peer||!["message","file"].includes(plain.type))continue;
+        remove.push(encrypted.id);
+        if(plain.type==="file"&&plain.file_id)cachedFiles.add(plain.file_id);
+      }
+      if(!remove.length)return 0;
+      const tx=db.transaction(["events","meta","attachments"],"readwrite");
+      const events=tx.objectStore("events");
+      const tombstones=tx.objectStore("meta");
+      const attachments=tx.objectStore("attachments");
+      const now=Date.now();
+      for(const id of remove){
+        events.delete(id);
+        // An unacknowledged server replay must not resurrect erased records.
+        tombstones.put({id:"deleted-"+id,at:now});
+      }
+      for(const fileId of cachedFiles)attachments.delete(fileId);
+      await completed(tx);
+      return remove.length;
+    }
     async function patchEvent(id,changes){
       requireKey();
       const row=await request(db.transaction("events").objectStore("events").get(id));
@@ -302,6 +332,6 @@ export async function openIdentityHistory(owner){
       return encrypted.length;
     }
     return {owner,ready:()=>!!key,needsMigration:()=>needsMigration,
-      migrate,read,persist,persistFile,deleteEvent,patchEvent,cacheImage,cachedImage,expireImages,deleteCachedImage,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
+      migrate,read,persist,persistFile,deleteEvent,deleteConversation,patchEvent,cacheImage,cachedImage,expireImages,deleteCachedImage,deliverReceipt,applyOutboxStatuses,importMessages,close:()=>db.close()};
   }catch(error){db.close();throw error}
 }
