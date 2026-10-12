@@ -14,27 +14,9 @@ body{background:radial-gradient(circle at 10% -20%,#1d3252,transparent 55%),#0c1
 .wtox-dot.on{background:#50d9a4;box-shadow:0 0 0 3px #46c99a26}
 
 
-.wtox-auth-layout{width:100%;height:100dvh;display:grid;place-items:center;padding:20px}
-.wtox-auth-card{display:flex;flex-direction:column;gap:13px;width:min(460px,94vw);max-height:94dvh;
- overflow:auto;background:#132239;border:1px solid #324966;border-radius:22px;
- box-shadow:0 32px 110px #0009;padding:34px;color:#dae9fc}
-.wtox-auth-card h1{font-size:27px;margin:4px 0;letter-spacing:-.7px}
-.wtox-auth-card p{margin:0;color:#a9bed8;line-height:1.6}
-.wtox-auth-card small{color:#869dbb;line-height:1.6}
-.wtox-auth-card details{color:#b8c9dc;font-size:12px}
-.wtox-auth-card summary{cursor:pointer;color:#8bb8fa}
-.wtox-kicker{letter-spacing:2px;color:#83b4ff!important;font-size:10px!important;font-weight:800}
-.wtox-separator{margin:17px 0 9px;padding-top:8px;border-top:1px solid #314760;color:#91aac9;font-size:12px}
-.wtox-auth-card label{display:flex;flex-direction:column;gap:8px;
- color:#b8cde5;font-size:13px;margin:12px 0}
-
-
-
 .wtox-loading{height:100dvh;display:grid;place-items:center;color:#acc5e3}
 
 
-.wtox-logo{width:43px;height:43px;object-fit:contain;display:block;flex-shrink:0}
-.wtox-auth-card>.wtox-logo{width:70px;height:70px;margin:0 auto 7px}
 
 /* Tox-native attachments live next to text messages in the same timeline. */
 .wtox-attachment-row{display:flex;flex-direction:column;align-items:flex-start;
