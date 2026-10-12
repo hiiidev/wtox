@@ -7,7 +7,7 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
   ArrowDownOutlined, CopyOutlined, CheckSquareOutlined,
-  MessageFilled, ContactsFilled, SettingFilled } from "@ant-design/icons";
+  } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import {LOGO_URL} from "./versioned_assets.js";
 import {disablePushBeforeLogout} from "./push_client.js";
@@ -132,13 +132,15 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
   </div>;
 }
 function StatusDot({active}){return <i className={"wtox-dot "+(active?"on":"")}/>;}
-/* One consistent filled Ant Design icon family on mobile and desktop.
- * Bundled in the React bundle: no Iconify or runtime icon-network request.
- */
+/* User-supplied 24px filled SVG paths; embedded, no Iconify requests. */
 function RailIcon({kind}){
-  const Icon=kind==="chats"?MessageFilled:
-    kind==="contacts"?ContactsFilled:SettingFilled;
-  return <Icon className="wt-rail-glyph" aria-hidden="true"/>;
+  if(kind==="settings")return <SettingFilled className="wt-rail-glyph" aria-hidden="true"/>;
+  return <svg xmlns="http://www.w3.org/2000/svg" className="wt-rail-glyph"
+    width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {kind==="chats"?
+      <path fill="currentColor" d="M12 2C6.49 2 2 6.49 2 12c0 2.12.68 4.19 1.93 5.9l-1.75 2.53c-.21.31-.24.7-.06 1.03c.17.33.51.54.89.54h9c5.51 0 10-4.49 10-10S17.51 2 12 2M8 13c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1m4 0c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1m4 0c-.55 0-1-.45-1-1s.45-1 1-1s1 .45 1 1s-.45 1-1 1"/>:
+      <path fill="currentColor" d="M9 4a4 4 0 1 0 0 8a4 4 0 1 0 0-8m1 9H8c-2.76 0-5 2.24-5 5v1c0 .55.45 1 1 1h10c.55 0 1-.45 1-1v-1c0-2.76-2.24-5-5-5m5-9c-.47 0-.9.09-1.31.22C14.51 5.24 15 6.55 15 8s-.49 2.75-1.31 3.78c.41.13.84.22 1.31.22c2.28 0 4-1.72 4-4s-1.72-4-4-4m1 9h-1.11A6.97 6.97 0 0 1 17 18v1c0 .35-.07.69-.18 1H20c.55 0 1-.45 1-1v-1c0-2.76-2.24-5-5-5"/>}
+  </svg>;
 }
 
 export default function App(){
@@ -171,6 +173,8 @@ export default function App(){
   const scrollIdleTimer=useRef(null);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
+  const [logoutOpen,setLogoutOpen]=useState(false);
+  const [logoutBusy,setLogoutBusy]=useState(false);
   const [ownProfile,setOwnProfile]=useState({name:"",status_message:"",user_status:0});
   const [profileSaving,setProfileSaving]=useState(false);
   // Permission is only requested from the explicit settings button, never on load.
@@ -1225,7 +1229,7 @@ export default function App(){
         历史 JSON 导出文件是明文，需自行妥善保存。
       </Typography.Paragraph>
     </Card>
-    <AntButton danger block className="wt-settings-signout" onClick={logout}>退出当前身份</AntButton>
+    <AntButton danger block className="wt-settings-signout" onClick={()=>setLogoutOpen(true)}>退出当前身份</AntButton>
   </div>;
 
   if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><Spin size="large"/></div>;
@@ -1243,7 +1247,7 @@ export default function App(){
         <Typography.Paragraph type="secondary" className="wtox-auth-subtitle">
           创建新身份，或导入已有的 .tox 文件。
         </Typography.Paragraph>
-          <Segmented block size="large" className="wtox-auth-switch"
+          <Segmented block size="middle" className="wtox-auth-switch"
             value={authMode} onChange={mode=>setAuthMode(mode)}
             options={[
               {label:"创建身份",value:"create"},
