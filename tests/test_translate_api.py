@@ -71,7 +71,7 @@ class TranslateTests(unittest.TestCase):
 
     def test_plaintext_sent_only_in_https_post_body(self):
         import urllib.parse
-        payload = [[[["bonjour", "hello"]]], None, "en"]
+        payload = [[["bonjour", "hello"]], None, "en"]
         response = MagicMock()
         response.status = 200
         response.read.return_value = __import__("json").dumps(payload).encode()
