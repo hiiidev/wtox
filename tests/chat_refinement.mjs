@@ -217,8 +217,8 @@ assert.match(app,/const transferTimer=setInterval\(\(\)=>\{/);
 assert.match(app,/clearInterval\(transferTimer\)/);
 assert.match(app,/recoverPending\(\),refreshTransfers\(\)/);
 
-assert.match(app,/record\\.delivery_status==="queued"\\)return "等待发送"/);
-assert.match(app,/record\\.delivery_status==="queued_local"\\)return "正在提交"/);
+assert.ok(app.includes('if(record.delivery_status==="queued")return "等待发送"'));
+assert.ok(app.includes('if(record.delivery_status==="queued_local")return "正在提交"'));
 assert.match(app,/record\.delivery_status\)\)return "正在发送"/);
 assert.match(app,/title="连接与消息队列"/);
 assert.match(app,/networkDiagnostics\?\.queued/);
@@ -233,13 +233,24 @@ assert.doesNotMatch(app,/<Tooltip title="好友请求">/);
 assert.doesNotMatch(app,/<Tooltip title="添加好友">/);
 assert.doesNotMatch(app,/<Tooltip title="添加附件">/);
 assert.match(app,/aria-label="添加附件"/);
-assert.match(app,/kind==="chats"\?MessageFilled/);
-assert.match(app,/kind==="contacts"\?ContactsFilled:SettingFilled/);
+assert.ok(app.includes("M12 2C6.49 2 2 6.49 2 12"),"Use supplied chat SVG path");
+assert.ok(app.includes("M9 4a4 4 0 1 0 0 8"),"Use supplied contacts SVG path");
 assert.match(app,/title="新消息通知"[\s\S]*?extra=\{<Badge/);
 assert.match(app,/title="连接与消息队列"[\s\S]*?extra=\{<Badge/);
 assert.match(app,/downloadToxFile\(await response\.blob\(\)/);
 const pushSettings=readFileSync("frontend/src/PushSettings.jsx","utf8");
 assert.match(pushSettings,/title="离线推送（PWA）"[\s\S]*?extra=\{<Badge/);
+assert.ok(!app.includes("Enter 发送 · Shift + Enter 换行"),"No shortcut hint below chat");
+assert.ok(app.includes('onClick={()=>setLogoutOpen(true)}'),"Exit must require choice");
+assert.ok(app.includes("清除当前身份本地数据并退出"));
+assert.ok(app.includes("保留本地数据并退出"));
+const railCSS=readFileSync("frontend/src/refine.css","utf8");
+assert.ok(railCSS.includes(".wechat-rail-button.is-active:hover"),
+  "Active desktop nav must still have hover feedback");
+assert.ok(railCSS.includes("background:transparent!important;"),
+  "Selected desktop icon should have no persistent tile");
+assert.ok(railCSS.includes("height:35px;min-height:35px"),
+  "Login segmented control should be compact");
 const toastCSS=readFileSync("frontend/src/ant-style.css","utf8");
 assert.match(toastCSS,/html\[data-wtox-theme="dark"\] \.ant-message \.ant-message-notice-content/);
 
