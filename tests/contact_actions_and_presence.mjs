@@ -33,7 +33,7 @@ assert.match(native,/tox_friend_get_last_online/);
 assert.match(native,/"last_online": last_online/);
 assert.match(app,/contactPresenceText\(friend\)/);
 assert.match(app,/chatPresenceText\(selectedFriend\)/);
-assert.match(app,/最近在线时间：\{formatLastOnline\(selectedFriend\.last_online\)\}/);
+assert.match(app,/最后在线：\{formatLastOnline\(selectedFriend\.last_online\)\}/);
 assert.match(app,/!online\(selectedFriend\)&&formatLastOnline\(selectedFriend\.last_online\)/);
 assert.match(app,/if\(section==="contacts"\)setDeleteFriendPeer\(peer\)/);
 assert.match(app,/setDeleteFriendPeer\(friend.public_key\)/);
