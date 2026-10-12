@@ -6,6 +6,8 @@ import {runInNewContext} from "node:vm";
 const handlers=new Map();
 const sent=[];
 const opened=[];
+const forwarded=[];
+let visibleClients=[];
 let skippedWaiting=0,claimed=0;
 const self={
   location:{origin:"https://tox.example.test"},
@@ -17,7 +19,7 @@ const self={
     })
   },
   clients:{
-    matchAll:async()=>[],
+    matchAll:async()=>visibleClients,
     openWindow:async path=>opened.push(path),
     claim:async()=>{claimed++}
   }
@@ -58,6 +60,36 @@ assert.deepEqual(Object.keys(notification.options).sort(),["data","tag"]);
 notification=await push("unexpected");
 assert.equal(notification.title,"你收到了一条新消息。",
   "Unknown push kinds must not reveal unexpected content");
+
+// Foreground clients get an in-page event; never send a phone OS banner.
+visibleClients=[{
+  url:"https://tox.example.test/",
+  visibilityState:"visible",
+  postMessage:value=>forwarded.push(JSON.parse(JSON.stringify(value)))
+}];
+const before=sent.length;
+await push("message");
+await push("friend_request");
+assert.equal(sent.length,before,"Visible PWA must never duplicate OS notifications");
+assert.deepEqual(forwarded,[
+  {type:"wtox-foreground-push",kind:"message"},
+  {type:"wtox-foreground-push",kind:"friend_request"},
+]);
+// Hidden, closed, and cross-origin clients cannot suppress real background push.
+visibleClients=[{
+  url:"https://tox.example.test/",visibilityState:"hidden",
+  postMessage:()=>{throw Error("Must not send to hidden client")}
+}];
+await push("message");
+assert.equal(sent.length,before+1,"Background PWA still receives native notification");
+visibleClients=[{
+  url:"https://other.example/",visibilityState:"visible",
+  postMessage:()=>{throw Error("Must not send to foreign origin")}
+}];
+await push("friend_request");
+assert.equal(sent.length,before+2,"Cross-origin pages cannot suppress our push");
+visibleClients=[];
+
 
 let clickPromise;
 let closed=false;
