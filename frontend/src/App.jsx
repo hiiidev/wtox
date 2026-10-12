@@ -1070,15 +1070,22 @@ export default function App(){
       socket.current=ws;
       lastMessage.current=Date.now();
       const currentSocket=ws;
+      const startedAt=Date.now();
+      let opened=false,handshakeTimedOut=false,hadSocketError=false;
       // Some mobile gateways stall the upgrade handshake indefinitely.
       handshakeTimeout=setTimeout(()=>{
-        if(!dead&&currentSocket.readyState===WebSocket.CONNECTING)currentSocket.close();
+        if(!dead&&currentSocket.readyState===WebSocket.CONNECTING){
+          handshakeTimedOut=true;
+          currentSocket.close();
+        }
       },10000);
       currentSocket.onopen=()=>{
         if(dead||currentSocket!==ws){currentSocket.close();return}
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         lastMessage.current=Date.now();
+        opened=true;
+        if(failures)console.info("wTox WebSocket 已恢复实时连接");
         failures=0;
         setSocketState("connected");
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
@@ -1089,11 +1096,33 @@ export default function App(){
         lastMessage.current=Date.now();
         try{onRealtime(JSON.parse(msg.data))}catch(error){alert("无法解析实时事件："+error.message)}
       };
-      currentSocket.onclose=()=>{
+      currentSocket.onerror=()=>{
+        if(dead||currentSocket!==ws)return;
+        // Browser APIs do not expose failed HTTP upgrade status, cookies or
+        // Cloudflare's internal reason. The paired close code is diagnostic.
+        hadSocketError=true;
+      };
+      currentSocket.onclose=event=>{
         if(dead||currentSocket!==ws)return;
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
-        if(!dead)scheduleRetry();
+        // Avoid printing one duplicate message on every retry forever.
+        // Do not log origins, tokens, cookies or websocket payloads.
+        if(!opened && (failures<2||failures%5===0)){
+          console.warn("wTox WebSocket 握手失败",{
+            phase:"before_open",
+            closeCode:event.code,wasClean:event.wasClean,
+            elapsedMs:Date.now()-startedAt,attempt:failures+1,
+            timedOut:handshakeTimedOut,networkError:hadSocketError,
+            hint:"检查 Network → WS 的 HTTP 状态码和服务器 wTox /ws 日志"
+          });
+        }else if(opened && event.code!==1000 && failures<2){
+          console.warn("wTox WebSocket 意外断开",{
+            phase:"after_open",closeCode:event.code,
+            wasClean:event.wasClean,elapsedMs:Date.now()-startedAt
+          });
+        }
+        scheduleRetry();
       };
     };
     connect();
