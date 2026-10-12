@@ -18,7 +18,6 @@ import {openIdentityHistory} from "./history.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
 import {isNearBottom,countNewEntries} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
-import {createConnectionNotice} from "./connection_notice.js";
 import {clearIdentityBrowserData} from "./identity_cleanup.js";
 import {shouldNotifyMessage,messageNotificationId} from "./message_notifications.js";
 import {unreadCountsByPeer,totalUnreadForFriends} from "./unread_counts.js";
@@ -718,10 +717,8 @@ export default function App(){
   useEffect(()=>{
     if(!user?.public_key)return;
     let dead=false,ws=null,retry=null,handshakeTimeout=null;
-    const notice=createConnectionNotice(uiMessageApi);
     const connect=()=>{
       if(dead)return;
-      notice.connecting();
       try{
         ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws");
       }catch(error){
@@ -740,7 +737,6 @@ export default function App(){
       currentSocket.onopen=()=>{
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
-        notice.connected();
         lastMessage.current=Date.now();
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
           refreshTransfers()]);
@@ -753,8 +749,7 @@ export default function App(){
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         if(!dead){
-          notice.connecting();
-          retry=setTimeout(connect,3500);
+              retry=setTimeout(connect,3500);
         }
       };
     };
@@ -785,7 +780,7 @@ export default function App(){
     document.addEventListener("visibilitychange",wake);
     window.addEventListener("focus",wake);
     return()=>{
-      dead=true;notice.stop();
+      dead=true;
       clearTimeout(retry);clearTimeout(handshakeTimeout);
       clearInterval(friendTimer);
       clearInterval(pendingTimer);clearInterval(transferTimer);clearInterval(pingTimer);
