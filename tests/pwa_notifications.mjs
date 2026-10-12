@@ -48,17 +48,17 @@ async function push(kind){
 }
 
 let notification=await push("message");
-assert.equal(notification.title,"你收到了一条新消息。");
+assert.equal(notification.title,"你收到了一条新消息");
 assert.deepEqual(Object.keys(notification.options).sort(),["data","tag"],
   "No body, app name, image or sender text should be added to notification content");
 assert.equal(notification.options.data.url,"/");
 
 notification=await push("friend_request");
-assert.equal(notification.title,"你有好友请求。");
+assert.equal(notification.title,"你有好友请求");
 assert.deepEqual(Object.keys(notification.options).sort(),["data","tag"]);
 
 notification=await push("unexpected");
-assert.equal(notification.title,"你收到了一条新消息。",
+assert.equal(notification.title,"你收到了一条新消息",
   "Unknown push kinds must not reveal unexpected content");
 
 // Foreground clients get an in-page event; never send a phone OS banner.
