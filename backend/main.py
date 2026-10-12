@@ -13,6 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import access, store
+from .tox_backup import encrypt_savedata
+from .tox_identity import ToxIdentityError
 from .body_limit import RequestBodyLimitMiddleware
 from .profile_api import router as profile_router, COOKIE_NAME as TOX_SESSION_COOKIE
 from .tox_api import router as tox_router
@@ -234,21 +236,30 @@ def me(request: Request):
     return store.tox_identity_info(uid)
 
 @app.get("/api/legacy/export")
-def export_legacy_profile(request: Request):
-    """One-way recovery for an already valid OLD login cookie.
+def export_legacy_profile():
+    # Unencrypted Tox savedata exposes a portable identity private key.
+    raise HTTPException(410, "原始旧身份导出已禁用，请改用加密导出")
 
-    Cannot sign in to the new site with a username/password; this endpoint
-    only downloads an existing profile before the legacy cookie expires.
-    """
+
+@app.post("/api/legacy/export/encrypted")
+def export_legacy_profile_encrypted(body: SitePasswordBody, request: Request):
+    """Legacy recovery remains possible without releasing plaintext private keys."""
+    from .profile_api import require_same_origin, rate_check
+    require_same_origin(request)
+    rate_check(request)
     legacy_uid = store.legacy_session_user(request.cookies.get("wtox_session"))
     if not legacy_uid:
         raise HTTPException(401, "旧会话已过期，请使用之前备份的 .tox 文件")
     saved = store.read_profile(legacy_uid)
     if saved is None:
         raise HTTPException(404, "旧账号未创建 Tox 身份")
+    try:
+        encrypted = encrypt_savedata(saved, body.password)
+    except ToxIdentityError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return Response(
-        saved, media_type="application/octet-stream",
-        headers={"Content-Disposition":'attachment; filename="wtox-legacy-backup.tox"',
+        encrypted, media_type="application/octet-stream",
+        headers={"Content-Disposition":'attachment; filename="wtox-legacy-encrypted.tox"',
                  "Cache-Control":"no-store", "X-Content-Type-Options":"nosniff"}
     )
 

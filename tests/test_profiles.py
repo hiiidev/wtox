@@ -142,7 +142,13 @@ class ToxLoginTests(unittest.TestCase):
                       (hashlib.sha256(old_cookie.encode()).hexdigest(), uid, int(time.time())+86400))
         pending_id=store.append_pending(uid,{"type":"message","text":"stored-before-upgrade"})
         self.client.cookies.set("wtox_session",old_cookie)
-        self.assertEqual(self.client.get("/api/legacy/export").content,self.alice.savedata)
+        self.assertEqual(self.client.get("/api/legacy/export").status_code,410)
+        with patch("backend.main.encrypt_savedata", return_value=b"encrypted-legacy") as backup:
+            legacy=self.client.post("/api/legacy/export/encrypted",
+                                    json={"password":"new-legacy-backup-password"})
+        self.assertEqual(legacy.status_code,200)
+        self.assertEqual(legacy.content,b"encrypted-legacy")
+        backup.assert_called_once_with(self.alice.savedata,"new-legacy-backup-password")
         self.assertTrue(store.needs_legacy_migration())
         native=self.native()
         store.migrate_legacy_identities(native)
