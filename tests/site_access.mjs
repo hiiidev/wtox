@@ -46,7 +46,8 @@ assert.ok(server.includes('request.cookies.get(access.COOKIE_NAME)'));
 assert.ok(websocket.includes("access.gate_authorized(ws.cookies.get(access.COOKIE_NAME))"),
   "WebSocket bypasses HTTP middleware, must independently check site access");
 assert.ok(gate.includes("REMEMBER_SECONDS = 365 * 86400") &&
-  gate.includes("def issue_access_cookie(password: str)") &&
+  gate.includes("def issue_access_cookie(password: str,") &&
+  gate.includes("device_id: str | None = None") &&
   gate.includes('payload = f"v3.{nonce}"') &&
   gate.includes("def revoke_device(device_id: str)") &&
   gate.includes("def renew_access_cookie(cookie: str | None)"),
