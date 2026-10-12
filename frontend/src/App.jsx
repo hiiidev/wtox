@@ -1990,6 +1990,14 @@ export default function App(){
               </small>
             </div>
           </div>
+          {friendRequests.length>0&&<AntButton type="text"
+              className="wt-mobile-chat-requests"
+              aria-label={`查看 ${friendRequests.length} 条好友请求`}
+              onClick={()=>setModal("requests")}>
+              <Badge count={friendRequests.length} overflowCount={99} size="small">
+                <UserAddOutlined/>
+              </Badge>
+            </AntButton>}
           <Dropdown trigger={["click"]} disabled={!selectedFriend}
               menu={{
                 items:[
