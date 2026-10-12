@@ -1202,8 +1202,15 @@ export default function App(){
     cancelThreadSettle();
   },[cancelThreadSettle]);
   const settleThreadBottom=useCallback((lockMs=0)=>{
-    cancelThreadSettle();
-    if(lockMs>0)autoScrollLockUntil.current=Date.now()+lockMs;
+    // A ResizeObserver notification during the transition must not cancel
+    // the later stabilization attempts scheduled for the newly selected peer.
+    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
+    scrollFrameIds.current=[];
+    if(lockMs>0){
+      for(const timer of scrollSettleTimers.current)clearTimeout(timer);
+      scrollSettleTimers.current=[];
+      autoScrollLockUntil.current=Date.now()+lockMs;
+    }
     const scroll=()=>{
       if(followLatest.current)scrollThreadToBottom(threadEl.current);
     };
