@@ -31,6 +31,7 @@ jobs:
       - run: node tests/check_static_assets.mjs
       - run: node tests/react_structure.mjs
       - run: node tests/chat_ui.mjs
+      - run: node tests/chat_time.mjs
       - run: node tests/tox_download.mjs
       - run: node tests/chat_refinement.mjs
       - run: node tests/history_io.mjs
