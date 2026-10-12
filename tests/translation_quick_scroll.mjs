@@ -26,8 +26,8 @@ assert.ok(app.includes("if(result.status===\"ok\" || result.status===\"error\")"
   "Scroll after final translation, including long results");
 assert.ok(app.includes("followLatest.current=true;"));
 assert.ok(app.includes("settleThreadBottom();"));
-assert.ok(app.includes("const second=requestAnimationFrame("),
-  "Late DOM layout should still settle the true bottom");
+assert.ok(app.includes("observer.observe(content)"),
+  "Later translation/content resizing is observed without timed jumps");
 assert.ok(app.includes("observer.observe(content)"),
   "Translation panel growth triggers bottom scroll when following latest");
 console.log("Noise filtering and last translation bottom-scrolling wiring OK");

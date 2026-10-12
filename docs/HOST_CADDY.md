@@ -147,6 +147,12 @@ sudo journalctl -u caddy -n 120 --no-pager
 sudo caddy validate --config /etc/caddy/Caddyfile
 ```
 
+新版本后端会记录 `wTox /ws upgrade reached application`、`wTox /ws upgrade accepted` 或固定的拒绝原因：
+
+- 连续失败且**完全没有** `reached application`：请求可能在 Cloudflare、CDN、Caddy 或其他代理层被挡住；
+- 有 `reached application` 但没有 `accepted`：查下一条后端拒绝原因；
+- 有 `accepted` 但随后断开：查看浏览器 Console 中的 `closeCode`、`wasClean`、`phase`、`elapsedMs` 和是否 `timedOut`。浏览器不提供失败 Upgrade 的 HTTP 状态码；它仍需要从 Network 面板确认。
+
 后端拒绝握手时只记录原因类别：
 - `site_access_required`：网站入口 Cookie 未通过检查；
 - `tox_session_missing_or_expired`：Tox 会话不存在或已过期；

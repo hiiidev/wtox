@@ -21,7 +21,7 @@ import {api,getJson,postJson,downloadBlob,downloadToxFile,shortKey} from "./api.
 import {openIdentityHistory} from "./history.js";
 import {MAX_ATTACHMENT_BYTES,formatAttachmentSize,mergeFileTimeline} from "./attachment_ui.js";
 import {avatarLabel,avatarFallbackColor,ensureAvatarColors} from "./avatar_utils.js";
-import {isNearBottom,countNewEntries,scrollThreadToBottom,shouldFollowThreadScroll} from "./thread_scroll.js";
+import {isNearBottom,countNewEntries,scrollThreadToBottom} from "./thread_scroll.js";
 import {chatTime} from "./chat_time.js";
 import {contactPresenceText,chatPresenceText,formatLastOnline} from "./friend_presence.js";
 import {TRANSLATION_LANGUAGES,translationTarget} from "./translation.js";
@@ -286,9 +286,8 @@ export default function App(){
   const followLatest=useRef(true);
   const previousThread=useRef({peer:null,ids:[]});
   const scrollIdleTimer=useRef(null);
-  const scrollFrameIds=useRef([]);
-  const scrollSettleTimers=useRef([]);
   const autoScrollLockUntil=useRef(0);
+  const threadTouchY=useRef(null);
   const [migrateRequired,setMigrateRequired]=useState(false),[legacyPass,setLegacyPass]=useState("");
   const [sending,setSending]=useState(false);
   const [logoutOpen,setLogoutOpen]=useState(false);
@@ -1072,15 +1071,22 @@ export default function App(){
       socket.current=ws;
       lastMessage.current=Date.now();
       const currentSocket=ws;
+      const startedAt=Date.now();
+      let opened=false,handshakeTimedOut=false,hadSocketError=false;
       // Some mobile gateways stall the upgrade handshake indefinitely.
       handshakeTimeout=setTimeout(()=>{
-        if(!dead&&currentSocket.readyState===WebSocket.CONNECTING)currentSocket.close();
+        if(!dead&&currentSocket.readyState===WebSocket.CONNECTING){
+          handshakeTimedOut=true;
+          currentSocket.close();
+        }
       },10000);
       currentSocket.onopen=()=>{
         if(dead||currentSocket!==ws){currentSocket.close();return}
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
         lastMessage.current=Date.now();
+        opened=true;
+        if(failures)console.info("wTox WebSocket 已恢复实时连接");
         failures=0;
         setSocketState("connected");
         Promise.allSettled([refreshFriends(),refreshNetwork(),recoverPending(),
@@ -1091,11 +1097,33 @@ export default function App(){
         lastMessage.current=Date.now();
         try{onRealtime(JSON.parse(msg.data))}catch(error){alert("无法解析实时事件："+error.message)}
       };
-      currentSocket.onclose=()=>{
+      currentSocket.onerror=()=>{
+        if(dead||currentSocket!==ws)return;
+        // Browser APIs do not expose failed HTTP upgrade status, cookies or
+        // Cloudflare's internal reason. The paired close code is diagnostic.
+        hadSocketError=true;
+      };
+      currentSocket.onclose=event=>{
         if(dead||currentSocket!==ws)return;
         clearTimeout(handshakeTimeout);
         handshakeTimeout=null;
-        if(!dead)scheduleRetry();
+        // Avoid printing one duplicate message on every retry forever.
+        // Do not log origins, tokens, cookies or websocket payloads.
+        if(!opened && (failures<2||failures%5===0)){
+          console.warn("wTox WebSocket 握手失败",{
+            phase:"before_open",
+            closeCode:event.code,wasClean:event.wasClean,
+            elapsedMs:Date.now()-startedAt,attempt:failures+1,
+            timedOut:handshakeTimedOut,networkError:hadSocketError,
+            hint:"检查 Network → WS 的 HTTP 状态码和服务器 wTox /ws 日志"
+          });
+        }else if(opened && event.code!==1000 && failures<2){
+          console.warn("wTox WebSocket 意外断开",{
+            phase:"after_open",closeCode:event.code,
+            wasClean:event.wasClean,elapsedMs:Date.now()-startedAt
+          });
+        }
+        scheduleRetry();
       };
     };
     connect();
@@ -1206,73 +1234,35 @@ export default function App(){
   // resolving. Merge the optimistic upload with the canonical transfer ID.
   const thread=useMemo(()=>mergeFileTimeline(messages,pendingFiles,selected)
     .slice(-250),[selected,messages,pendingFiles]);
-  const cancelThreadSettle=useCallback(()=>{
-    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
-    scrollFrameIds.current=[];
-    for(const timer of scrollSettleTimers.current)clearTimeout(timer);
-    scrollSettleTimers.current=[];
-  },[]);
   const cancelFollowForManualScroll=useCallback(()=>{
-    // Only explicit touch/wheel/key input cancels a pending automatic jump.
+    // Explicit input means the reader has taken control. Programmatic scroll
+    // events from React/layout do not count as user intent.
     autoScrollLockUntil.current=0;
     followLatest.current=false;
-    cancelThreadSettle();
-  },[cancelThreadSettle]);
-  const settleThreadBottom=useCallback((lockMs=0)=>{
-    // A ResizeObserver notification during the transition must not cancel
-    // the later stabilization attempts scheduled for the newly selected peer.
-    for(const id of scrollFrameIds.current)cancelAnimationFrame(id);
-    scrollFrameIds.current=[];
-    if(lockMs>0){
-      for(const timer of scrollSettleTimers.current)clearTimeout(timer);
-      scrollSettleTimers.current=[];
-      autoScrollLockUntil.current=Date.now()+lockMs;
-    }
-    const scroll=()=>{
-      if(followLatest.current)scrollThreadToBottom(threadEl.current);
-    };
-    // Newly opened chat layout, image footers and iOS viewport metrics can
-    // settle after React's first two frames; wait for final layout too.
-    scroll();
-    const first=requestAnimationFrame(()=>{
-      scroll();
-      const second=requestAnimationFrame(()=>{
-        scroll();
-        scrollFrameIds.current=[];
-      });
-      scrollFrameIds.current=[second];
-    });
-    scrollFrameIds.current=[first];
-    if(lockMs>0){
-      scrollSettleTimers.current=[
-        setTimeout(scroll,240),setTimeout(scroll,650),
-        setTimeout(()=>{scroll();autoScrollLockUntil.current=0},lockMs)
-      ];
-    }
-  },[cancelThreadSettle]);
+  },[]);
+  const settleThreadBottom=useCallback(()=>{
+    if(followLatest.current)scrollThreadToBottom(threadEl.current);
+  },[]);
   const scrollToLatest=useCallback(()=>{
     followLatest.current=true;
     setNewBelowCount(0);
-    settleThreadBottom(1000);
+    settleThreadBottom();
   },[settleThreadBottom]);
   const onThreadScroll=useCallback(()=>{
     const element=threadEl.current;
     if(!element)return;
     const atBottom=isNearBottom(element);
-    // React may dispatch the previous peer's programmatic scroll event after
-    // the next peer mounted. Keep following until its layout is stable.
-    if(autoScrollLockUntil.current>0)
-      followLatest.current=shouldFollowThreadScroll(element,autoScrollLockUntil.current);
-    else followLatest.current=atBottom;
+    if(Date.now()>=autoScrollLockUntil.current){
+      // A DOM/layout-driven event may happen before a ResizeObserver fixes
+      // the scroll position; only upward user input disables auto-follow.
+      if(atBottom)followLatest.current=true;
+    }
     if(atBottom)setNewBelowCount(count=>count===0?count:0);
     setThreadScrolling(true);
     if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
     scrollIdleTimer.current=setTimeout(()=>setThreadScrolling(false),950);
   },[]);
-  useEffect(()=>()=> {
-    if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current);
-    cancelThreadSettle();
-  },[cancelThreadSettle]);
+  useEffect(()=>()=>{if(scrollIdleTimer.current)clearTimeout(scrollIdleTimer.current)},[]);
   useLayoutEffect(()=>{
     const ids=thread.map(item=>item.id);
     const previous=previousThread.current;
@@ -1280,7 +1270,10 @@ export default function App(){
       previousThread.current={peer:selected,ids};
       followLatest.current=true;
       setNewBelowCount(0);
-      settleThreadBottom(1000);
+      // useLayoutEffect runs after the new peer's DOM commits and before
+      // paint, so no old-thread scroll or 240/650/1000ms visible jump.
+      autoScrollLockUntil.current=Date.now()+120;
+      settleThreadBottom();
       return;
     }
     const newlyAdded=countNewEntries(previous.ids,ids);
@@ -1484,9 +1477,8 @@ export default function App(){
       window.history.pushState({...window.history.state,wtoxChat:true},"",window.location.href);
     }
     setMobileChat(true);
-    // The selected thread re-renders after this handler returns. The layout
-    // effect scrolls the new content, then retries after two animation frames.
-    scrollToLatest();
+    // The selected thread's useLayoutEffect scrolls the NEW DOM before paint.
+    // Do not scroll the previous conversation here.
     setSeen(previous=>({...previous,[key]:Date.now()}));
   }
   useEffect(()=>{
@@ -1642,16 +1634,52 @@ export default function App(){
   }
   async function removeFriend(){
     const publicKey=deleteFriendPeer;
+    const h=history.current;
     if(!publicKey||removingFriend)return;
+    if(!h?.ready()){
+      alert("本地加密聊天记录尚未解锁，暂不能同时删除好友与记录","error");
+      return;
+    }
     setRemovingFriend(true);
+    let remoteDeleted=false,localDeleted=false;
     try{
+      // Keep local records if the Tox friend removal request fails.
       await api("/api/friends/"+encodeURIComponent(publicKey),{method:"DELETE"});
+      remoteDeleted=true;
+      await h.deleteConversation(publicKey);
+      localDeleted=true;
+      drafts.current.delete(publicKey);
+      setSeen(previous=>{
+        if(!(publicKey in previous))return previous;
+        const next={...previous};delete next[publicKey];return next;
+      });
+      setMessages(previous=>previous.filter(item=>item.public_key!==publicKey));
+      setPendingFiles(previous=>previous.filter(item=>item.public_key!==publicKey));
+      setSelectedMessageIds(new Set());
       setDeleteFriendPeer(null);
-      if(selectedRef.current===publicKey)clearMobileConversation();
-      await refreshFriends();
-      alert("已删除好友，本地聊天记录仍然保留");
-    }catch(error){alert("删除好友失败："+error.message)}
-    finally{setRemovingFriend(false)}
+      if(selectedRef.current===publicKey){
+        if(window.history.state?.wtoxChat)
+          window.history.replaceState({...window.history.state,wtoxChat:false},"",window.location.href);
+        clearMobileConversation();
+      }
+      await refreshHistory(h).catch(()=>{});
+      await refreshFriends().catch(()=>{});
+      alert("已删除好友及此浏览器中的聊天记录","success");
+    }catch(error){
+      if(remoteDeleted&&!localDeleted){
+        // There is no atomic transaction across Toxcore and IndexedDB. Keep
+        // an explicit local cleanup action available instead of claiming all
+        // data was removed when IndexedDB failed.
+        setDeleteFriendPeer(null);
+        setConversationDeletePeer(publicKey);
+        await refreshFriends().catch(()=>{});
+        alert("好友已移除，但本地清理未完成。请使用弹出的聊天记录删除操作重试："+error.message,"error");
+      }else if(remoteDeleted){
+        // Storage deletion committed, but later local UI maintenance failed.
+        await refreshFriends().catch(()=>{});
+        alert("好友及聊天记录已删除，但界面刷新未完成："+error.message,"error");
+      }else alert("删除好友失败："+error.message,"error");
+    }finally{setRemovingFriend(false)}
   }
   async function saveOwnProfile(){
     setProfileSaving(true);
@@ -2388,7 +2416,24 @@ export default function App(){
             className={"ant-thread"+(threadScrolling?" wt-thread-scrolling":"")}
             onScroll={onThreadScroll}
             onWheel={event=>{if(event.deltaY<0)cancelFollowForManualScroll()}}
-            onTouchStart={cancelFollowForManualScroll}
+            onTouchStart={event=>{
+              threadTouchY.current=event.touches?.[0]?.clientY??null;
+            }}
+            onTouchMove={event=>{
+              const nextY=event.touches?.[0]?.clientY;
+              if(threadTouchY.current!==null && nextY!==undefined &&
+                 nextY>threadTouchY.current+10)
+                cancelFollowForManualScroll();
+            }}
+            onTouchEnd={()=>{threadTouchY.current=null}}
+            onTouchCancel={()=>{threadTouchY.current=null}}
+            onPointerDown={event=>{
+              // Handle scrollbar-thumb dragging without treating bubble taps
+              // as a request to stop following the latest message.
+              const rect=event.currentTarget.getBoundingClientRect();
+              if(event.target===event.currentTarget&&event.clientX>=rect.right-14)
+                cancelFollowForManualScroll();
+            }}
             onKeyDown={event=>{
               if(["ArrowUp","PageUp","Home"].includes(event.key))
                 cancelFollowForManualScroll();
@@ -2621,7 +2666,8 @@ export default function App(){
         确定要删除「{friends.find(f=>f.public_key===deleteFriendPeer)?.name||"该好友"}」吗？
       </Typography.Paragraph>
       <Typography.Text type="secondary">
-        将从好友列表移除，当前浏览器保存的聊天记录不会被清除。
+        将删除该 Tox 好友，同时清除当前浏览器里与其有关的加密聊天记录及图片缓存。
+        不会撤回对方已收到的消息，也不会取消服务器已排队的消息。操作不可恢复。
       </Typography.Text>
     </AntModal>
 

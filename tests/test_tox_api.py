@@ -164,6 +164,20 @@ class ChatApiTests(unittest.TestCase):
             self.assertEqual(ws.receive_json()["type"], "pong")
         self.assertEqual(store.get_pending(self.uid), [])
 
+    def test_websocket_logs_safe_handshake_markers(self):
+        # A public proxy may block before reaching ASGI; this marker
+        # distinguishes "never reached the app" from backend rejection.
+        with self.assertLogs("uvicorn.error", level="INFO") as output:
+            with self.client.websocket_connect(
+                "/ws", headers={"origin":"http://testserver"}
+            ) as ws:
+                ws.send_json({"type":"ping"})
+                self.assertEqual(ws.receive_json()["type"],"pong")
+        logs=" ".join(output.output)
+        self.assertIn("wTox /ws upgrade reached application",logs)
+        self.assertIn("wTox /ws upgrade accepted",logs)
+        self.assertNotIn(self.client.cookies.get("wtox_tox_session"),logs)
+
     def test_websocket_denials_log_safe_reasons(self):
         # Browsers only report a generic websocket error when HTTP upgrade
         # authentication fails. Production logs must identify the condition
