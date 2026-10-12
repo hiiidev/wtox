@@ -6,7 +6,7 @@ import { Bubble, Sender, FileCard } from "@ant-design/x";
 import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserAddOutlined, DeleteOutlined, MessageOutlined, ContactsOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
-  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined,
+  ArrowDownOutlined, CopyOutlined, CheckSquareOutlined, SettingFilled
   } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
 import {LOGO_URL} from "./versioned_assets.js";
@@ -60,7 +60,7 @@ async function decodedImage(blob){
 function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheRevision}){
   const [preview,setPreview]=useState("");
   const [previewMissing,setPreviewMissing]=useState(false);
-  const isPicture=/\\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
+  const isPicture=/\.(?:png|jpe?g|webp|gif)$/i.test(file.file_name||"");
   const completed=file.file_state==="completed";
   const canDownload=file.direction==="incoming"&&completed;
   useEffect(()=>{
@@ -76,9 +76,9 @@ function AttachmentBubble({file,accept,reject,download,historyHandle,imageCacheR
           const response=await api("/api/files/"+encodeURIComponent(file.file_id)+"/download");
           blob=await response.blob();
           if(blob.size>5*1024*1024)return;
-          const mime=/\\.png$/i.test(file.file_name)?"image/png":
-            /\\.webp$/i.test(file.file_name)?"image/webp":
-            /\\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
+          const mime=/\.png$/i.test(file.file_name)?"image/png":
+            /\.webp$/i.test(file.file_name)?"image/webp":
+            /\.gif$/i.test(file.file_name)?"image/gif":"image/jpeg";
           blob=new Blob([blob],{type:mime});
           if(!await decodedImage(blob))throw new Error("附件不是可解码的图片");
           if(historyHandle?.ready())await historyHandle.cacheImage(file.file_id,blob);
@@ -1101,11 +1101,11 @@ export default function App(){
     try{
       if(!h?.ready())throw new Error("本地加密历史尚未就绪");
       await h.persistFile(transfer);
-      if(/\\.(png|jpe?g|webp|gif)$/i.test(file.name)){
+      if(/\.(png|jpe?g|webp|gif)$/i.test(file.name)){
         const mime=file.type.startsWith("image/")?file.type:
-          /\\.png$/i.test(file.name)?"image/png":
-          /\\.webp$/i.test(file.name)?"image/webp":
-          /\\.gif$/i.test(file.name)?"image/gif":"image/jpeg";
+          /\.png$/i.test(file.name)?"image/png":
+          /\.webp$/i.test(file.name)?"image/webp":
+          /\.gif$/i.test(file.name)?"image/gif":"image/jpeg";
         const blob=new Blob([file],{type:mime});
         if(await decodedImage(blob)){
           await h.cacheImage(transfer.id,blob);
