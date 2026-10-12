@@ -40,4 +40,4 @@ RUN useradd --uid 10001 --create-home wtox && mkdir /data && chown -R wtox:wtox 
 USER wtox
 ENV PYTHONUNBUFFERED=1
 EXPOSE 6066
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "6066", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "6066", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1,172.16.0.0/12"]

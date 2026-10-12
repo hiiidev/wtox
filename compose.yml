@@ -23,7 +23,7 @@ services:
       retries: 3
       start_period: 60s
   caddy:
-    image: caddy:2
+    image: caddy:2.10
     restart: unless-stopped
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in .env}
