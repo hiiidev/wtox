@@ -1181,7 +1181,7 @@ export default function App(){
               </div>
               {!online(selectedFriend)&&formatLastOnline(selectedFriend.last_online)&&
                 <Typography.Text type="secondary" className="wt-peer-last-online">
-                  最近在线时间：{formatLastOnline(selectedFriend.last_online)}
+                  最后在线：{formatLastOnline(selectedFriend.last_online)}
                 </Typography.Text>}
               <Divider/>
               <Typography.Text type="secondary">状态消息</Typography.Text>
