@@ -8,6 +8,7 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
   UserOutlined, PlusOutlined, QrcodeOutlined, SmileOutlined, FolderOutlined,
   ArrowDownOutlined, CopyOutlined, CheckSquareOutlined } from "@ant-design/icons";
 import PushSettings from "./PushSettings.jsx";
+import {LOGO_URL} from "./versioned_assets.js";
 import {disablePushBeforeLogout} from "./push_client.js";
 import {api,getJson,postJson,downloadBlob,shortKey} from "./api.js";
 import {openIdentityHistory} from "./history.js";
@@ -315,7 +316,7 @@ export default function App(){
       const notification=new Notification("wTox · 新消息",{
         body:(peer?.name||"Tox 好友")+" 发来一条新消息",
         tag:"wtox-message-"+event.public_key,
-        icon:"/logo.svg"
+        icon:LOGO_URL
       });
       notification.onclick=()=>{
         window.focus();
@@ -1040,13 +1041,19 @@ export default function App(){
 
   // Shared Ant Design settings: mobile full page and desktop side drawer.
   const settingsContent=<div className="wt-settings-content">
-    <Card size="small" title="连接与消息队列" className="wt-settings-card">
+    <div className="wt-settings-overview" aria-hidden="true">
+      <span className="wt-settings-eyebrow">WTOX / PREFERENCES</span>
+      <strong>你的聊天，由你掌控</strong>
+      <p>连接状态、通知、个人身份和聊天数据都在这里管理。</p>
+    </div>
+    <Card size="small" title="连接与消息队列" className="wt-settings-card wt-settings-network-card">
       <Space orientation="vertical" size="small" style={{width:"100%"}}>
-        <Typography.Text>
+        <Typography.Text className="wt-network-status">
+          <span className={"wt-network-indicator "+(network>0?"connected":"disconnected")} aria-hidden="true"/>
           Tox 网络：{network===2?"UDP 已连接":network===1?"TCP 已连接":
             network===0?"未连接（暂时无法接收消息）":"正在启动或检查"}
         </Typography.Text>
-        <Typography.Text type="secondary">
+        <Typography.Text type="secondary" className="wt-network-diagnostics">
           在线好友：{networkDiagnostics?.online_friends??"-"}/
           {networkDiagnostics?.total_friends??"-"} · 
           待发送：{networkDiagnostics?.queued??"-"} ·
@@ -1131,7 +1138,7 @@ export default function App(){
         历史 JSON 导出文件是明文，需自行妥善保存。
       </Typography.Paragraph>
     </Card>
-    <AntButton danger block onClick={logout}>退出当前身份</AntButton>
+    <AntButton danger block className="wt-settings-signout" onClick={logout}>退出当前身份</AntButton>
   </div>;
 
   if(loading)return <div className="wtox-loading" role="status" aria-label="正在加载"><Spin size="large"/></div>;
@@ -1143,7 +1150,7 @@ export default function App(){
     <main className="wtox-auth-layout" data-theme={effectiveTheme}>
       <section className="wtox-auth-card" aria-label="进入 wTox">
         <div className="wtox-auth-card-header">
-          <img src="/logo.svg" className="wtox-auth-small-mark" alt="" />
+          <img src={LOGO_URL} className="wtox-auth-small-mark" alt="" />
           <strong>wTox</strong>
         </div>
         <Typography.Paragraph type="secondary" className="wtox-auth-subtitle">
@@ -1281,7 +1288,7 @@ export default function App(){
             <strong>{section==="contacts"?"通讯录":"聊天"}</strong>
           </div>
           <h2 className="wechat-desktop-heading">{section==="contacts"?"通讯录":"聊天"}</h2>
-          <div className="wt-list-actions">
+          <div className="wt-list-actions" role="group" aria-label="好友操作">
             <Badge count={friendRequests.length} size="small" color="#ef4444" title="">
               <AntButton type="text" icon={<UserAddOutlined/>} aria-label="好友请求"
                 onClick={()=>setModal("requests")}/>
@@ -1381,8 +1388,8 @@ export default function App(){
           </button>
         </nav>
       </section>
-      <main className="ant-chat-area">
-        <div className="ant-chat-toolbar">
+      <main className={"ant-chat-area"+(!selected?" is-empty-chat":"")}>
+        {selected&&<div className="ant-chat-toolbar">
           <div className="ant-chat-identity">
             <AntButton className="ant-mobile-back" aria-label="返回联系人"
               icon={<ArrowLeftOutlined/>} onClick={()=>setMobileChat(false)}/>
@@ -1422,9 +1429,9 @@ export default function App(){
                   <circle cx="19" cy="12" r="2.25"/>
                 </svg>} aria-label="更多操作" disabled={!selectedFriend}/>
             </Dropdown>
-        </div>
+        </div>}
         <div className="wt-thread-shell">
-          {selectedMessageIds.size>0&&<div className="wt-batch-toolbar" role="toolbar" aria-label="批量删除聊天记录">
+          {selected&&selectedMessageIds.size>0&&<div className="wt-batch-toolbar" role="toolbar" aria-label="批量删除聊天记录">
             <strong>已选 {selectedMessageIds.size} 条</strong>
             <AntButton size="small" onClick={()=>setSelectedMessageIds(new Set(thread.map(m=>m.id)))}>
               全选
@@ -1442,7 +1449,7 @@ export default function App(){
             onScroll={onThreadScroll} role="log" aria-label="聊天记录">
             <div className="wt-thread-content">
           {!selected&&<div className="ant-empty-chat">
-            <img src="/logo.svg" alt="" width="74" height="74"/>
+            <img src={LOGO_URL} alt="" width="74" height="74"/>
             <h3>欢迎使用 wTox</h3><p>选择一位好友，开始私人对话</p>
           </div>}
           {selected&&!thread.length&&<div className="ant-empty-chat wt-empty-conversation">
@@ -1492,7 +1499,7 @@ export default function App(){
             {newBelowCount} 条新消息
           </AntButton>}
         </div>
-        <div className="ant-compose-area">
+        {selected&&<div className="ant-compose-area">
           <div className="wt-compose-tools">
             <Upload showUploadList={false} maxCount={1} className="wt-chat-file-upload"
               disabled={!selected||!online(selectedFriend)}
@@ -1543,7 +1550,7 @@ export default function App(){
             }}
             onSubmit={text=>{if(text.trim())sendText("",text,text)}}
             disabled={!selected||!historyReady||sending} submitType="enter"/>
-        </div>
+        </div>}
       </main>
     </div>
 
@@ -1573,8 +1580,7 @@ export default function App(){
       </Typography.Text>
     </AntModal>
 
-    {selectedFriend&&<>
-      {isMobile
+    {isMobile
         ? <Drawer open={peerDetailsOpen} title="好友资料" placement="bottom"
             height="auto" styles={{body:{maxHeight:"68dvh",overflowY:"auto"}}}
             onClose={()=>setPeerDetailsOpen(false)} destroyOnHidden>
@@ -1585,9 +1591,7 @@ export default function App(){
             centered destroyOnHidden width={500}>
             {peerProfileContent}
           </AntModal>}
-    </>}
-
-    {modal==="profile"&&<AntModal open title="我的 Tox 资料"
+    <AntModal open={modal==="profile"} title="我的 Tox 资料"
       onCancel={closeModal} footer={null} centered destroyOnHidden width={520}>
       <div className="wt-own-tox-id-heading">
         <Typography.Text type="secondary">我的 Tox ID（可分享给好友）</Typography.Text>
@@ -1618,9 +1622,9 @@ export default function App(){
           保存 Tox 个人资料
         </AntButton>
       </Form>
-    </AntModal>}
+    </AntModal>
 
-    {modal==="qrcode"&&<AntModal open centered title="我的 Tox ID 二维码"
+    <AntModal open={modal==="qrcode"} centered title="我的 Tox ID 二维码"
       onCancel={()=>setModal("profile")}
       footer={<AntButton onClick={()=>setModal("profile")}>返回我的资料</AntButton>}
       width={360} destroyOnHidden>
@@ -1635,15 +1639,15 @@ export default function App(){
           }catch{uiMessageApi.error("复制失败，请手动复制")}
         }}>复制 Tox ID</AntButton>
       </div>
-    </AntModal>}
+    </AntModal>
 
-    {modal==="settings"&&<Drawer open title="设置" placement="right"
-      onClose={closeModal} width={460} destroyOnHidden
-      className="wt-settings-drawer">
+    <Drawer open={modal==="settings"} title="设置" placement="right"
+      onClose={closeModal} width={480} destroyOnHidden
+      className="wt-settings-drawer" rootClassName="wt-settings-drawer-root">
       {settingsContent}
-    </Drawer>}
+    </Drawer>
 
-    {modal==="add"&&<AntModal open title="添加 Tox 好友" onCancel={closeModal}
+    <AntModal open={modal==="add"} title="添加 Tox 好友" onCancel={closeModal}
       footer={null} centered destroyOnHidden>
       <Form layout="vertical" onFinish={addFriend}>
         <Form.Item label="好友 Tox ID（76 位）" required>
@@ -1655,8 +1659,8 @@ export default function App(){
         </Form.Item>
         <AntButton type="primary" htmlType="submit" block>发送好友请求</AntButton>
       </Form>
-    </AntModal>}
-    {modal==="requests"&&<AntModal open title={`好友请求（${friendRequests.length}）`}
+    </AntModal>
+    <AntModal open={modal==="requests"} title={`好友请求（${friendRequests.length}）`}
       onCancel={closeModal} footer={null} centered destroyOnHidden>
       <List dataSource={friendRequests} locale={{emptyText:"暂无待处理的好友请求"}}
         renderItem={item=><List.Item actions={[
@@ -1670,7 +1674,7 @@ export default function App(){
                 {new Date(item.created*1000).toLocaleString("zh-CN")}
               </Typography.Text></>}/>
         </List.Item>}/>
-    </AntModal>}
+    </AntModal>
 
 
   </div></ConfigProvider>;
