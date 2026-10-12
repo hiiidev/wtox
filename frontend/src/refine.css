@@ -1371,3 +1371,68 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
 @media(prefers-reduced-motion:reduce){
   .ant-messenger[data-theme] .wt-translate-button{transition:none}
 }
+
+/* Keep the message body anchored to the correct edge irrespective of the
+   long YYYY年MM月DD日 HH:mm delivery footer or expanded translation. Before
+   this, AntD Bubble let the much wider footer dictate the short bubble's
+   horizontal position (e.g. a "123" bubble floating to the left). */
+.ant-messenger[data-theme] .wt-message-row>.wt-message-main-stack{
+  display:flex!important;flex-direction:column!important;
+  width:max-content!important;max-width:min(84%,650px)!important;
+  min-width:0!important;gap:0!important;
+  flex:0 1 auto!important;
+}
+.ant-messenger[data-theme] .wt-message-outgoing>.wt-message-main-stack{
+  margin-left:auto!important;align-items:flex-end!important;
+  align-self:flex-end!important;
+}
+.ant-messenger[data-theme] .wt-message-incoming>.wt-message-main-stack{
+  margin-right:auto!important;align-items:flex-start!important;
+  align-self:flex-start!important;
+}
+.ant-messenger[data-theme] .wt-message-main-stack>.wt-conversation-bubble.ant-bubble{
+  width:fit-content!important;max-width:100%!important;
+  min-width:0!important;flex:0 1 auto!important;
+}
+.ant-messenger[data-theme] .wt-message-main-stack.out>.wt-conversation-bubble.ant-bubble{
+  align-self:flex-end!important;margin-left:auto!important;
+}
+.ant-messenger[data-theme] .wt-message-main-stack.in>.wt-conversation-bubble.ant-bubble{
+  align-self:flex-start!important;margin-right:auto!important;
+}
+.ant-messenger[data-theme] .wt-message-main-stack>.wt-bubble-footer-stack{
+  margin-top:6px;max-width:100%;width:fit-content;min-width:0;
+  gap:6px;
+}
+.ant-messenger[data-theme] .wt-message-main-stack.out>.wt-bubble-footer-stack{
+  align-self:flex-end!important;align-items:flex-end!important;
+}
+.ant-messenger[data-theme] .wt-message-main-stack.in>.wt-bubble-footer-stack{
+  align-self:flex-start!important;align-items:flex-start!important;
+}
+.ant-messenger[data-theme] .wt-message-main-stack .wt-bubble-meta-row{
+  max-width:100%;gap:5px;
+}
+.ant-messenger[data-theme] .wt-message-main-stack.out .wt-bubble-meta-row{
+  justify-content:flex-end;
+}
+.ant-messenger[data-theme] .wt-message-main-stack .ant-message-status{
+  font-size:11px!important;letter-spacing:0;
+  font-variant-numeric:tabular-nums;
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wt-message-row>.wt-message-main-stack{
+    max-width:min(91%,440px)!important;
+  }
+  .ant-messenger[data-theme] .wt-message-main-stack .ant-message-status{
+    font-size:10.5px!important;white-space:normal;
+    overflow-wrap:anywhere;text-align:end;
+  }
+  .ant-messenger[data-theme] .wt-message-main-stack.in .ant-message-status{
+    text-align:start;
+  }
+  /* iOS long-press opens the message menu rather than selecting the text. */
+  .ant-messenger[data-theme] .wt-selectable-message{
+    -webkit-touch-callout:none;touch-action:pan-y;
+  }
+}
