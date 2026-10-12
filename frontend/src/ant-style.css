@@ -432,3 +432,22 @@ html[data-wtox-theme="light"] .ant-dropdown .ant-dropdown-menu{
     transition:none!important;
   }
 }
+
+/* Desktop friend requests are Ant Design Notification, not Message.
+   The popup is portaled and needs independent dark-mode elevation. */
+html[data-wtox-theme="dark"] .ant-notification .ant-notification-notice{
+  background:linear-gradient(180deg,#303034,#252528)!important;
+  border:1px solid rgba(255,255,255,.14)!important;
+  border-radius:14px!important;
+  box-shadow:0 20px 60px rgba(0,0,0,.52),
+             0 5px 18px rgba(0,0,0,.27)!important;
+}
+html[data-wtox-theme="dark"] .ant-notification .ant-notification-notice-message{
+  color:#f5f5f6!important;font-weight:650!important;
+}
+html[data-wtox-theme="dark"] .ant-notification .ant-notification-notice-description{
+  color:#c6c6cb!important;
+}
+html[data-wtox-theme="dark"] .ant-notification .ant-notification-notice-close{
+  color:#c1c1c5!important;
+}

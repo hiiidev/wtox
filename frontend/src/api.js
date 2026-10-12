@@ -12,7 +12,7 @@ export async function api(url, init={}) {
   }
   return response;
 }
-export async function getJson(url){return(await api(url)).json()}
+export async function getJson(url,init={}){return(await api(url,init)).json()}
 export async function postJson(url,data={}){return(await api(url,{method:"POST",body:JSON.stringify(data)})).json()}
 export function downloadBlob(blob,name){
   const objectUrl=URL.createObjectURL(blob);
