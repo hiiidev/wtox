@@ -1511,3 +1511,18 @@ html[data-wtox-theme="dark"] .wt-friend-request-message .ant-btn-text{
     z-index:2;pointer-events:none;
   }
 }
+
+@media(min-width:768px){
+  .ant-messenger[data-theme] .wt-mobile-chat-requests{display:none!important;}
+}
+@media(max-width:767px){
+  .ant-messenger[data-theme] .wt-mobile-chat-requests.ant-btn{
+    flex:0 0 38px;min-width:38px;height:42px;padding:0!important;
+    display:inline-flex;align-items:center;justify-content:center;
+    background:transparent!important;color:var(--wt-text)!important;
+    font-size:19px;
+  }
+  .ant-messenger[data-theme] .wt-mobile-chat-requests .ant-badge-count{
+    background:#ef4444!important;box-shadow:0 0 0 1px var(--wt-chat);
+  }
+}
