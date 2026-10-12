@@ -45,6 +45,34 @@ assert.match(app,/await h\.persistFile\(transfer\)/);
 assert.match(app,/await h\.cacheImage\(transfer\.id/);
 assert.match(app,/<FileCard name=\{file\.file_name\}/);
 assert.match(app,/<Image className="wtox-attachment-image"/);
+assert.match(app,/await decodedImage\\(blob\\)/,
+  "Preview must decode real attachment bytes, not trust filename previews");
+assert.match(app,/setImageCacheRevision\\(n=>n\\+1\\)/,
+  "Outgoing image should rerender once the encrypted image cache is written");
+assert.match(app,/file\\.previewBlob/,
+  "A newly sent image should be previewable during upload");
+assert.doesNotMatch(app,/已由 Toxcore 完成文件传输/,
+  "Completed attachment should not show redundant Toxcore text");
+assert.match(app,/wt-chat-presence-badge/,
+  "Friend presence should appear on the avatar");
+assert.doesNotMatch(app,/selectedFriend&&<Badge status=\\{peerStatusColor\\} text=\\{peerStatus\\}\\/>/,
+  "Do not show redundant presence text next to the friend nickname");
+assert.match(refined,/\\.wt-thread-content\\{[\\s\\S]*?padding-bottom:34px!important/,
+  "Leave space after the last incoming message");
+const sendBody=app.slice(app.indexOf("async function sendText("),
+  app.indexOf("async function addFriend("));
+assert.ok(sendBody.indexOf("setMessages(previous=>[...previous,optimistic])")>=0 &&
+  sendBody.indexOf("setMessages(previous=>[...previous,optimistic])") <
+  sendBody.indexOf('postJson("/api/messages"'),
+  "Optimistic message must enter timeline before server roundtrip");
+const fileBody=app.slice(app.indexOf("async function sendFile()"),
+  app.indexOf("async function controlFile("));
+assert.ok(fileBody.indexOf("setPendingFiles(previous=>[...previous,optimistic])")>=0 &&
+  fileBody.indexOf("setPendingFiles(previous=>[...previous,optimistic])") <
+  fileBody.indexOf("await api(url"),
+  "Optimistic attachment must enter timeline before file upload");
+assert.doesNotMatch(app,/sending\\?"正在发送请求"/,
+  "Composer must not host the outgoing send status");
 assert.match(refined,/max-width:none!important/);
 assert.ok(refined.includes("wt-message-outgoing") &&
   refined.includes("justify-content:flex-end"),
@@ -189,7 +217,8 @@ assert.match(app,/const transferTimer=setInterval\(\(\)=>\{/);
 assert.match(app,/clearInterval\(transferTimer\)/);
 assert.match(app,/recoverPending\(\),refreshTransfers\(\)/);
 
-assert.match(app,/record\.delivery_status\)\)return "待发送"/);
+assert.match(app,/record\\.delivery_status==="queued"\\)return "等待发送"/);
+assert.match(app,/record\\.delivery_status==="queued_local"\\)return "正在提交"/);
 assert.match(app,/record\.delivery_status\)\)return "正在发送"/);
 assert.match(app,/title="连接与消息队列"/);
 assert.match(app,/networkDiagnostics\?\.queued/);
