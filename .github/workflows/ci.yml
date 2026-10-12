@@ -49,6 +49,7 @@ jobs:
       - run: node tests/translation_quick_scroll.mjs
       - run: node tests/photo_sanitize.mjs
       - run: node tests/branch_cleanup_safe.mjs
+      - run: node tests/review_invariants.mjs
       - run: node tests/identity_cleanup.mjs
       - run: node tests/tox_download.mjs
       - run: node tests/chat_refinement.mjs
