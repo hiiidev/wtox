@@ -48,7 +48,8 @@ assert.match(app,/if\(bootstrapError\)return/);
 assert.match(app,/window\.history\.pushState/);
 assert.match(app,/addEventListener\("popstate"/);
 assert.match(app,/onTouchStart=\{onChatTouchStart\}/);
-assert.match(app,/className="wt-mobile-back-badge"/);\nassert.match(app,/icon=\{<ArrowLeftOutlined\/>\} onClick=\{returnFromMobileChat\}/);
+assert.match(app,/className="wt-mobile-back-badge"/);
+assert.match(app,/icon=\{<ArrowLeftOutlined\/>\} onClick=\{returnFromMobileChat\}/);
 
 assert.match(app,/新备份的加密密码/);
 assert.match(app,/并非验证创建身份时的旧密码/);
