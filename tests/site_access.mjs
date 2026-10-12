@@ -43,7 +43,8 @@ assert.ok(server.includes('request.cookies.get(access.COOKIE_NAME)'));
 assert.ok(websocket.includes("access.gate_authorized(ws.cookies.get(access.COOKIE_NAME))"),
   "WebSocket bypasses HTTP middleware, must independently check site access");
 assert.ok(gate.includes("REMEMBER_SECONDS = 10 * 365 * 86400") &&
-  gate.includes("issue_access_cookie(password)"),
+  gate.includes("def issue_access_cookie(password: str)") &&
+  gate.includes('payload = f"v2.{nonce}"'),
   "Persistent signed tokens must not use a 30-day expiry");
 assert.ok(gate.includes('samesite')===false,
   "Cookie attributes are set only by the API handler");
