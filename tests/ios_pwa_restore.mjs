@@ -23,14 +23,22 @@ check('const [socketState,setSocketState]=useState("connecting")');
 check('setSocketState("connected")');
 check('setSocketState(realtimeConnectionState(failures))');
 check('realtimeRetryDelay(failures)');
-check('socketState==="polling"?"轮询中":"正在重连"');
+check('polling?"轮询中":"正在重连"');
 check('setTimeout(()=>setSlowReconnect(true),10000)');
-check('socketState!=="connected"&&<span className={"wt-connection-indicator"');
-check('socketState==="polling"?"轮询中":"正在重连"');
+check('if(socketState==="connected")return null;');
+check('polling?"轮询中":"正在重连"');
 check('<LoadingOutlined spin aria-hidden="true"/>');
-const markup=app.indexOf('className="wt-connection-indicator"');
-assert.ok(markup > app.indexOf("wechat-desktop-heading"));
-assert.ok(markup < app.indexOf('className="wt-list-actions"'));
+const mobile=app.indexOf('className="wechat-mobile-heading"');
+const desktop=app.indexOf('className="wechat-desktop-heading"');
+const actions=app.indexOf('className="wt-list-actions"');
+assert.ok(mobile>0 && desktop>mobile && actions>desktop);
+const call='<RealtimeConnectionIndicator socketState={socketState}';
+const first=app.indexOf(call,mobile);
+const second=app.indexOf(call,desktop);
+assert.ok(first>mobile && first<desktop,
+  "Mobile spinner belongs immediately after mobile heading label");
+assert.ok(second>desktop && second<actions,
+  "Desktop spinner belongs inside heading, not near right-side actions");
 assert.match(css,/\.wt-connection-indicator\{/);
 assert.match(css,/\.wt-reconnect-label\{/);
 assert.ok(!app.includes('message.open({content:"连接成功"'),
