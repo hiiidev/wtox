@@ -252,3 +252,26 @@ To rerun the full isolated gate locally after compiling original dependencies:
 npm run test:browser`. The GitHub workflow builds and tests in separate
 jobs, with the compiled WASM artifact passed between them. No Cloudflare
 secrets or deployment steps are needed.
+
+## Fourteenth increment: genuine Chromium Worker / WebSocket / Node TCP Relay fixture
+
+`browser/relay-browser-research.worker.mjs` runs the persistent original
+Toxcore with injected `Network_Funcs` in a real **Chromium Dedicated
+Worker**. After Toxcore itself requests TCP and creates a 128-byte native
+hello, the browser attaches an authenticated localhost WebSocket tunnel.
+A strictly local test-only Node TCP fixture returns 96 bytes of synthetic
+encrypted Relay ciphertext through the **actual** WS → Node TCP → WS path,
+where original Toxcore reads/verifies it on subsequent `tox_iterate` calls.
+
+The test covers matching Relay key, a fragmented valid reply, a wrong
+private key and a tampered MAC, in separate Workers. The browser-side
+WASM creates the synthetic reply and sends **ciphertext only** to the
+loopback fixture before transmitting the client hello. No long-term
+private key crosses to Node; neither does any real user identity.
+The test-only server is bound to `127.0.0.1`, validates exact origin,
+fixed route and fixture token, and **never dials arbitrary destinations**.
+
+**Limitation:** this fixture does not independently possess a real Relay
+private key and cannot prove a live remote Relay accepted a connection.
+It is research instrumentation, NOT a production gateway or general
+proxy. The normal identity Worker and production site do not import it.

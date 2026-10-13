@@ -176,3 +176,18 @@ Tests cover valid reply, wrong secret, altered MAC and cancelled async
 readiness. This validates asynchronous scheduling and native socket
 ownership; it remains a synthetic offline Relay, not production WSS
 or a real remote TCP relay.
+
+## Dedicated Chromium Worker + real local WS/TCP handshake gate
+
+A new isolated browser test runs original c-toxcore WASM with persistent
+injected `Network_Funcs`. Its native Relay client sends the actual client
+handshake into a real WebSocket which forwards through a localhost Node
+TCP socket. That test-only TCP endpoint returns locally prepared synthetic
+authenticated ciphertext via the reverse WebSocket path. Original Toxcore
+then processes it on a later iteration. Negative controls use wrong key
+and altered MAC; a split valid frame also exercises asynchronous delivery.
+
+The synthetic response is constructed inside browser WASM and uploaded as
+**ciphertext-only** to a same-origin, loopback test fixture. This proves
+transport scheduling and native validation but expressly does **not**
+constitute a remotely independently authenticated Tox Relay handshake.
