@@ -31,7 +31,7 @@ PREFIX="$WORK/prefix"
 if [[ ! -f "$PREFIX/lib/libsodium.a" ]]; then
   (
     cd "$WORK/libsodium"
-    emconfigure ./configure --disable-shared --enable-static --disable-asm \
+    emconfigure ./configure --host=wasm32-unknown-emscripten --disable-shared --enable-static --disable-asm \
       --without-pthreads --disable-ssp --disable-pie --prefix="$PREFIX"
     emmake make -j2
     emmake make install
