@@ -59,3 +59,12 @@ cc -std=c11 -O2 -D_GNU_SOURCE \
   -o "$DIST/tox-udp-bootstrap"
 test -s "$DIST/tox-udp-bootstrap"
 echo "Pinned original loopback-only UDP DHT bootstrap compiled"
+
+# Native original receiver + independent original DHT bootstrap:
+# test-only first-contact Onion callback through loopback OS UDP.
+cc -std=c11 -O2 -D_GNU_SOURCE \
+  -I "$UPSTREAM" "$ROOT/native/tox_udp_friend_receiver.c" \
+  "$archive" $(pkg-config --cflags --libs libsodium) -lm -pthread \
+  -o "$DIST/tox-udp-friend-receiver"
+test -s "$DIST/tox-udp-friend-receiver"
+echo "Pinned original local first-contact receiver built"

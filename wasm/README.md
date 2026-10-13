@@ -676,3 +676,31 @@ not a generic UDP proxy or a deployed network service.
 acceptance, restart/reconnect, or real qTox/aTox interoperation. The next
 gate must demonstrate these explicitly without artificial peer DHT key
 injection. `main`, Cloudflare and production VPS are never touched.
+
+## Stage 25e: real browser-originated Onion first-contact integration
+
+This experimental CI gate pairs an original pinned **Chromium WASM Toxcore**
+with TWO independently running Linux-native original Toxcore instances:
+a loopback-only DHT bootstrap and a loopback-only potential friend. The
+native receiver bootstraps normally and publishes a real Tox ID. No test
+injects either peer's DHT key, routes friends with `set_dht_temp_pk`, or
+synthesizes Tox request, online or text callbacks.
+
+After original browser `tox_bootstrap` authenticates the DHT neighbor, the
+browser calls original `tox_friend_add` with the Linux receiver's 38-byte
+Tox ID and real request text. The Linux process must emit
+`REQUEST_RECEIVED <browser identity public key>` from its ORIGINAL
+`tox_callback_friend_request` event; it then accepts with original
+`tox_friend_add_norequest`. Browser and Linux both need original friend
+online and text callbacks, with distinct predefined messages both ways.
+
+The Node bridge is an authenticated WebSocket transport to OS UDP. It
+permits ONLY the explicitly launched Linux bootstrap port, receiver port
+and the browser's one ephemeral localhost mapping port, and no remote
+IP addresses. It has no Tox cryptographic keys and cannot generate,
+modify or decrypt Tox protocol packets. The test must fail rather than
+fake an online friend or inject DHT identity.
+
+This test is a LOCAL isolated research feature, not public Tox network
+availability and not qTox/aTox UI interoperability. `main`, production
+VPS, and Cloudflare stay untouched.

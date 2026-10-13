@@ -18,6 +18,30 @@ static unsigned vudp_tx_head, vudp_tx_count, vudp_rx_head, vudp_rx_count;
 static bool vudp_socket_open, vudp_socket_bound;
 static uint16_t vudp_local_port;
 static uint16_t vudp_bootstrap_port;
+static bool vudp_friend_requested=false;
+static uint32_t vudp_friend_online_events=0;
+static uint32_t vudp_friend_inbound=0;
+static uint8_t vudp_friend_message[128]={0};
+static uint16_t vudp_friend_message_length=0;
+static void vudp_friend_status_cb(Tox *tox, Tox_Friend_Number id,
+                                   Tox_Connection status, void *unused)
+{
+    (void)unused;
+    if(tox==vudp_tox && id==0 && status!=TOX_CONNECTION_NONE)
+        ++vudp_friend_online_events;
+}
+static void vudp_friend_text_cb(Tox *tox, Tox_Friend_Number id,
+                                 Tox_Message_Type type, const uint8_t *text,
+                                 size_t len, void *unused)
+{
+    (void)unused;
+    if(tox!=vudp_tox || id!=0 || type!=TOX_MESSAGE_TYPE_NORMAL ||
+       !text || !len || len>sizeof(vudp_friend_message) ||
+       vudp_friend_message_length!=0)return;
+    memcpy(vudp_friend_message,text,len);
+    vudp_friend_message_length=(uint16_t)len;
+    ++vudp_friend_inbound;
+}
 static Tox *vudp_tox;
 static Network vudp_network;
 static Tox_System vudp_system;
@@ -154,6 +178,10 @@ void wtox_vudp_probe_stop(void)
     vudp_socket_open=vudp_socket_bound=false;
     vudp_local_port=0;
     vudp_bootstrap_port=0;
+    vudp_friend_requested=false;
+    vudp_friend_online_events=vudp_friend_inbound=0;
+    sodium_memzero(vudp_friend_message,sizeof(vudp_friend_message));
+    vudp_friend_message_length=0;
     vudp_rejected=vudp_backpressure=vudp_sent=vudp_received=0;
 }
 EMSCRIPTEN_KEEPALIVE
@@ -334,4 +362,65 @@ int wtox_vudp_native_bootstrap_verified(const uint8_t *key, size_t len)
             return 1;
     }
     return 0;
+}
+
+/* Genuine first-contact Tox ID API on UDP-enabled browser Toxcore.
+ * This calls ONLY original tox_friend_add, no artificial peer DHT key. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_address(uint8_t *out,size_t cap)
+{
+    if(!vudp_tox || !out || cap!=TOX_ADDRESS_SIZE)return -1;
+    tox_self_get_address(vudp_tox,out);
+    return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_friend_request(const uint8_t *address,size_t alen,
+                                     const uint8_t *message,size_t mlen)
+{
+    if(!vudp_tox || vudp_friend_requested || !address ||
+       alen!=TOX_ADDRESS_SIZE || !message || !mlen || mlen>128)
+        return -1;
+    Tox_Err_Friend_Add error=TOX_ERR_FRIEND_ADD_OK;
+    Tox_Friend_Number index=tox_friend_add(vudp_tox,address,message,mlen,&error);
+    if(error!=TOX_ERR_FRIEND_ADD_OK || index!=0)return -10-(int)error;
+    vudp_friend_requested=true;
+    tox_callback_friend_connection_status(vudp_tox,vudp_friend_status_cb);
+    tox_callback_friend_message(vudp_tox,vudp_friend_text_cb);
+    return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_friend_state(uint32_t out[4])
+{
+    if(!vudp_tox || !out)return -1;
+    out[0]=vudp_friend_requested?1:0;
+    Tox_Err_Friend_Query error=TOX_ERR_FRIEND_QUERY_OK;
+    Tox_Connection connection=TOX_CONNECTION_NONE;
+    if(vudp_friend_requested)
+        connection=tox_friend_get_connection_status(vudp_tox,0,&error);
+    if(error!=TOX_ERR_FRIEND_QUERY_OK)return -2;
+    out[1]=(uint32_t)connection;
+    out[2]=vudp_friend_online_events;
+    out[3]=vudp_friend_inbound;
+    return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_friend_send(const uint8_t *message,size_t length)
+{
+    if(!vudp_tox || !vudp_friend_requested || !message ||
+       !length || length>128)return -1;
+    Tox_Err_Friend_Send_Message err=TOX_ERR_FRIEND_SEND_MESSAGE_OK;
+    tox_friend_send_message(vudp_tox,0,TOX_MESSAGE_TYPE_NORMAL,
+                            message,length,&err);
+    return err==TOX_ERR_FRIEND_SEND_MESSAGE_OK?0:-10-(int)err;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_friend_take(uint8_t *out,size_t capacity)
+{
+    if(!vudp_tox || !out || capacity<sizeof(vudp_friend_message))return -1;
+    int n=vudp_friend_message_length;
+    if(!n)return 0;
+    memcpy(out,vudp_friend_message,(size_t)n);
+    sodium_memzero(vudp_friend_message,sizeof(vudp_friend_message));
+    vudp_friend_message_length=0;
+    return n;
 }
