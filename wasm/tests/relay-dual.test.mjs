@@ -2,7 +2,8 @@
  * Test-only two-client c-toxcore TCP Relay. Both actual browser WASM clients
  * authenticate to ONE Node-owned ephemeral Relay. Node forwards opaque route
  * payloads only between distinct client sockets, never to the sender.
- * No arbitrary TCP proxy, Cloudflare, public network or real Tox messaging.
+ * No arbitrary TCP proxy, Cloudflare, or public network. Friend messaging
+ * is original Toxcore only in a dedicated loopback fixture.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -64,6 +65,14 @@ async function checkIndependentClients(mode) {
     let pathname;
     try { pathname = new URL(req.url, "http://127.0.0.1").pathname; }
     catch { res.writeHead(400); res.end(); return; }
+    if (req.method === "GET" && pathname === "/__wtox_dual_round_status" &&
+        mode === "restart") {
+      res.writeHead(200, {"Content-Type":"application/json",
+                          "Cache-Control":"no-store"});
+      res.end(JSON.stringify({roles:usedRoles.size,sessions:sessions.size,
+        sockets:sockets.size,websockets:wss.clients.size}));
+      return;
+    }
     if (req.method === "GET" && pathname === "/__wtox_dual_public") {
       res.writeHead(200, {"Content-Type":"text/plain; charset=utf-8",
                           "Cache-Control":"no-store", "X-Content-Type-Options":"nosniff"});
@@ -240,6 +249,7 @@ async function checkIndependentClients(mode) {
     usedRoles.add(role);
     wss.handleUpgrade(req,socket,head,ws => {
       let authed = false, tcp = null;
+      ws.on("close",()=>usedRoles.delete(role));
       ws.on("close", () => tcp?.destroy());
       ws.on("error", () => tcp?.destroy());
       ws.on("message", (input, binary) => {
@@ -296,9 +306,13 @@ async function checkIndependentClients(mode) {
       state:el.dataset.state, message:el.textContent
     }));
     assert.equal(state.state,"passed",state.message+"; "+pageErrors.join("/"));
-    assert.equal(metrics.authenticated,2,"two distinct original Tox TCP hellos");
-    assert.equal(metrics.routeRequests,2,"two reciprocal native routing requests");
-    assert.equal(metrics.notifications,2,"both native routes connected");
+    const rounds = mode === "restart" ? 2 : 1;
+    assert.equal(metrics.authenticated,2*rounds,
+                 "two original authenticated Tox TCP handshakes in each round");
+    assert.equal(metrics.routeRequests,2*rounds,
+                 "two native reciprocal routing requests per round");
+    assert.equal(metrics.notifications,2*rounds,
+                 "both native routes connected in each round");
     if (mode === "raw") {
       assert.equal(metrics.forwardAtoB,1,"A payload forwarded to B, not echoed");
       assert.equal(metrics.forwardBtoA,1,"B payload forwarded to A, not echoed");
@@ -317,7 +331,7 @@ async function checkIndependentClients(mode) {
     relay.secretKey.fill(0);
   }
 }
-for (const mode of ["raw", "crypto", "friend"]) {
+for (const mode of ["raw", "crypto", "friend", "restart"]) {
   test("two original Chromium Toxcore clients: " + mode +
        " reciprocal Relay communication", {timeout:105000}, async () =>
        checkIndependentClients(mode));

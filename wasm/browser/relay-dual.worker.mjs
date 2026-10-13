@@ -14,6 +14,12 @@ const FRIEND_TEXT = {
   a: "From-A: original Tox friend message",
   b: "From-B: original Tox friend message"
 };
+const RESTORED_TEXT = {
+  a: "From-A: after encrypted .tox restore",
+  b: "From-B: after encrypted .tox restore"
+};
+// Public single-use localhost test credential, NEVER a real user password.
+const TEST_PASSWORD = new TextEncoder().encode("wtox-test-only-savedata-password-22");
 const hex = data => Array.from(data, value => value.toString(16).padStart(2, "0")).join("");
 function fromHex(value) {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) {
@@ -23,7 +29,8 @@ function fromHex(value) {
     parseInt(value.slice(i * 2, i * 2 + 2), 16));
 }
 let h, role, timer, phase = "new", started = false, terminated = false;
-let cryptoMode = false, friendMode = false;
+let cryptoMode = false, friendMode = false, restartMode = false;
+let restored = false;
 function announce(type, extra = {}) {
   self.postMessage({ type, role, ...extra });
 }
@@ -41,7 +48,8 @@ function tick() {
     if (phase === "connecting" && h.connectedRelays() === 1) {
       phase = "ready";
       announce("READY", { publicKey: hex(h.dhtPublicKey()),
-        cryptoPublicKey: (cryptoMode || friendMode) ? hex(h.netCryptoPublicKey()) : null });
+        cryptoPublicKey: (cryptoMode || friendMode) ? hex(h.netCryptoPublicKey()) : null,
+        restored });
     }
     if (phase === "routing") {
       if (friendMode) {
@@ -88,16 +96,37 @@ self.addEventListener("message", async ({data}) => {
       }
       started = true;
       role = data.role;
-      if (!["raw", "crypto", "friend"].includes(data.mode)) throw Error("invalid_dual_mode");
+      if (!["raw", "crypto", "friend", "restart"].includes(data.mode))
+        throw Error("invalid_dual_mode");
       cryptoMode = data.mode === "crypto";
-      friendMode = data.mode === "friend";
+      restartMode = data.mode === "restart";
+      friendMode = data.mode === "friend" || restartMode;
+      restored = restartMode && data.restored === true;
+      if (!restartMode && data.restored) throw Error("unexpected_restore_input");
+      if (restored && (!(data.backup instanceof Uint8Array) ||
+          data.backup.length > 1048576+256)) throw Error("invalid_restore_backup");
+      if (restartMode && data.backup && !restored) throw Error("invalid_restore_round");
       const response = await fetch("/__wtox_dual_public", {
         credentials: "omit", cache: "no-store", redirect: "error"
       });
       if (!response.ok) throw Error("dual_relay_key_unavailable");
       const publicKey = fromHex((await response.text()).trim());
       h = new RelayResearchHarness(await createModule());
-      h.startWithRelayPublicKey(publicKey);
+      if (restored) {
+        // Explicitly prove authenticated backup rejects the wrong password.
+        const wrong = new TextEncoder().encode("definitely-not-the-correct-password");
+        let passwordRejected = false;
+        try {
+          h.startWithRelayEncrypted(publicKey, data.backup, wrong);
+        } catch (error) {
+          passwordRejected = String(error?.message).includes("relay_research_restore_failed:-4");
+        } finally {wrong.fill(0);}
+        if (!passwordRejected) throw Error("invalid_password_was_accepted");
+        h.startWithRelayEncrypted(publicKey, data.backup, TEST_PASSWORD);
+        data.backup.fill(0); // no extra ciphertext copy after native restore
+      } else {
+        h.startWithRelayPublicKey(publicKey);
+      }
       await h.attach("ws://" + self.location.host +
                      "/__wtox_dual_relay?role=" + role, TOKEN);
       if (terminated) { h.close(); return; }
@@ -105,9 +134,12 @@ self.addEventListener("message", async ({data}) => {
       timer = setInterval(tick, 15);
       tick();
     } else if (action === "ROUTE" && phase === "ready") {
-      if (friendMode)
-        h.addNativeFriend(fromHex(data?.peerCryptoPublicKey),
-                          fromHex(data?.peerPublicKey));
+      if (friendMode) {
+        const real = fromHex(data?.peerCryptoPublicKey),
+              dht = fromHex(data?.peerPublicKey);
+        if (restored) h.resumeSavedFriend(real, dht);
+        else h.addNativeFriend(real, dht);
+      }
       else if (cryptoMode)
         h.beginNetCrypto(fromHex(data?.peerCryptoPublicKey),
                          fromHex(data?.peerPublicKey));
@@ -115,11 +147,17 @@ self.addEventListener("message", async ({data}) => {
         h.registerSyntheticRoute(fromHex(data?.peerPublicKey));
       phase = "routing";
     } else if (action === "SEND" && phase === "routed") {
-      if (friendMode) h.sendNativeFriendText(new TextEncoder().encode(FRIEND_TEXT[role]));
+      if (friendMode) h.sendNativeFriendText(new TextEncoder().encode(
+        restored ? RESTORED_TEXT[role] : FRIEND_TEXT[role]));
       else if (cryptoMode) h.sendNetCryptoPayload(PAYLOAD[role]);
       else h.sendRoutePayload(PAYLOAD[role]);
       phase = "sent";
       announce("SENT");
+    } else if (action === "SAVE" && restartMode && !restored && phase === "received") {
+      const encrypted = h.exportEncryptedSavedata(TEST_PASSWORD);
+      const bytes = Array.from(encrypted);
+      encrypted.fill(0);
+      announce("SAVED", {backup:bytes});
     } else if (action === "STOP" && started) {
       terminated = true;
       clearInterval(timer);

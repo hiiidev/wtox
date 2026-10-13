@@ -19,7 +19,9 @@ const required = ["_malloc", "_free", "_wtox_research_start",
   "_wtox_research_begin_crypto", "_wtox_research_crypto_status_get",
   "_wtox_research_crypto_send", "_wtox_research_crypto_recv",
   "_wtox_research_add_native_friend", "_wtox_research_native_friend_stats",
-  "_wtox_research_native_send_text", "_wtox_research_native_take_message"];
+  "_wtox_research_native_send_text", "_wtox_research_native_take_message",
+  "_wtox_research_savedata_encrypted_size", "_wtox_research_export_encrypted",
+  "_wtox_research_start_with_relay_encrypted", "_wtox_research_resume_saved_friend"];
 const statsNames = ["sockets", "connects", "sends", "recvs", "closes",
   "txPending", "rxBuffered", "socketState", "toxConnection"];
 
@@ -68,6 +70,82 @@ export class RelayResearchHarness {
       m.HEAPU8.fill(0, ptr, ptr + 32);
       m._free(ptr);
     }
+  }
+  /** Recreate a NEW original Tox instance from standard encrypted .tox.
+   * Decryption and raw savedata stay inside WASM native memory. */
+  startWithRelayEncrypted(relayKey, ciphertext, password) {
+    if (this.#started) throw Error("relay_research_already_started");
+    if (!(relayKey instanceof Uint8Array) || relayKey.length !== 32 ||
+        !(ciphertext instanceof Uint8Array) || ciphertext.length < 100 ||
+        ciphertext.length > 1048576 + 256 ||
+        !(password instanceof Uint8Array) ||
+        password.length < 8 || password.length > 1024)
+      throw TypeError("invalid_research_encrypted_restore_input");
+    const m=this.#module, keyPtr=m._malloc(32),
+          backupPtr=m._malloc(ciphertext.length), pwdPtr=m._malloc(password.length);
+    if (!keyPtr || !backupPtr || !pwdPtr) {
+      if(keyPtr)m._free(keyPtr); if(backupPtr)m._free(backupPtr);
+      if(pwdPtr)m._free(pwdPtr);
+      throw Error("relay_research_out_of_memory");
+    }
+    try {
+      m.HEAPU8.set(relayKey,keyPtr);
+      m.HEAPU8.set(ciphertext,backupPtr);
+      m.HEAPU8.set(password,pwdPtr);
+      const code=m._wtox_research_start_with_relay_encrypted(
+        keyPtr,32,backupPtr,ciphertext.length,pwdPtr,password.length);
+      if (code !== 0) throw Error("relay_research_restore_failed:"+code);
+      this.#started=true;
+      if (this.state !== VirtualTcpState.CONNECTING) {
+        this.close();
+        throw Error("relay_research_restore_no_native_connect");
+      }
+    } finally {
+      m.HEAPU8.fill(0,keyPtr,keyPtr+32);m._free(keyPtr);
+      m.HEAPU8.fill(0,backupPtr,backupPtr+ciphertext.length);m._free(backupPtr);
+      m.HEAPU8.fill(0,pwdPtr,pwdPtr+password.length);m._free(pwdPtr);
+    }
+  }
+  /** Standard ToxEncryptSave ciphertext only. Caller must store safely. */
+  exportEncryptedSavedata(password) {
+    if (!this.#started) throw Error("relay_research_not_started");
+    if (!(password instanceof Uint8Array)||password.length < 8 ||
+        password.length > 1024) throw TypeError("invalid_research_backup_password");
+    const m=this.#module, n=m._wtox_research_savedata_encrypted_size();
+    if (!Number.isSafeInteger(n) || n < 100 || n > 1048576 + 256)
+      throw Error("relay_research_backup_size_invalid");
+    const pwdPtr=m._malloc(password.length), outPtr=m._malloc(n),
+          writtenPtr=m._malloc(4);
+    if (!pwdPtr || !outPtr || !writtenPtr) {
+      if(pwdPtr)m._free(pwdPtr);if(outPtr)m._free(outPtr);
+      if(writtenPtr)m._free(writtenPtr);
+      throw Error("relay_research_out_of_memory");
+    }
+    try {
+      m.HEAPU8.set(password,pwdPtr);
+      const code=m._wtox_research_export_encrypted(
+        pwdPtr,password.length,outPtr,n,writtenPtr);
+      const written=new DataView(m.HEAPU8.buffer).getUint32(writtenPtr,true);
+      if(code!==0 || written!==n)throw Error("relay_research_backup_failed:"+code);
+      return m.HEAPU8.slice(outPtr,outPtr+n);
+    } finally {
+      m.HEAPU8.fill(0,pwdPtr,pwdPtr+password.length);m._free(pwdPtr);
+      m.HEAPU8.fill(0,outPtr,outPtr+n);m._free(outPtr);
+      m.HEAPU8.fill(0,writtenPtr,writtenPtr+4);m._free(writtenPtr);
+    }
+  }
+  /** Only used after restore: reject different peer or missing saved friend. */
+  resumeSavedFriend(realPk,dhtPk) {
+    if (!this.#started)throw Error("relay_research_not_started");
+    if (![realPk,dhtPk].every(x=>x instanceof Uint8Array&&x.length===32))
+      throw TypeError("invalid_saved_friend_keys");
+    const m=this.#module,p=m._malloc(64);
+    if(!p)throw Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(realPk,p);m.HEAPU8.set(dhtPk,p+32);
+      const code=m._wtox_research_resume_saved_friend(p,p+32,32);
+      if(code!==0)throw Error("relay_research_resume_saved_friend_failed:"+code);
+    } finally {m.HEAPU8.fill(0,p,p+64);m._free(p);}
   }
   async attach(url, token, options = {}) {
     if (!this.#started) throw new Error("relay_research_not_started");

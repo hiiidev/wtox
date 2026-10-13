@@ -135,7 +135,8 @@ void wtox_research_stop(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-static int wtox_research_start_internal(const uint8_t *external_key) {
+static int wtox_research_start_internal(const uint8_t *external_key,
+                                         const uint8_t *saved, size_t saved_len) {
     if (wtox_live || wtox_research_tox || sodium_init() < 0) return -1;
     wtox_research_stop();
     wtox_research_network.funcs = &wtox_probe_funcs;
@@ -154,6 +155,15 @@ static int wtox_research_start_internal(const uint8_t *external_key) {
     tox_options_set_local_discovery_enabled(opts, false);
     tox_options_set_ipv6_enabled(opts, false);
     tox_options_set_experimental_disable_dns(opts, true);
+    if (saved != NULL) {
+        if (saved_len == 0 || saved_len > MAX_RAW_SAVEDATA ||
+            !tox_options_set_savedata_data(opts, saved, saved_len)) {
+            tox_options_free(opts);
+            wtox_research_stop();
+            return -5;
+        }
+        tox_options_set_savedata_type(opts, TOX_SAVEDATA_TYPE_TOX_SAVE);
+    }
     Tox_Err_New new_err = TOX_ERR_NEW_OK;
     Tox_Err_New_Testing testing_err = TOX_ERR_NEW_TESTING_OK;
     wtox_research_tox = tox_new_testing(opts, &new_err, &testing, &testing_err);
@@ -188,13 +198,13 @@ static int wtox_research_start_internal(const uint8_t *external_key) {
 
 EMSCRIPTEN_KEEPALIVE
 int wtox_research_start(void) {
-    return wtox_research_start_internal(NULL);
+    return wtox_research_start_internal(NULL, NULL, 0);
 }
 /* Strict public-key-only interface. Key bytes never include private material. */
 EMSCRIPTEN_KEEPALIVE
 int wtox_research_start_with_relay_public_key(const uint8_t *key, size_t len) {
     if (!key || len != CRYPTO_PUBLIC_KEY_SIZE) return -1;
-    return wtox_research_start_internal(key);
+    return wtox_research_start_internal(key, NULL, 0);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -515,4 +525,103 @@ int wtox_research_native_take_message(uint8_t *out, size_t capacity) {
                    sizeof(wtox_research_friend_inbox));
     wtox_research_friend_inbox_len = 0;
     return len;
+}
+
+/* Encrypted standard ToxEncryptSave research backup. Never return raw
+ * original c-toxcore savedata or long-term secret keys to JavaScript. */
+EMSCRIPTEN_KEEPALIVE
+size_t wtox_research_savedata_encrypted_size(void) {
+    if (!wtox_research_tox || !wtox_research_external_relay) return 0;
+    const size_t raw = tox_get_savedata_size(wtox_research_tox);
+    return raw > 0 && raw <= MAX_RAW_SAVEDATA
+      ? raw + TOX_PASS_ENCRYPTION_EXTRA_LENGTH : 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_export_encrypted(const uint8_t *password, size_t password_len,
+                                   uint8_t *out, size_t capacity,
+                                   size_t *written) {
+    if (!wtox_research_tox || !wtox_research_external_relay ||
+        !valid_password(password, password_len) || !out || !written)
+        return -1;
+    *written = 0;
+    const size_t total = wtox_research_savedata_encrypted_size();
+    if (!total || capacity < total) return -2;
+    const size_t raw_len = total - TOX_PASS_ENCRYPTION_EXTRA_LENGTH;
+    uint8_t *raw = (uint8_t *)malloc(raw_len);
+    if (!raw) return -3;
+    tox_get_savedata(wtox_research_tox, raw);
+    Tox_Err_Encryption error = TOX_ERR_ENCRYPTION_OK;
+    const bool ok = tox_pass_encrypt(raw, raw_len, password, password_len,
+                                      out, &error);
+    sodium_memzero(raw, raw_len);
+    free(raw);
+    if (!ok || error != TOX_ERR_ENCRYPTION_OK) {
+        sodium_memzero(out, capacity);
+        return -4;
+    }
+    *written = total;
+    return 0;
+}
+
+/* Restore a new original tox_new_testing from authenticated standard
+ * encrypted .tox, injecting ONLY our synthetic test Network_Funcs.
+ * A wrong password/corrupted backup must not create a live Tox instance. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_start_with_relay_encrypted(
+    const uint8_t *relay_key, size_t relay_key_len,
+    const uint8_t *backup, size_t backup_len,
+    const uint8_t *password, size_t password_len) {
+    if (wtox_research_tox || wtox_live || !relay_key ||
+        relay_key_len != CRYPTO_PUBLIC_KEY_SIZE || !backup ||
+        !valid_password(password, password_len) ||
+        backup_len <= TOX_PASS_ENCRYPTION_EXTRA_LENGTH ||
+        backup_len > MAX_RAW_SAVEDATA + TOX_PASS_ENCRYPTION_EXTRA_LENGTH ||
+        sodium_init() < 0) return -1;
+    if (!tox_is_data_encrypted(backup)) return -2;
+    const size_t raw_len = backup_len - TOX_PASS_ENCRYPTION_EXTRA_LENGTH;
+    uint8_t *raw = (uint8_t *)malloc(raw_len);
+    if (!raw) return -3;
+    Tox_Err_Decryption err = TOX_ERR_DECRYPTION_OK;
+    const bool ok = tox_pass_decrypt(backup, backup_len, password,
+                                     password_len, raw, &err);
+    int ret = -4;
+    if (ok && err == TOX_ERR_DECRYPTION_OK)
+        ret = wtox_research_start_internal(relay_key, raw, raw_len);
+    sodium_memzero(raw, raw_len);
+    free(raw);
+    return ret;
+}
+
+/* Reconnect the already-persisted friend WITHOUT another add_norequest:
+ * assert one real friend with the exact saved peer identity public key. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_resume_saved_friend(const uint8_t *real_pk,
+                                      const uint8_t *dht_pk, size_t len) {
+    if (!wtox_research_tox || !wtox_research_external_relay ||
+        wtox_research_friendcon_id >= 0 || wtox_research_crypto_id >= 0 ||
+        wtox_research_route_id >= 0 || !real_pk || !dht_pk ||
+        len != CRYPTO_PUBLIC_KEY_SIZE || wtox_vtcp_state() != WTOX_VTCP_OPEN)
+        return -1;
+    if (tox_self_get_friend_list_size(wtox_research_tox) != 1) return -2;
+    uint32_t friend_no = UINT32_MAX;
+    tox_self_get_friend_list(wtox_research_tox, &friend_no);
+    if (friend_no != 0) return -3;
+    uint8_t restored_pk[TOX_PUBLIC_KEY_SIZE] = {0};
+    Tox_Err_Friend_Get_Public_Key err = TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK;
+    const bool good = tox_friend_get_public_key(wtox_research_tox, 0,
+                                                restored_pk, &err);
+    const bool match = good && err == TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK &&
+                       sodium_memcmp(restored_pk, real_pk, len) == 0;
+    sodium_memzero(restored_pk, sizeof(restored_pk));
+    if (!match) return -4;
+    const int friendcon_id =
+        getfriend_conn_id_pk(wtox_research_tox->m->fr_c, real_pk);
+    if (friendcon_id != 0) return -5;
+    wtox_research_friendcon_id = friendcon_id;
+    tox_callback_friend_connection_status(wtox_research_tox,
+                                           wtox_research_on_friend_status);
+    tox_callback_friend_message(wtox_research_tox,
+                                 wtox_research_on_friend_message);
+    set_dht_temp_pk(wtox_research_tox->m->fr_c, friendcon_id, dht_pk, NULL);
+    return 0;
 }

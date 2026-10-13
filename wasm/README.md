@@ -447,3 +447,36 @@ injects public DHT discovery information, allows only two loopback clients,
 and uses a Node-owned, test-only TCP Relay. No browser production transport
 or Cloudflare worker is added; no qTox/aTox interoperability, remote Relay,
 savedata reconnect or arbitrary contact discovery is claimed.
+
+## Twenty-second increment: encrypted identity restart and friend reconnection
+
+The fourth `relay-dual` test mode (`restart`) exercises a genuine
+**destroy → restore → reconnect** lifecycle for **two independent original
+c-toxcore instances** inside separate Chromium Workers. Round one adds one
+real native friend per identity, establishes original Messenger friend-online
+callbacks and exchanges authenticated native friend text.
+
+Each instance exports only a **standard ToxEncryptSave encrypted .tox**
+savedata blob. The temporary plaintext savedata and the password in native
+memory are wiped after use. The Worker is terminated, and the localhost Relay
+test waits for *all* original WebSocket/TCP sockets and sessions to drain.
+Round two creates **new Workers and new WASM modules**, rejects an incorrect
+backup password, decrypts each standard encrypted backup **inside WASM**,
+and reconstructs an original `tox_new_testing` instance with the restored
+savedata. The test verifies unchanged native real public identity keys,
+exactly one persisted native friend with the matching public key, and does
+not call `tox_friend_add_norequest` on the restored instance.
+
+The fixture supplies only the fresh peer **public** DHT key to normal
+`Friend_Connections` discovery, requires a new encrypted Relay handshake,
+both original Messenger friend-online callbacks, and a *different* second
+round of bidirectional `tox_friend_send_message` text delivered through
+`tox_callback_friend_message`. Node must observe two new original TCP
+handshakes and reciprocal routes each round and no rejected protocol packets.
+
+This is a strictly isolated two-browser-native-client test. A fixed
+test-only password and a Node-owned localhost Relay are used only for CI;
+no production identity secrets, public Relay access, remote qTox/aTox
+interop, Cloudflare Worker deployment or VPS operations are involved.
+Restoring friends in this controlled scenario does not prove public
+network peer discovery or cross-client interoperability.
