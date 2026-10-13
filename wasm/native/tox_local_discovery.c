@@ -25,7 +25,7 @@
 #include "toxcore/network.h"
 
 #define MAX_SECONDS 100
-static const Network *os_network = NULL;
+static const Network *host_network = NULL;
 static Tox *alice = NULL, *bob = NULL, *bootstrap_node = NULL;
 static uint32_t received_requests = 0, online_a = 0, online_b = 0;
 static uint32_t recv_a = 0, recv_b = 0;
@@ -49,20 +49,20 @@ static int only_loopback_bind(void *unused, Socket sock, const IP_Port *requeste
     }
     IP_Port address = *requested;
     address.ip.ip.v4 = get_ip4_loopback();
-    return os_network->funcs->bind(os_network->obj, sock, &address);
+    return host_network->funcs->bind(host_network->obj, sock, &address);
 }
 static int only_loopback_sendto(void *unused, Socket sock, const uint8_t *data,
                                 size_t length, const IP_Port *dest)
 {
     (void)unused;
     if (!local_address(dest)) { errno=EACCES; return -1; }
-    return os_network->funcs->sendto(os_network->obj,sock,data,length,dest);
+    return host_network->funcs->sendto(host_network->obj,sock,data,length,dest);
 }
 static int only_loopback_connect(void *unused, Socket sock, const IP_Port *dest)
 {
     (void)unused;
     if (!local_address(dest)) {errno=EACCES;return -1;}
-    return os_network->funcs->connect(os_network->obj,sock,dest);
+    return host_network->funcs->connect(host_network->obj,sock,dest);
 }
 static void on_request(Tox *tox, const uint8_t *sender,
                        const uint8_t *message, size_t length, void *user_data)
@@ -180,8 +180,8 @@ int main(int argc, char **argv)
 
     const Tox_System base=tox_default_system();
     if (!base.ns || !base.ns->funcs || !base.mem || !base.rng) return 3;
-    os_network=base.ns;
-    Network_Funcs limited=*os_network->funcs;
+    host_network=base.ns;
+    Network_Funcs limited=*host_network->funcs;
     limited.bind=only_loopback_bind;
     limited.sendto=only_loopback_sendto;
     limited.connect=only_loopback_connect;
