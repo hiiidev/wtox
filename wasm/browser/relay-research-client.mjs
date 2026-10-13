@@ -21,7 +21,9 @@ const required = ["_malloc", "_free", "_wtox_research_start",
   "_wtox_research_add_native_friend", "_wtox_research_native_friend_stats",
   "_wtox_research_native_send_text", "_wtox_research_native_take_message",
   "_wtox_research_savedata_encrypted_size", "_wtox_research_export_encrypted",
-  "_wtox_research_start_with_relay_encrypted", "_wtox_research_resume_saved_friend"];
+  "_wtox_research_start_with_relay_encrypted", "_wtox_research_resume_saved_friend",
+  "_wtox_research_get_tox_address", "_wtox_research_queue_tox_id_request",
+  "_wtox_research_tox_request_status", "_wtox_research_take_real_friend_request"];
 const statsNames = ["sockets", "connects", "sends", "recvs", "closes",
   "txPending", "rxBuffered", "socketState", "toxConnection"];
 
@@ -234,6 +236,58 @@ export class RelayResearchHarness {
       if(n<0||n>128)throw Error("net_crypto_receive_failed:"+n);
       return n?m.HEAPU8.slice(p,p+n):null;
     } finally {m.HEAPU8.fill(0,p,p+128);m._free(p);}
+  }
+  /** A genuine, public 38-byte Tox ID (public key, nospam and checksum). */
+  toxAddress() {
+    if (!this.#started) throw Error("relay_research_not_started");
+    const m=this.#module,p=m._malloc(38);
+    if (!p) throw Error("relay_research_out_of_memory");
+    try {
+      const result=m._wtox_research_get_tox_address(p,38);
+      if(result!==0)throw Error("research_tox_address_failed:"+result);
+      return m.HEAPU8.slice(p,p+38);
+    } finally {m.HEAPU8.fill(0,p,p+38);m._free(p);}
+  }
+  /** Native tox_friend_add. Successful QUEUEING is not delivery; never
+   * inject a peer DHT key as a shortcut around original Onion discovery. */
+  requestFriendByToxId(address,message) {
+    if (!this.#started)throw Error("relay_research_not_started");
+    if (!(address instanceof Uint8Array)||address.length!==38 ||
+        !(message instanceof Uint8Array)||message.length<1||message.length>128)
+      throw TypeError("invalid_native_tox_friend_request");
+    const m=this.#module,p=m._malloc(38+message.length);
+    if(!p)throw Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(address,p);m.HEAPU8.set(message,p+38);
+      const ret=m._wtox_research_queue_tox_id_request(p,38,p+38,message.length);
+      if(ret!==0)throw Error("native_tox_friend_request_failed:"+ret);
+    } finally {m.HEAPU8.fill(0,p,p+38+message.length);m._free(p);}
+  }
+  nativeToxRequestState() {
+    if(!this.#started)throw Error("relay_research_not_started");
+    const m=this.#module,p=m._malloc(28);
+    if(!p)throw Error("relay_research_out_of_memory");
+    try {
+      const ret=m._wtox_research_tox_request_status(p);
+      if(ret!==0)throw Error("native_tox_request_state_failed:"+ret);
+      const v=new DataView(m.HEAPU8.buffer);
+      const names=["friends","queued","connection","onlineEvents","routeAttached",
+                    "receivedRequests","droppedRequests"];
+      return Object.fromEntries(names.map((name,i)=>[name,v.getUint32(p+4*i,true)]));
+    } finally {m.HEAPU8.fill(0,p,p+28);m._free(p);}
+  }
+  /** Return ONLY original tox_callback_friend_request events, never
+   * simulated packets. Public sender key + original request message. */
+  takeRealFriendRequest() {
+    if(!this.#started)throw Error("relay_research_not_started");
+    const m=this.#module,p=m._malloc(32+128);
+    if(!p)throw Error("relay_research_out_of_memory");
+    try {
+      const n=m._wtox_research_take_real_friend_request(p,p+32,128);
+      if(n<0||n>128)throw Error("native_tox_request_receive_failed:"+n);
+      return n ? {sender:m.HEAPU8.slice(p,p+32),
+                  message:m.HEAPU8.slice(p+32,p+32+n)} : null;
+    } finally {m.HEAPU8.fill(0,p,p+160);m._free(p);}
   }
   /** Original Tox Friend API: accept native peer without network friend request. */
   addNativeFriend(realPk, dhtPk) {

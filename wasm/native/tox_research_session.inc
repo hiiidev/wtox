@@ -40,6 +40,33 @@ static uint32_t wtox_research_friend_dropped = 0;
 static uint8_t wtox_research_friend_inbox[WTOX_RESEARCH_ROUTE_MAX] = {0};
 static uint16_t wtox_research_friend_inbox_len = 0;
 
+/* Genuine Tox friend requests are accepted ONLY by original Onion_Client.
+ * A TCP Relay connection alone cannot deliver a request or discover a peer.
+ * This bounded inbox records original tox_callback_friend_request events;
+ * it is NEVER populated by test-side peer-key injection or fake packets. */
+static uint8_t wtox_research_request_sender[TOX_PUBLIC_KEY_SIZE] = {0};
+static uint8_t wtox_research_request_message[WTOX_RESEARCH_ROUTE_MAX] = {0};
+static uint16_t wtox_research_request_length = 0;
+static uint32_t wtox_research_request_received = 0;
+static uint32_t wtox_research_request_dropped = 0;
+static bool wtox_research_request_pending = false;
+static void wtox_research_on_friend_request(Tox *tox,
+                                             const uint8_t *public_key,
+                                             const uint8_t *message,
+                                             size_t length, void *userdata) {
+    (void)userdata;
+    if (tox != wtox_research_tox || !public_key || !message ||
+        length == 0 || length > WTOX_RESEARCH_ROUTE_MAX ||
+        wtox_research_request_length != 0) {
+        ++wtox_research_request_dropped;
+        return;
+    }
+    memcpy(wtox_research_request_sender, public_key, TOX_PUBLIC_KEY_SIZE);
+    memcpy(wtox_research_request_message, message, length);
+    wtox_research_request_length = (uint16_t)length;
+    ++wtox_research_request_received;
+}
+
 static void wtox_research_on_friend_status(Tox *tox, Tox_Friend_Number number,
                                            Tox_Connection status, void *unused) {
     (void)unused;
@@ -131,6 +158,12 @@ void wtox_research_stop(void) {
     wtox_research_friend_dropped = 0;
     wtox_research_friend_inbox_len = 0;
     sodium_memzero(wtox_research_friend_inbox, sizeof(wtox_research_friend_inbox));
+    sodium_memzero(wtox_research_request_sender, sizeof(wtox_research_request_sender));
+    sodium_memzero(wtox_research_request_message, sizeof(wtox_research_request_message));
+    wtox_research_request_length = 0;
+    wtox_research_request_received = 0;
+    wtox_research_request_dropped = 0;
+    wtox_research_request_pending = false;
     wtox_vtcp_close();
 }
 
@@ -173,6 +206,8 @@ static int wtox_research_start_internal(const uint8_t *external_key,
         wtox_research_stop();
         return -3;
     }
+    tox_callback_friend_request(wtox_research_tox,
+                                wtox_research_on_friend_request);
     uint8_t public_key[CRYPTO_PUBLIC_KEY_SIZE] = {0};
     if (external_key) {
         /* Real fixture's private key is Node-owned and is never imported. */
@@ -211,7 +246,8 @@ EMSCRIPTEN_KEEPALIVE
 int wtox_research_tick(void) {
     if (!wtox_research_tox) return -1;
     tox_iterate(wtox_research_tox, NULL);
-    if (wtox_research_friendcon_id >= 0 && !wtox_research_friend_route_attached) {
+    if (wtox_research_friendcon_id >= 0 && !wtox_research_friend_route_attached &&
+        !wtox_research_request_pending) {
         Friend_Connections *fr_c = wtox_research_tox->m->fr_c;
         const int crypto_id = friend_connection_crypt_connection_id(
             fr_c, wtox_research_friendcon_id);
@@ -624,4 +660,84 @@ int wtox_research_resume_saved_friend(const uint8_t *real_pk,
                                  wtox_research_on_friend_message);
     set_dht_temp_pk(wtox_research_tox->m->fr_c, friendcon_id, dht_pk, NULL);
     return 0;
+}
+
+/* Stage-25 request gate: genuine original public Tox ID (38 bytes, with
+ * nospam and checksum). This API does not expose the secret identity key. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_get_tox_address(uint8_t *out, size_t capacity) {
+    if (!wtox_research_tox || !out || capacity != TOX_ADDRESS_SIZE) return -1;
+    tox_self_get_address(wtox_research_tox, out);
+    return 0;
+}
+
+/* The original tox_friend_add queues a real friend request. NO manual
+ * DHT discovery is injected and NO delivery/online success is implied.
+ * Without bootstrap/Onion nodes, the request must remain pending. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_queue_tox_id_request(const uint8_t *address,
+                                       size_t address_len,
+                                       const uint8_t *message,
+                                       size_t message_len) {
+    if (!wtox_research_tox || !wtox_research_external_relay ||
+        !address || address_len != TOX_ADDRESS_SIZE || !message ||
+        message_len == 0 || message_len > WTOX_RESEARCH_ROUTE_MAX ||
+        wtox_research_friendcon_id >= 0 ||
+        wtox_research_crypto_id >= 0 || wtox_research_route_id >= 0 ||
+        wtox_research_capture_enabled) return -1;
+    Tox_Err_Friend_Add err = TOX_ERR_FRIEND_ADD_OK;
+    Tox_Friend_Number number = tox_friend_add(
+        wtox_research_tox, address, message, message_len, &err);
+    if (err != TOX_ERR_FRIEND_ADD_OK || number != 0)
+        return -10 - (int)err;
+    const int friendcon = getfriend_conn_id_pk(
+        wtox_research_tox->m->fr_c, address);
+    if (friendcon != 0) return -20;
+    wtox_research_friendcon_id = friendcon;
+    wtox_research_request_pending = true;
+    tox_callback_friend_connection_status(wtox_research_tox,
+                                           wtox_research_on_friend_status);
+    tox_callback_friend_message(wtox_research_tox,
+                                 wtox_research_on_friend_message);
+    /* Deliberately DO NOT call set_dht_temp_pk or synthesize a route. */
+    return 0;
+}
+
+/* A status of 0 here means there is no online friend. In particular,
+ * "queued" is NOT "request delivered" or "request accepted". */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_tox_request_status(uint32_t out[7]) {
+    if (!wtox_research_tox || !out) return -1;
+    out[0] = (uint32_t)tox_self_get_friend_list_size(wtox_research_tox);
+    out[1] = wtox_research_request_pending ? 1 : 0;
+    out[2] = 0;
+    if (out[0] != 0) {
+        Tox_Err_Friend_Query err = TOX_ERR_FRIEND_QUERY_OK;
+        out[2] = (uint32_t)tox_friend_get_connection_status(
+            wtox_research_tox, 0, &err);
+        if (err != TOX_ERR_FRIEND_QUERY_OK) return -2;
+    }
+    out[3] = wtox_research_friend_online_events;
+    out[4] = wtox_research_friend_route_attached ? 1 : 0;
+    out[5] = wtox_research_request_received;
+    out[6] = wtox_research_request_dropped;
+    return 0;
+}
+
+/* Returns zero when no original Tox request callback has fired. The test
+ * runner does NOT fabricate these events. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_take_real_friend_request(uint8_t *sender,
+                                            uint8_t *message,
+                                            size_t capacity) {
+    if (!wtox_research_tox || !sender || !message ||
+        capacity < WTOX_RESEARCH_ROUTE_MAX) return -1;
+    if (!wtox_research_request_length) return 0;
+    const int length = (int)wtox_research_request_length;
+    memcpy(sender, wtox_research_request_sender, TOX_PUBLIC_KEY_SIZE);
+    memcpy(message, wtox_research_request_message, (size_t)length);
+    sodium_memzero(wtox_research_request_sender, sizeof(wtox_research_request_sender));
+    sodium_memzero(wtox_research_request_message, sizeof(wtox_research_request_message));
+    wtox_research_request_length = 0;
+    return length;
 }

@@ -1,7 +1,7 @@
 /** Orchestrate two independent WASM Toxcore clients, never fake an echo. */
 const result = document.querySelector("#result");
 const requestedMode = new URL(location.href).searchParams.get("mode");
-const mode = ["raw", "crypto", "friend", "restart"].includes(requestedMode)
+const mode = ["raw", "crypto", "friend", "restart", "request"].includes(requestedMode)
   ? requestedMode : "raw";
 const FRIEND_TEXT = {
   a: "From-A: original Tox friend message",
@@ -156,7 +156,56 @@ async function runSavedataRestart() {
   }
 }
 
+/* A queued friend request is NOT proof of delivery. This negative gate
+ * intentionally starts with no DHT/Onion discovery route and requires the
+ * request to remain offline. The fixture does not inject the peer's DHT key. */
+async function runTrueToxIdRequestGate() {
+  const clients=[spawn("a"),spawn("b")];
+  for(const c of clients)instances.set(c.role,c);
+  try {
+    for(const c of clients)c.post("START",{role:c.role,mode:"request"});
+    const [a,b]=await Promise.all(clients.map(c=>c.wait("READY")));
+    if(!/^[0-9a-f]{76}$/.test(a.toxId) ||
+       !/^[0-9a-f]{76}$/.test(b.toxId) ||
+       a.toxId===b.toxId ||
+       a.toxId.slice(0,64)!==a.cryptoPublicKey ||
+       b.toxId.slice(0,64)!==b.cryptoPublicKey)
+      throw Error("invalid_original_tox_id");
+    clients[0].post("REQUEST_INVALID",{toxId:b.toxId});
+    await clients[0].wait("INVALID_REJECTED");
+    clients[0].post("REQUEST",{toxId:b.toxId});
+    const queued=await clients[0].wait("REQUEST_QUEUED");
+    if(queued.state?.friends!==1 || queued.state.queued!==1 ||
+       queued.state.connection!==0 || queued.state.routeAttached!==0)
+      throw Error("friend_request_not_queued_offline");
+    clients[0].post("SEND_PENDING");
+    await clients[0].wait("OFFLINE_SEND_REJECTED");
+    // Give native Onion_Client its ordinary iterations; never claim a
+    // received request when we have no discovery nodes.
+    await nap(850);
+    clients[0].post("CHECK_REQUEST");
+    clients[1].post("CHECK_REQUEST");
+    const states=await Promise.all(clients.map(c=>c.wait("REQUEST_STATE")));
+    const sender=states[0].state,receiver=states[1].state;
+    if(sender.friends!==1 || sender.queued!==1 ||
+       sender.connection!==0 || sender.routeAttached!==0 ||
+       sender.onlineEvents!==0 || sender.receivedRequests!==0 ||
+       sender.droppedRequests!==0 ||
+       receiver.friends!==0 || receiver.queued!==0 ||
+       receiver.connection!==0 || receiver.receivedRequests!==0 ||
+       receiver.droppedRequests!==0)
+      throw Error("friend_request_falsely_reported_as_delivered");
+    result.dataset.state="passed";
+    result.textContent="PASS: original Tox ID request queued; invalid checksum and offline send rejected; missing discovery never fakes delivery";
+  } finally {
+    for(const c of clients)c.stop();
+  }
+}
 (async () => {
+  if (mode === "request") {
+    await runTrueToxIdRequestGate();
+    return;
+  }
   if (mode === "restart") {
     await runSavedataRestart();
     return;

@@ -543,3 +543,42 @@ implemented yet. Thus **it does not prove qTox/aTox binary interoperability,
 unsupervised public discovery or production gateway readiness**. No Cloudflare
 or VPS is involved. The fixture is loopback-only and never available in the
 normal production application.
+
+## Twenty-fifth increment (first discovery gate): authentic Tox ID requests, pending-state truthfulness
+
+This **increment is deliberately NOT a completed friend-discovery feature**.
+It exposes the original 38-byte Tox ID returned by
+`tox_self_get_address` (public key, nospam and checksum) and queues real
+requests via original `tox_friend_add` in an isolated browser Toxcore WASM.
+The sender does **not** call `tox_friend_add_norequest` and neither browser
+injects a peer DHT public key via `set_dht_temp_pk` for this new mode.
+
+The new `request` Chromium mode runs both clients against the unmodified
+upstream Linux `TCP_Server`. It verifies:
+- Tox IDs match each client's real native public identity.
+- An invalid checksum is rejected by c-toxcore without adding a friend.
+- The legitimate Tox ID + nonempty request message is queued with exactly
+  one native pending friend.
+- The recipient has no friend, no fake request callback and no online status;
+  a plaintext friend message is **rejected** while offline.
+- Both clients continue iterating the original native state machine, and
+  a TCP Relay authentication alone is **not** misreported as delivery.
+
+The native request callback has a bounded inbox but is invoked **only**
+from original `tox_callback_friend_request` (it cannot be populated by
+the JS test runner). An additional real-WASM test verifies the pending friend
+survives standard encrypted `.tox` backup and restore with unchanged identity.
+
+**Remaining blocker:** c-toxcore sends first-contact friend requests via its
+original `Onion_Client` and requires an actual DHT/Onion discovery path to
+route them. Our isolated browser's Network_Funcs implementation currently
+provides one outbound virtual TCP Relay, with UDP disabled and no bootstrap
+nodes. A routed friend request, accepting it, and automatic online messaging
+are therefore **not yet proven by this increment**. The next required work is
+normal bootstrap/onion discovery via browser-supported transport (or a
+well-defined trusted network bridge), followed by a genuinely received
+original callback in an unmodified peer. Do not replace that proof with a
+synthetic callback, injected DHT key or a success-looking UI status.
+
+All tests are loopback-only with original upstream c-toxcore; no Cloudflare,
+VPS, public Tox peer or production client is modified.

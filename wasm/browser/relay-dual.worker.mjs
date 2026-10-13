@@ -21,6 +21,12 @@ const RESTORED_TEXT = {
 // Public single-use localhost test credential, NEVER a real user password.
 const TEST_PASSWORD = new TextEncoder().encode("wtox-test-only-savedata-password-22");
 const hex = data => Array.from(data, value => value.toString(16).padStart(2, "0")).join("");
+function fromToxId(value) {
+  if (typeof value !== "string" || !/^[0-9a-f]{76}$/.test(value))
+    throw Error("invalid_test_tox_id");
+  return Uint8Array.from({length:38},(_,i)=>
+    parseInt(value.slice(i*2,i*2+2),16));
+}
 function fromHex(value) {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) {
     throw Error("invalid_dual_peer_public_key");
@@ -30,7 +36,7 @@ function fromHex(value) {
 }
 let h, role, timer, phase = "new", started = false, terminated = false;
 let cryptoMode = false, friendMode = false, restartMode = false;
-let restored = false;
+let restored = false, requestMode = false;
 function announce(type, extra = {}) {
   self.postMessage({ type, role, ...extra });
 }
@@ -48,8 +54,16 @@ function tick() {
     if (phase === "connecting" && h.connectedRelays() === 1) {
       phase = "ready";
       announce("READY", { publicKey: hex(h.dhtPublicKey()),
-        cryptoPublicKey: (cryptoMode || friendMode) ? hex(h.netCryptoPublicKey()) : null,
+        cryptoPublicKey: (cryptoMode || friendMode || requestMode)
+          ? hex(h.netCryptoPublicKey()) : null,
+        toxId: requestMode ? hex(h.toxAddress()) : null,
         restored });
+    }
+    if (requestMode && phase === "pending") {
+      const inbound=h.takeRealFriendRequest();
+      if (inbound) announce("REQUEST_RECEIVED", {
+        publicKey:hex(inbound.sender),bytes:Array.from(inbound.message)
+      });
     }
     if (phase === "routing") {
       if (friendMode) {
@@ -96,9 +110,10 @@ self.addEventListener("message", async ({data}) => {
       }
       started = true;
       role = data.role;
-      if (!["raw", "crypto", "friend", "restart"].includes(data.mode))
+      if (!["raw", "crypto", "friend", "restart", "request"].includes(data.mode))
         throw Error("invalid_dual_mode");
       cryptoMode = data.mode === "crypto";
+      requestMode = data.mode === "request";
       restartMode = data.mode === "restart";
       friendMode = data.mode === "friend" || restartMode;
       restored = restartMode && data.restored === true;
@@ -133,6 +148,32 @@ self.addEventListener("message", async ({data}) => {
       phase = "connecting";
       timer = setInterval(tick, 15);
       tick();
+    } else if (action === "REQUEST_INVALID" && requestMode && phase === "ready") {
+      const tampered=fromToxId(data.toxId);
+      tampered[37]^=0x01; // invalid checksum, original tox_friend_add must reject
+      let rejected=false;
+      try { h.requestFriendByToxId(tampered,new TextEncoder().encode("check")); }
+      catch (e) { rejected=String(e?.message).includes("native_tox_friend_request_failed"); }
+      tampered.fill(0);
+      if(!rejected || h.nativeToxRequestState().friends!==0)
+        throw Error("invalid_tox_id_checksum_was_accepted");
+      announce("INVALID_REJECTED");
+    } else if (action === "REQUEST" && requestMode && phase === "ready") {
+      const address=fromToxId(data.toxId);
+      const message=new TextEncoder().encode("wTox native friend request stage 25");
+      h.requestFriendByToxId(address,message);
+      address.fill(0);message.fill(0);
+      phase="pending";
+      announce("REQUEST_QUEUED", {state:h.nativeToxRequestState()});
+    } else if (action === "CHECK_REQUEST" && requestMode &&
+               (phase === "ready" || phase === "pending")) {
+      announce("REQUEST_STATE", {state:h.nativeToxRequestState()});
+    } else if (action === "SEND_PENDING" && requestMode && phase === "pending") {
+      let rejected=false;
+      try {h.sendNativeFriendText(new TextEncoder().encode("must stay offline"));}
+      catch {rejected=true;}
+      if(!rejected)throw Error("offline_message_falsely_accepted");
+      announce("OFFLINE_SEND_REJECTED");
     } else if (action === "ROUTE" && phase === "ready") {
       if (friendMode) {
         const real = fromHex(data?.peerCryptoPublicKey),

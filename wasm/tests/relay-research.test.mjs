@@ -96,3 +96,58 @@ test("research-only socket rejects attach before native connect and cleans up a 
     h.close();
   }
 });
+
+/* Stage 25: genuine Tox ID request semantics and encrypted persistence.
+ * An authenticated TCP Relay is not an Onion bootstrap path. Never treat
+ * acceptance of tox_friend_add as a delivered request or online friend. */
+test("real Tox ID request is pending without discovery; encrypted backup retains the exact peer", async () => {
+  const {default:createModule}=await import("../dist/tox_identity.mjs");
+  const relayPublic=Uint8Array.from({length:32},(_,i)=>i+27);
+  const sender=new RelayResearchHarness(await createModule());
+  const receiver=new RelayResearchHarness(await createModule());
+  let restored=null,backup=null;
+  const password=new TextEncoder().encode("isolated-stage25-encrypted-test");
+  const message=new TextEncoder().encode("Original Tox friend request");
+  try {
+    sender.startWithRelayPublicKey(relayPublic);
+    receiver.startWithRelayPublicKey(relayPublic);
+    const recipient=receiver.toxAddress();
+    const previous=sender.toxAddress();
+    assert.equal(recipient.length,38);
+    assert.equal(previous.length,38);
+    assert.notDeepEqual(Array.from(recipient),Array.from(previous));
+    const bad=recipient.slice();
+    bad[37]^=1;
+    assert.throws(()=>sender.requestFriendByToxId(bad,message),
+                  /native_tox_friend_request_failed/);
+    assert.equal(sender.nativeToxRequestState().friends,0,
+                 "bad standard Tox checksum must not create friend");
+    sender.requestFriendByToxId(recipient,message);
+    const waiting=sender.nativeToxRequestState();
+    assert.equal(waiting.friends,1);
+    assert.equal(waiting.queued,1);
+    assert.equal(waiting.connection,0);
+    assert.equal(waiting.onlineEvents,0);
+    assert.equal(waiting.routeAttached,0);
+    assert.equal(receiver.nativeToxRequestState().friends,0);
+    assert.equal(receiver.takeRealFriendRequest(),null);
+    assert.throws(()=>sender.sendNativeFriendText(message),
+                  /native_friend_send_failed/);
+    backup=sender.exportEncryptedSavedata(password);
+    assert.equal(new TextDecoder().decode(backup.subarray(0,8)),"toxEsave");
+    sender.close();
+    restored=new RelayResearchHarness(await createModule());
+    restored.startWithRelayEncrypted(relayPublic,backup,password);
+    assert.deepEqual(Array.from(restored.toxAddress()),Array.from(previous),
+                     "restoring encrypted savedata must retain original Tox ID");
+    const after=restored.nativeToxRequestState();
+    assert.equal(after.friends,1,"the original queued friend remains persisted");
+    assert.equal(after.connection,0,"restored friend is not falsely online");
+    assert.equal(after.onlineEvents,0);
+    assert.equal(after.routeAttached,0);
+    assert.equal(restored.takeRealFriendRequest(),null);
+  } finally {
+    sender.close();receiver.close();restored?.close();
+    password.fill(0);message.fill(0);backup?.fill(0);
+  }
+});
