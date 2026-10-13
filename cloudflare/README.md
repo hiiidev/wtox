@@ -70,3 +70,5 @@ before using this as a production build pipeline.
    and malicious delivered JavaScript could still compromise browser data.
 
 See `docs/CLOUDFLARE_V1.md` for the migration and acceptance plan.
+
+## GitHub Actions 测试环境部署\n\n在 v1 分支使用 GitHub Actions 手动部署到独立 Worker，具体步骤见\n[Cloudflare staging 部署手册](../docs/CLOUDFLARE_STAGING_DEPLOY.md)。\n

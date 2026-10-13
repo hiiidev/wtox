@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "wtox-v1-staging",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-10-13",
+  "workers_dev": true,
+  "observability": {
+    "enabled": false
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MAILBOX",
+        "class_name": "EncryptedMailbox"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-sqlite",
+      "new_sqlite_classes": [
+        "EncryptedMailbox"
+      ]
+    }
+  ]
+}

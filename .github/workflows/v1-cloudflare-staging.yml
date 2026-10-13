@@ -1,0 +1,71 @@
+name: v1-cloudflare-staging-deploy
+# Callable by python-checks on the v1 branch. workflow_dispatch is retained
+# for when/if this file exists on GitHub's default branch in the future.
+on:
+  workflow_call:
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: "Deploy isolated staging Worker (manual, v1 only)"
+    # Called workflows retain the triggering workflow's event context.
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/v1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: wtox-v1-cloudflare-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Require account-scoped Cloudflare secrets
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CF_API_TOKEN" || -z "$CF_ACCOUNT_ID" ]]; then
+            echo "::error::Set repository Actions secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID before a manual staging deployment."
+            exit 1
+          fi
+      - name: Install dependencies
+        working-directory: cloudflare
+        run: npm install --no-audit --no-fund
+      - name: Typecheck and test public API
+        working-directory: cloudflare
+        run: |
+          npm run typecheck
+          npm test
+      - name: Validate staging deployment (dry run, no account changes)
+        working-directory: cloudflare
+        run: npm run deploy:staging:dry-run
+      - name: Deploy isolated staging Worker
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy:staging
+      - name: Summarize staging limitations
+        run: |
+          {
+            echo "### wTox v1 staging deployed"
+            echo ""
+            echo "- Worker: \`wtox-v1-staging\`, Cloudflare Workers.dev only"
+            echo "- Health: \`GET /api/v1/health\`"
+            echo "- Capabilities: \`GET /api/v1/capabilities\`"
+            echo "- Mailbox, relay, identity, and push endpoints remain **HTTP 501**"
+            echo "- No custom domain, production Python server, or Tox keys modified"
+            echo "- Deployment output above contains the actual workers.dev URL."
+          } >> "$GITHUB_STEP_SUMMARY"

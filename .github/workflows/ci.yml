@@ -105,3 +105,17 @@ jobs:
           docker run --rm -e SITE_DOMAIN=chat.example.test \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  deploy-v1-cloudflare-staging:
+    # The existing python-checks manual UI exists on main. Only the v1
+    # revision has this deploy job. No main modification is required.
+    # NORMAL PUSH/PULL_REQUEST RUNS CANNOT DEPLOY.
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/v1' }}
+    name: "Manual deploy: Cloudflare v1 staging"
+    needs: [checks]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/v1-cloudflare-staging.yml
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
