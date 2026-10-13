@@ -101,3 +101,21 @@ test("native friend request persists in encrypted savedata, and offline send fai
     peer.encryptedBackup.fill(0);
   }
 });
+
+test("native Toxcore callback queue API is available on persistent sessions", async () => {
+  const { default: createModule } = await import("../dist/tox_identity.mjs");
+  const wasm = await createModule();
+  const session = new BrowserToxSession(wasm);
+  try {
+    session.startNew();
+    session.iterate();
+    const batch = session.pollEvents();
+    assert.equal(Array.isArray(batch.events), true);
+    assert.equal(batch.dropped >= 0, true);
+    for (const e of batch.events) {
+      assert.ok(e.kind >= 1 && e.kind <= 5);
+      assert.ok(e.payload instanceof Uint8Array);
+      assert.ok(e.payload.length <= 1372);
+    }
+  } finally { session.close(); }
+});

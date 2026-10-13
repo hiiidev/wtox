@@ -30,6 +30,13 @@ function schedulePolling(session) {
     if (!session.active) return;
     try {
       session.iterate();
+      const batch = session.pollEvents();
+      for (const payload of batch.events) {
+        self.postMessage({ type: "TOX_EVENT", event: payload });
+      }
+      if (batch.dropped > 0) {
+        self.postMessage({ type: "TOX_EVENTS_DROPPED", count: batch.dropped });
+      }
       // Web Worker timers, NOT blocking emscripten socket calls.
       const delay = Math.min(1000, Math.max(50, session.iterationInterval()));
       pollTimer = setTimeout(poll, delay);
@@ -86,6 +93,8 @@ self.addEventListener("message", async event => {
     } else if (message.action === "SESSION_SEND_TEXT") {
       const messageId = session.sendText(message.number, message.text);
       self.postMessage({ id: message.id, ok: true, messageId });
+    } else if (message.action === "SESSION_POLL_EVENTS") {
+      self.postMessage({ id: message.id, ok: true, ...session.pollEvents() });
     } else if (message.action === "SESSION_CLOSE") {
       stopPolling();
       session.close();

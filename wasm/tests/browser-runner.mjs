@@ -86,6 +86,11 @@ async function smoke() {
     blocked = String(error.message).startsWith("tox_friend_send_failed");
   }
   if (!blocked) throw Error("offline_delivery_was_falsely_reported");
+  // Native event callbacks are registered even though no peer is online.
+  const localEvents = await rpc("SESSION_POLL_EVENTS", {});
+  if (!Array.isArray(localEvents.events) || !Number.isInteger(localEvents.dropped)) {
+    throw Error("wasm_event_api_invalid");
+  }
   const exported = await rpc("SESSION_EXPORT_ENCRYPTED", { password });
   if (!(exported.encryptedBackup instanceof Uint8Array) ||
       exported.encryptedBackup.length <= 80) throw Error("invalid_live_export");

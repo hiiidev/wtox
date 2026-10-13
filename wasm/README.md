@@ -104,3 +104,20 @@ sent while offline **throws an error rather than claiming delivery**.
 `SESSION_ACCEPT_FRIEND` requires explicit user acceptance in the future
 UI; the raw API is only for research. Incoming callbacks and native online
 messaging are still unimplemented; no claim of qTox/aTox networking.
+
+## Seventh increment: bounded native callback queue
+
+Native friend requests, normal/action text messages, self connection
+status, and friend connection status are now registered on the persistent
+`Tox*` instance. The C callbacks copy into a **bounded 32-event FIFO**
+(1372-byte max payload, zeroized after reading). Drop counts are reported
+to the browser rather than silently overwriting events.
+
+`BrowserToxSession.pollEvents()` validates the versioned fixed header,
+returns opaque `Uint8Array` payloads (not unsafe implicit UTF-8), and
+reports overflow. The Dedicated Worker schedules `tox_iterate()` and
+forwards `TOX_EVENT` / `TOX_EVENTS_DROPPED` messages asynchronously.
+
+The real WASM and browser smoke tests currently assert that the callbacks
+are registered and polling does not crash *offline*. **No inbound event has
+been verified from a real qTox/aTox network peer yet.**

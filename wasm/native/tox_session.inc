@@ -1,12 +1,13 @@
 /* Native browser-memory-only session. Never exports unencrypted savedata.
  * No working Tox TCP/UDP socket adapter or bootstrapping in this phase. */
-static Tox *wtox_live = NULL;
 EMSCRIPTEN_KEEPALIVE
 int wtox_session_start_new(uint8_t address[TOX_ADDRESS_SIZE]) {
     if (!address || wtox_live || sodium_init() < 0) return -1;
     Tox *tox = create_offline_tox(NULL, 0);
     if (!tox) return -2;
     tox_self_get_address(tox, address);
+    wtox_events_reset();
+    wtox_attach_event_callbacks(tox);
     wtox_live = tox;
     return 0;
 }
@@ -31,6 +32,8 @@ int wtox_session_restore_encrypted(const uint8_t *backup, size_t len,
     if (!ok || err != TOX_ERR_DECRYPTION_OK) return -4;
     if (!instance) return -5;
     tox_self_get_address(instance, address);
+    wtox_events_reset();
+    wtox_attach_event_callbacks(instance);
     wtox_live = instance;
     return 0;
 }
@@ -93,6 +96,7 @@ int wtox_session_iteration_interval(void) {
 EMSCRIPTEN_KEEPALIVE
 void wtox_session_close(void) {
     if (wtox_live) { tox_kill(wtox_live); wtox_live = NULL; }
+    wtox_events_reset();
 }
 
 

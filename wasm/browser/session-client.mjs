@@ -9,7 +9,8 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 const required = ["_malloc", "_free", ...["start_new", "restore_encrypted", "savedata_size",
   "export_encrypted", "set_name", "get_name", "iterate", "iteration_interval",
   "close", "friend_add", "friend_accept", "friend_count", "friend_list",
-  "friend_public_key", "friend_delete", "send_text"].map(k => "_wtox_session_" + k)];
+  "friend_public_key", "friend_delete", "send_text",
+  "event_next", "events_dropped"].map(k => "_wtox_session_" + k)];
 
 const ADDRESS_HEX = /^[0-9A-Fa-f]{76}$/;
 const KEY_HEX = /^[0-9A-Fa-f]{64}$/;
@@ -264,6 +265,48 @@ export class BrowserToxSession {
       bytes.fill(0);
       for (const b of [out, input]) wipeFree(m, b);
     }
+  }
+
+  /**
+   * Pull native callbacks out of WASM without asynchronous reentry.
+   * Payload is raw bytes: Tox messages need not be valid UTF-8.
+   */
+  pollEvents() {
+    this.#state(true);
+    const m = this.#m;
+    const FRAME_BYTES = 40 + 1372;
+    const output = allocate(m, new Uint8Array(FRAME_BYTES));
+    const events = [];
+    try {
+      for (let i = 0; i < 32; i++) {
+        const len = m._wtox_session_event_next(output.ptr, FRAME_BYTES);
+        if (len === 0) break;
+        if (!Number.isInteger(len) || len < 40 || len > FRAME_BYTES) {
+          throw new Error("invalid_native_event_length");
+        }
+        const bytes = m.HEAPU8.slice(output.ptr, output.ptr + len);
+        const kind = bytes[0];
+        const status = bytes[1];
+        const view = new DataView(bytes.buffer);
+        const friendNumber = view.getUint32(2, false);
+        const payloadLen = view.getUint16(38, false);
+        if (kind < 1 || kind > 5 || 40 + payloadLen !== len ||
+            (kind >= 4 && payloadLen !== 0) ||
+            (kind === 1 && payloadLen > 921)) {
+          throw new Error("invalid_native_event");
+        }
+        events.push({
+          kind, status, friendNumber,
+          publicKey: kind === 1 ? hex(bytes.slice(6, 38)) : null,
+          payload: bytes.slice(40)
+        });
+      }
+      const dropped = m._wtox_session_events_dropped();
+      if (!Number.isInteger(dropped) || dropped < 0) {
+        throw new Error("invalid_native_event_drop_count");
+      }
+      return { events, dropped };
+    } finally { wipeFree(m, output); }
   }
   close() {
     if (!this.#active) return;

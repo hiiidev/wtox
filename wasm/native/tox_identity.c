@@ -132,4 +132,6 @@ int wtox_inspect_encrypted(const uint8_t *backup, size_t backup_len,
 }
 
 /* Included to reuse the verified offline Tox creation routine. */
+static Tox *wtox_live = NULL;
+#include "tox_events.inc"
 #include "tox_session.inc"
