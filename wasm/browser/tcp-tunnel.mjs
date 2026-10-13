@@ -21,11 +21,11 @@ function unframe(input) {
 }
 export async function openExperimentalTcpTunnel(url, token, {
   webSocketFactory = (address, protocol) => new WebSocket(address, protocol),
-  onBytes = () => {}, handshakeTimeoutMs = 8000
+  onBytes = () => {}, onDisconnected = () => {}, handshakeTimeoutMs = 8000
 } = {}) {
   if (typeof url !== "string" || !/^wss?:\/\//.test(url) ||
       typeof token !== "string" || !/^[0-9a-fA-F]{64}$/.test(token) ||
-      typeof onBytes !== "function" ||
+      typeof onBytes !== "function" || typeof onDisconnected !== "function" ||
       !Number.isInteger(handshakeTimeoutMs) ||
       handshakeTimeoutMs < 1000 || handshakeTimeoutMs > 30000) {
     throw new TypeError("invalid_tunnel_config");
@@ -72,7 +72,7 @@ export async function openExperimentalTcpTunnel(url, token, {
     ws.close();
     throw error;
   }
-  ws.addEventListener("close", () => { closed = true; });
+  ws.addEventListener("close", event => { closed = true; onDisconnected(event.code); });
   return {
     send(bytes) {
       if (closed || ws.readyState !== 1) throw Error("tcp_tunnel_closed");

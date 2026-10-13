@@ -121,3 +121,32 @@ forwards `TOX_EVENT` / `TOX_EVENTS_DROPPED` messages asynchronously.
 The real WASM and browser smoke tests currently assert that the callbacks
 are registered and polling does not crash *offline*. **No inbound event has
 been verified from a real qTox/aTox network peer yet.**
+
+## Eighth increment: native-WASM single-stream virtual TCP proof
+
+`native/tox_virtual_tcp.inc` defines a real, exported C/WASM **single-stream**
+virtual TCP FIFO. Native `send` and `recv` have synchronous
+nonblocking semantics, explicit partial writes/reads, and `-11` would-block.
+Each RX and TX FIFO is capped at 64 KiB. Browser code cannot forge a remote
+connection-ready state: `_wtox_vtcp_connected()` runs only after the async
+WebSocket gateway handshake. Clean remote EOF allows pending RX to drain;
+explicit close/failure zeroizes the buffers. TCP queue acceptance is **not**
+Tox delivery acknowledgement.
+
+`browser/native-virtual-tcp.mjs` bridges synchronous WASM I/O to the
+existing `openExperimentalTcpTunnel()` asynchronous byte transport.
+It retains native TX when the WebSocket send buffer reports backpressure;
+it fails closed on RX buffer overflow and protocol/transport errors.
+The browser test uses an **isolated research-only Worker**, not the Tox
+identity Worker, to avoid turning on arbitrary network egress in the app.
+
+`test:wasm` tests original compiled WASM FIFO ordering, partial reads,
+backpressure, clean EOF and failed connection cancellation.
+`test:browser` also tests original WASM inside real Chromium Dedicated
+Worker through real localhost WebSocket byte framing and echo. The echo
+endpoint is loopback-only and never dials external hosts.
+
+**Important limitation:** the original Toxcore `Network_Funcs` is
+**not yet injected**. The native FIFO is the auditable primitive on which
+that adapter can be built. This does not perform an actual Tox TCP relay
+handshake; it does not make the messenger qTox/aTox compatible yet.

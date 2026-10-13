@@ -106,3 +106,17 @@ E. Hardening: concurrent peers, 3G/mobile wake/suspend, connection loss,
   a separate `wtox-v1-staging` Worker in the intended account and
   authorize only that Worker for deployments.
 - No changes to `main`, the production VPS/domain, or existing Tox keys.
+
+## Implemented standalone primitive (not yet Network_Funcs)
+
+The single-stream `wasm/native/tox_virtual_tcp.inc` exported from original
+c-toxcore/libsodium WASM implements bounded synchronous nonblocking read/write
+queues. `wasm/browser/native-virtual-tcp.mjs` connects the queues to the
+existing explicit opt-in browser WebSocket tunnel. Genuine compiled WASM and
+Chromium tests drive loopback bytes through the adapter, covering EWOULDBLOCK,
+backpressure, packet ordering, EOF and failed connections.
+
+Next step: inspect c-toxcore's private `Tox_System.ns` injection contract,
+provide a **separate test-only** `Network_Funcs` table backed by virtual
+handles, and test real Toxcore calling these operations. No browser networking
+will be enabled in the production identity Worker before that audit.
