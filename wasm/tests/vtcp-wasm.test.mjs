@@ -44,9 +44,12 @@ test("native WASM virtual TCP: ordering, partial I/O, backpressure, EOF and reco
   assert.equal(sent.length, 3);
   await new Promise(resolve => setImmediate(resolve));
   const received = [];
-  while (true) {
+  // Keep the loop bounded: a clean EOF is an empty byte array, not
+  // would-block (null). Never spin forever on EOF in a test or UI.
+  for (let i = 0; i < 10; i++) {
     const bytes = vt.read(10000);
     if (bytes === null) break;
+    assert.ok(bytes.byteLength > 0, "unexpected EOF while socket is open");
     received.push(bytes);
   }
   assert.deepEqual(Buffer.concat(received), Buffer.from(payload));
