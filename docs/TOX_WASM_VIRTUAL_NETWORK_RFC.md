@@ -120,3 +120,18 @@ Next step: inspect c-toxcore's private `Tox_System.ns` injection contract,
 provide a **separate test-only** `Network_Funcs` table backed by virtual
 handles, and test real Toxcore calling these operations. No browser networking
 will be enabled in the production identity Worker before that audit.
+
+## First injected Network_Funcs test gate
+
+Added a separate `wtox_network_injection_probe` inside original compiled
+WASM. It creates a temporary `tox_new_testing` with custom
+`Tox_System.ns` and a complete, closed-by-default `Network_Funcs` table.
+Only a fake TCP socket handle can call the bounded WASM virtual TCP queue;
+no host DNS, native OS TCP or UDP are ever reached. All calls are through
+the `Network` pointer attached to a real Tox instance, and `tox_iterate`
+still executes on that instance.
+
+This is intentionally below the *real handshake* milestone: Toxcore's
+internal TCP client has not initiated an actual connection, and the
+nonblocking connect completion/get- and set-sockopt semantics still need
+to be implemented and tested for it.

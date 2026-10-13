@@ -136,3 +136,4 @@ static Tox *wtox_live = NULL;
 #include "tox_events.inc"
 #include "tox_session.inc"
 #include "tox_virtual_tcp.inc"
+#include "tox_net_probe.inc"

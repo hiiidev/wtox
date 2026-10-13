@@ -150,3 +150,22 @@ endpoint is loopback-only and never dials external hosts.
 **not yet injected**. The native FIFO is the auditable primitive on which
 that adapter can be built. This does not perform an actual Tox TCP relay
 handshake; it does not make the messenger qTox/aTox compatible yet.
+
+## Ninth increment: genuine Toxcore Network_Funcs injection probe
+
+`native/tox_net_probe.inc` creates a **separate test-only Tox instance**
+using the pinned original `tox_new_testing()` and custom `Tox_System.ns`
+(`Network_Funcs`). Every OS network path (UDP, DNS, listen, arbitrary
+system connect) is fail-closed. The single supported fake IPv4/TCP handle
+forwards synchronous native `send` / `recv` into the bounded
+`tox_virtual_tcp.inc` FIFO with `EWOULDBLOCK` semantics. The native test
+calls `ns_socket` / `ns_connect` / `ns_send` / `ns_recv` through
+`tox_get_system(tox)->ns`, validates exact byte integrity, and invokes
+`tox_iterate()` before closing the Tox instance.
+
+This validates **injection wiring and callback ABI only**: it does not
+yet prove that Toxcore's TCP relay machinery opened this socket itself.
+The live browser identity remains on the existing offline constructor;
+no production network flags are enabled. Real relay handshake, async
+socket readiness, destination allowlisting and multi-socket handling
+remain future work. The testing API is private and pinned to v0.2.23.

@@ -119,3 +119,34 @@ test("native Toxcore callback queue API is available on persistent sessions", as
     }
   } finally { session.close(); }
 });
+
+test("genuine Toxcore v0.2.23 accepts isolated Network_Funcs injection, dispatches virtual socket callbacks", async () => {
+  const { default: createModule } = await import("../dist/tox_identity.mjs");
+  const wasm = await createModule();
+  assert.equal(typeof wasm._wtox_network_injection_probe, "function");
+  const ptr = wasm._malloc(6 * 4);
+  assert.notEqual(ptr, 0);
+  try {
+    wasm.HEAPU8.fill(0xff, ptr, ptr + 24);
+    const code = wasm._wtox_network_injection_probe(ptr);
+    assert.equal(code, 0, "native Tox_System.ns injected probe failed code " + code);
+    const result = Array.from(
+      { length: 6 },
+      (_, i) => new DataView(wasm.HEAPU8.buffer).getUint32(ptr + i * 4, true)
+    );
+    assert.ok(result[0] >= 1, "Tox-owned Network_Funcs socket callback not called");
+    assert.ok(result[1] >= 1, "Tox-owned Network_Funcs connect callback not called");
+    assert.ok(result[2] >= 2, "virtual socket send and would-block path not called");
+    assert.ok(result[3] >= 2, "virtual socket recv and would-block path not called");
+    assert.ok(result[4] >= 1, "fake socket close callback not called");
+    assert.equal(result[5], 0, "offline probe must never report an active Tox peer");
+    // The probe never activates the independent persistent browser session.
+    const session = new BrowserToxSession(wasm);
+    const { toxId } = session.startNew();
+    assert.match(toxId, /^[0-9A-F]{76}$/);
+    session.close();
+  } finally {
+    wasm.HEAPU8.fill(0, ptr, ptr + 24);
+    wasm._free(ptr);
+  }
+});
