@@ -22,7 +22,10 @@ jobs:
           version: "5.0.1"
       - name: Verify Emscripten compiler
         run: emcc -v
-      - name: Install browser test harness\n        working-directory: wasm\n        run: npm install --no-audit --no-fund\n      - name: JS WASM-boundary unit tests
+      - name: Install browser test harness
+        working-directory: wasm
+        run: npm install --no-audit --no-fund
+      - name: JS WASM-boundary unit tests
         working-directory: wasm
         run: npm run test:unit
       - name: Compile pinned c-toxcore and libsodium to WASM
@@ -31,7 +34,10 @@ jobs:
       - name: Test genuine WASM Tox ID and encrypted backup roundtrip
         working-directory: wasm
         run: npm run test:wasm
-      - name: Test genuine browser Dedicated Worker identity roundtrip\n        working-directory: wasm\n        run: npm run test:browser\n      - name: Upload research artifact (not deployed)
+      - name: Test genuine browser Dedicated Worker identity roundtrip
+        working-directory: wasm
+        run: npm run test:browser
+      - name: Upload research artifact (not deployed)
         uses: actions/upload-artifact@v4
         with:
           name: wtox-v1-tox-identity-research
