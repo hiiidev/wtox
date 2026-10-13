@@ -608,3 +608,36 @@ not a browser DHT proof and not qTox/aTox interoperability. The browser
 WASM build still needs an explicit bounded UDP datagram transport (or a
 protocol-compatible TCP Onion bootstrap path) before it can match the
 native reference. No production environment or Cloudflare Worker is involved.
+
+## Stage 25c: bounded, nonblocking Chromium WASM UDP data plane
+
+The new `native/tox_virtual_udp.inc` is a separate **research-only**
+Network_Funcs implementation installed into a real original
+`tox_new_testing` with UDP enabled. It supports one IPv4 datagram socket,
+a bound local UDP port, original `ns_sendto` and `ns_recvfrom`, and two
+fixed queues of **16 datagrams × 2048 bytes** each.
+
+The target address is restricted to `127.0.0.1` and an unprivileged UDP
+port. The adapter rejects IPv6, off-loopback destinations, invalid packets,
+a second socket, and any attempt to exceed queue capacity (nonblocking
+EWOULDBLOCK). It returns the original source port with each received
+datagram, never treats UDP as a byte stream, and wipes all queued bytes on
+socket close or instance shutdown.
+
+`vudp-wasm.test.mjs` verifies native UDP socket creation and binding,
+whole-datagram atomicity, source ports, both inbound/outbound backpressure,
+nonblocking empty reads, remote-address rejection, and restart without
+stale packets. `udp-browser.test.mjs` adds a full browser/OS integration:
+an actual Chromium Dedicated Worker runs the original WASM Network_Funcs
+against an authenticated local WebSocket-to-UDP bridge; Node sends each
+packet to a **real loopback OS UDP echo socket**, then delivers the OS
+datagram back through the Worker to original `ns_recvfrom`. The bridge
+accepts **only the one ephemeral UDP echo endpoint** and cannot proxy
+arbitrary destinations. The integration verifies 16 distinct datagrams,
+including a 2048-byte packet and binary null/high-bit bytes.
+
+This stage is a **transport prerequisite, not completed DHT discovery**:
+the client does not yet bootstrap its original DHT against an upstream
+node, run an end-to-end Onion request, or discover another browser peer.
+The existing independent native DHT/Onion reference test stays separate.
+No production Worker, user account, Cloudflare deployment or VPS changes.

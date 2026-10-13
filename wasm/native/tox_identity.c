@@ -137,6 +137,7 @@ static Tox *wtox_live = NULL;
 #include "tox_session.inc"
 #include "tox_virtual_tcp.inc"
 #include "tox_net_probe.inc"
+#include "tox_virtual_udp.inc"
 #include <toxcore/tox_struct.h>
 #include <toxcore/Messenger.h>
 #include <toxcore/net_crypto.h>
