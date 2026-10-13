@@ -66,3 +66,24 @@ strict CSP. It checks encrypted backup creation, same-ID restoration and
 wrong-password rejection. It never contacts Cloudflare or a Tox relay.
 This does not claim network/Tox interoperability and is not integrated into
 the existing React login.
+
+## Fifth increment: persistent browser Toxcore instance (offline-only)
+
+`native/tox_session.inc` and `browser/session-client.mjs` expose a
+singleton live C `Tox*` with browser-only operations: create, restore
+from standard encrypted `.tox`, set/get UTF-8 nickname, calculate the
+native iteration interval, call `tox_iterate`, encrypt and export savedata,
+and close the instance. The Dedicated Worker runs a bounded timer loop
+and stops it on explicit close. Native decrypted savedata is zeroized after
+load/save and never sent as a Worker response.
+
+The `test:wasm` suite loads real Emscripten/c-toxcore and verifies
+identity and nickname persistence through export/close/reimport; Chromium
+`test:browser` repeats it in a real Dedicated Worker, including rejection
+of a wrong password.
+
+**Still intentionally offline.** The constructor disables Tox UDP and
+provides no working TCP virtual socket / bootstrap nodes. Iteration
+alone does not imply peer connectivity. The old Python chat service and
+production React login remain untouched. Never advertise this as a
+native qTox/aTox-compatible browser messenger until real-network tests pass.

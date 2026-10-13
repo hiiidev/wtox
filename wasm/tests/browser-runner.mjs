@@ -59,6 +59,34 @@ async function smoke() {
   }
   created.encryptedBackup.fill(0);
   if (!wrongPasswordRejected) throw new Error("tox_wasm_browser_password_failure");
+  // A real persistent instance, not the create/kill-only identity helper.
+  const active = await rpc("SESSION_START_NEW", {});
+  if (!/^[0-9A-F]{76}$/.test(active.toxId)) throw Error("invalid_live_tox_id");
+  const nickname = "wTox 网页身份";
+  const named = await rpc("SESSION_SET_NAME", { name: nickname });
+  if (named.name !== nickname) throw Error("tox_live_name_failed");
+  const exported = await rpc("SESSION_EXPORT_ENCRYPTED", { password });
+  if (!(exported.encryptedBackup instanceof Uint8Array) ||
+      exported.encryptedBackup.length <= 80) throw Error("invalid_live_export");
+  await rpc("SESSION_CLOSE", {});
+  let denied = false;
+  try {
+    await rpc("SESSION_RESTORE_ENCRYPTED", {
+      encryptedBackup: exported.encryptedBackup, password: "not-the-right-password"
+    });
+  } catch (error) {
+    denied = String(error.message).startsWith("tox_session_restore_failed");
+  }
+  if (!denied) throw Error("live_wrong_password_not_rejected");
+  const reopened = await rpc("SESSION_RESTORE_ENCRYPTED", {
+    encryptedBackup: exported.encryptedBackup, password
+  });
+  const readName = await rpc("SESSION_GET_NAME", {});
+  if (reopened.toxId !== active.toxId || readName.name !== nickname) {
+    throw Error("live_tox_identity_not_restored");
+  }
+  await rpc("SESSION_CLOSE", {});
+  exported.encryptedBackup.fill(0);
   result.dataset.state = "passed";
   result.textContent = "PASS: real browser Dedicated Worker + native Toxcore WASM encrypted-backup roundtrip";
 }

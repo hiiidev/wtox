@@ -55,7 +55,7 @@ emcc "$ROOT/native/tox_identity.c" -I "$WORK/c-toxcore" -I "$PREFIX/include" \
   "$TOX_ARCHIVE" "$PREFIX/lib/libsodium.a" -O2 -o "$DIST/tox_identity.mjs" \
   -s MODULARIZE=1 -s EXPORT_ES6=1 -s ALLOW_MEMORY_GROWTH=1 \
   -s ENVIRONMENT=web,worker,node \
-  -s EXPORTED_FUNCTIONS='["_malloc","_free","_wtox_create_encrypted","_wtox_inspect_encrypted"]' \
+  -s EXPORTED_FUNCTIONS='["_malloc","_free","_wtox_create_encrypted","_wtox_inspect_encrypted","_wtox_session_start_new","_wtox_session_restore_encrypted","_wtox_session_savedata_size","_wtox_session_export_encrypted","_wtox_session_set_name","_wtox_session_get_name","_wtox_session_iterate","_wtox_session_iteration_interval","_wtox_session_close"]' \
   -s EXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
   -s ASSERTIONS=1
 test -s "$DIST/tox_identity.wasm"

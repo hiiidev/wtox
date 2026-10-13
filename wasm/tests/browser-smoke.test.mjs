@@ -19,6 +19,7 @@ const resources = new Map([
   ["/tests/browser-runner.mjs", "text/javascript; charset=utf-8"],
   ["/browser/tox-identity.worker.mjs", "text/javascript; charset=utf-8"],
   ["/browser/identity-client.mjs", "text/javascript; charset=utf-8"],
+  ["/browser/session-client.mjs", "text/javascript; charset=utf-8"],
   ["/dist/tox_identity.mjs", "text/javascript; charset=utf-8"],
   ["/dist/tox_identity.wasm", "application/wasm"]
 ]);
