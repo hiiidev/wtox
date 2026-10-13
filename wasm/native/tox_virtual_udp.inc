@@ -328,7 +328,7 @@ int wtox_vudp_native_bootstrap_verified(const uint8_t *key, size_t len)
         const Client_data *peer=&list[i];
         if(peer->assoc4.timestamp!=0 &&
            net_family_is_ipv4(peer->assoc4.ip_port.ip.family) &&
-           peer->assoc4.ip_port.ip.v4.uint32==get_ip4_loopback().uint32 &&
+           peer->assoc4.ip_port.ip.ip.v4.uint32==get_ip4_loopback().uint32 &&
            net_ntohs(peer->assoc4.ip_port.port)==vudp_bootstrap_port &&
            sodium_memcmp(peer->public_key,key,TOX_PUBLIC_KEY_SIZE)==0)
             return 1;
