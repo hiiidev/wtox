@@ -6,42 +6,67 @@ on:
       - "wasm/**"
       - ".github/workflows/v1-wasm.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
-  browser-tox-identity:
+  build-native-wasm:
+    name: Build original pinned c-toxcore + libsodium WASM
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-      - name: Install build tools
+          persist-credentials: false
+      - name: Install native build prerequisites
         run: sudo apt-get update && sudo apt-get install -y cmake make autoconf automake libtool pkg-config
       - uses: emscripten-core/setup-emsdk@v15
         with:
           version: "5.0.1"
       - name: Verify Emscripten compiler
         run: emcc -v
-      - name: Install browser test harness
-        working-directory: wasm
-        run: npm install --no-audit --no-fund
-      - name: JS WASM-boundary unit tests
-        working-directory: wasm
-        run: npm run test:unit
-      - name: Compile pinned c-toxcore and libsodium to WASM
+      - name: Compile exact-pinned original Toxcore and libsodium
         working-directory: wasm
         run: npm run build
-      - name: Test genuine WASM Tox ID and encrypted backup roundtrip
-        working-directory: wasm
-        run: npm run test:wasm
-      - name: Test genuine browser Dedicated Worker identity roundtrip
-        working-directory: wasm
-        run: npm run test:browser
-      - name: Upload research artifact (not deployed)
+      - name: Upload isolated compiled research artifact
         uses: actions/upload-artifact@v4
         with:
           name: wtox-v1-tox-identity-research
           path: |
             wasm/dist/tox_identity.mjs
             wasm/dist/tox_identity.wasm
+          if-no-files-found: error
           retention-days: 3
+
+  verify-native-wasm:
+    name: Test actual WASM, nonblocking TCP FIFO and Chromium
+    needs: build-native-wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser test harness
+        working-directory: wasm
+        run: npm install --no-audit --no-fund
+      - name: Download WASM compiled by previous job in same run
+        uses: actions/download-artifact@v4
+        with:
+          name: wtox-v1-tox-identity-research
+          path: wasm/dist
+      - name: Assert exact pinned WASM build outputs
+        run: test -s wasm/dist/tox_identity.mjs && test -s wasm/dist/tox_identity.wasm
+      - name: Test JS WASM-boundary and virtual socket error handling
+        working-directory: wasm
+        run: npm run test:unit
+      - name: Test compiled original WASM identity, friends, events, virtual TCP
+        working-directory: wasm
+        run: npm run test:wasm
+      - name: Test compiled WASM in real Chromium Dedicated Worker
+        working-directory: wasm
+        run: npm run test:browser
