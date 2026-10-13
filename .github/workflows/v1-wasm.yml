@@ -20,7 +20,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install native build prerequisites
-        run: sudo apt-get update && sudo apt-get install -y cmake make autoconf automake libtool pkg-config
+        run: sudo apt-get update && sudo apt-get install -y cmake make autoconf automake libtool pkg-config libsodium-dev
       - uses: emscripten-core/setup-emsdk@v15
         with:
           version: "5.0.1"
@@ -29,6 +29,9 @@ jobs:
       - name: Compile exact-pinned original Toxcore and libsodium
         working-directory: wasm
         run: npm run build
+      - name: Compile independent original native c-toxcore TCP Relay
+        working-directory: wasm
+        run: bash scripts/build-native-relay.sh
       - name: Upload isolated compiled research artifact
         uses: actions/upload-artifact@v4
         with:
@@ -36,6 +39,7 @@ jobs:
           path: |
             wasm/dist/tox_identity.mjs
             wasm/dist/tox_identity.wasm
+            wasm/dist/tox-relay-loopback
           if-no-files-found: error
           retention-days: 3
 
@@ -59,8 +63,12 @@ jobs:
         with:
           name: wtox-v1-tox-identity-research
           path: wasm/dist
-      - name: Assert exact pinned WASM build outputs
-        run: test -s wasm/dist/tox_identity.mjs && test -s wasm/dist/tox_identity.wasm
+      - name: Assert compiled original WASM and native Relay outputs
+        run: |
+          test -s wasm/dist/tox_identity.mjs
+          test -s wasm/dist/tox_identity.wasm
+          test -s wasm/dist/tox-relay-loopback
+          chmod +x wasm/dist/tox-relay-loopback
       - name: Test JS WASM-boundary and virtual socket error handling
         working-directory: wasm
         run: npm run test:unit

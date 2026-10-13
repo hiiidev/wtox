@@ -480,3 +480,38 @@ no production identity secrets, public Relay access, remote qTox/aTox
 interop, Cloudflare Worker deployment or VPS operations are involved.
 Restoring friends in this controlled scenario does not prove public
 network peer discovery or cross-client interoperability.
+
+## Twenty-third increment: independent ORIGINAL c-toxcore TCP Relay compatibility gate
+
+The previous `relay-dual.test.mjs` proves native browser Toxcore's behavior
+against a separately written Node TCP Relay protocol fixture. To distinguish
+a fixture-specific success from interoperability, the new
+`relay-upstream.test.mjs` builds an **unmodified upstream c-toxcore
+v0.2.23 `TCP_server.c`** into a Linux-native executable, independently
+of the already-built browser WASM `tox_identity.wasm`.
+
+The harness in `native/tox_relay_loopback.c` calls original
+`new_tcp_server` and `do_tcp_server` and changes only the native
+`Network_Funcs.bind` callback to restrict listening to `127.0.0.1`.
+Its private Relay key never leaves the native process; only the
+32-byte public Relay key is given to the two isolated Chromium Workers.
+
+Node serves test-only local HTML/JS and bridges authenticated browser
+WebSocket frames byte-for-byte to independent TCP sockets connected to that
+native server. Crucially, this bridge **does not derive session keys,
+authenticate Tox clients, decrypt Tox frames, synthesize a routing success
+notification, echo application payloads or route Tox packets**. All such
+operations are performed by the unmodified native upstream Relay.
+
+The fixture then reuses the existing real Messenger friend-mode test and
+the two-round encrypted savedata `restart` test, requiring true original
+friend-online callbacks and both directions of
+`tox_friend_send_message` / `tox_callback_friend_message`. The
+restored-round test requires four independently authenticated native TCP
+sessions across two separate Worker lifecycles.
+
+Both upstream source pins are verified before the build, and the native
+executable is built only inside CI. No public listener, Cloudflare Worker,
+production VPS or normal web UI import is required. This test does **not**
+establish qTox/aTox interoperability, remote Relay accessibility, or
+public DHT/onion peer discovery: those remain explicit future gates.
