@@ -31,3 +31,13 @@ cc -std=c11 -O2 -D_GNU_SOURCE \
   -o "$DIST/tox-relay-loopback"
 test -s "$DIST/tox-relay-loopback"
 echo "Pinned original c-toxcore TCP_Server native fixture built"
+
+# Build the OTHER endpoint as a standalone Linux Tox client. It uses the
+# original public tox_new/tox_friend_* APIs with a real native TCP socket,
+# not the browser's WASM virtual network or a synthetic Node protocol client.
+cc -std=c11 -O2 -D_GNU_SOURCE \
+  -I "$UPSTREAM" "$ROOT/native/tox_linux_peer.c" \
+  "$archive" $(pkg-config --cflags --libs libsodium) -lm -pthread \
+  -o "$DIST/tox-linux-peer"
+test -s "$DIST/tox-linux-peer"
+echo "Pinned Linux Tox client built for browser/native interop"

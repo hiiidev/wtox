@@ -515,3 +515,31 @@ executable is built only inside CI. No public listener, Cloudflare Worker,
 production VPS or normal web UI import is required. This test does **not**
 establish qTox/aTox interoperability, remote Relay accessibility, or
 public DHT/onion peer discovery: those remain explicit future gates.
+
+## Twenty-fourth increment: independent Linux Tox ↔ Chromium WASM friend messaging
+
+This new cross-runtime fixture complements rather than replaces the earlier
+two-WASM-client and original native TCP Relay tests. CI builds three separately
+executing endpoints from fixed upstream c-toxcore v0.2.23:
+
+- The original `TCP_Server.c` Linux process with a loopback-only listener.
+- An independent `tox-linux-peer` Linux process using public
+  `tox_new`, `tox_add_tcp_relay`, `tox_friend_add_norequest`,
+  `tox_friend_send_message` and native friend callbacks, using REAL OS TCP.
+- A fresh Chromium Dedicated Worker with the original c-toxcore WASM client,
+  using browser WebSocket and virtual TCP Network_Funcs.
+
+Node is only a loopback WebSocket-to-TCP byte tunnel for the WASM side. The
+Linux client connects directly to the original native Relay without a Node
+Tox protocol handler. It is **not** an emulated second browser client and
+neither Node nor the Relay decrypts Tox end-to-end friend text.
+
+The test exchanges each peer's **public** DHT and identity keys over the
+isolated fixture, verifies distinct native identities, waits for both real
+friend-online callbacks, and requires cross-runtime bidirectional real Tox
+friend text from the original receive callbacks. The test keeps public
+peer discovery artificially seeded because browser UDP/DHT/Onion is not
+implemented yet. Thus **it does not prove qTox/aTox binary interoperability,
+unsupervised public discovery or production gateway readiness**. No Cloudflare
+or VPS is involved. The fixture is loopback-only and never available in the
+normal production application.

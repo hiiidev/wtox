@@ -40,6 +40,7 @@ jobs:
             wasm/dist/tox_identity.mjs
             wasm/dist/tox_identity.wasm
             wasm/dist/tox-relay-loopback
+            wasm/dist/tox-linux-peer
           if-no-files-found: error
           retention-days: 3
 
@@ -68,7 +69,8 @@ jobs:
           test -s wasm/dist/tox_identity.mjs
           test -s wasm/dist/tox_identity.wasm
           test -s wasm/dist/tox-relay-loopback
-          chmod +x wasm/dist/tox-relay-loopback
+          test -s wasm/dist/tox-linux-peer
+          chmod +x wasm/dist/tox-relay-loopback wasm/dist/tox-linux-peer
       - name: Test JS WASM-boundary and virtual socket error handling
         working-directory: wasm
         run: npm run test:unit
