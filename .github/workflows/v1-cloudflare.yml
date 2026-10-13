@@ -28,6 +28,9 @@ jobs:
       - name: Run Node tests
         working-directory: cloudflare
         run: npm test
+      - name: Validate Cloudflare staging deployment package (no credentials)
+        working-directory: cloudflare
+        run: npm run deploy:staging:dry-run
 
   selfhost:
     runs-on: ubuntu-latest
