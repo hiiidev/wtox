@@ -169,3 +169,21 @@ The live browser identity remains on the existing offline constructor;
 no production network flags are enabled. Real relay handshake, async
 socket readiness, destination allowlisting and multi-socket handling
 remain future work. The testing API is private and pinned to v0.2.23.
+
+## Tenth increment: native Toxcore originates a TCP relay connection
+
+The isolated `wtox_network_relay_dial_probe()` creates original
+c-toxcore v0.2.23 with a custom `Tox_System.ns` and calls
+`tox_add_tcp_relay()` using IANA TEST-NET-2 address `198.51.100.7`.
+Only one synthetic TCP socket is permitted. The injected table rejects
+DNS, UDP, arbitrary destination ports and OS sockets. It counts **calls
+originating from Toxcore**, simulates the gateway's nonblocking connect
+completion and runs `tox_iterate()` until c-toxcore itself writes its TCP
+relay handshake into the virtual TX FIFO. No real network call is made.
+
+This is a narrower but deeper networking test: it demonstrates that the
+native TCP client takes the virtual socket path, NOT that a remote relay
+responds, validates a key or delivers messages. Internal Toxcore socket
+life-cycle, readiness/backpressure handling, real handshake and multi-relay
+support are still pending. The default persistent browser Tox instance
+continues to be offline-only.

@@ -27,7 +27,7 @@ static bool probe_valid(Socket sock) {
 }
 static Socket probe_socket(void *context, int domain, int type, int protocol) {
     Wtox_Probe *p = (Wtox_Probe *)context;
-    if (p && domain == TOX_AF_INET && type == TOX_SOCK_STREAM &&
+    if (p && p->sockets == 0 && domain == TOX_AF_INET && type == TOX_SOCK_STREAM &&
         protocol == TOX_PROTO_TCP) {
         ++p->sockets;
         return net_socket_from_native(WTOX_PROBE_SOCKET);
@@ -42,7 +42,11 @@ static int probe_close(void *context, Socket sock) {
     return 0;
 }
 static int probe_connect(void *context, Socket sock, const IP_Port *addr) {
-    if (!context || !probe_valid(sock) || !addr) { errno = EBADF; return -1; }
+    if (!context || !probe_valid(sock) || !addr ||
+        !net_family_is_ipv4(addr->ip.family) ||
+        addr->port != net_htons(33445)) {
+        errno = EACCES; return -1;
+    }
     ++((Wtox_Probe *)context)->connects;
     if (wtox_vtcp_begin() != 0) { errno = EALREADY; return -1; }
     errno = EINPROGRESS;
@@ -70,7 +74,7 @@ static int probe_nonblock(void *context, Socket sock, bool enable) {
 }
 static int probe_recvbuf(void *context, Socket sock) {
     if (!context || !probe_valid(sock)) { errno = EBADF; return -1; }
-    return 0; /* probe does not expose recvbuf readiness yet */
+    return WTOX_VTCP_LIMIT - wtox_vtcp_rx_free();
 }
 static Socket probe_accept(void *context, Socket sock) {
     (void)context; (void)sock;
@@ -170,7 +174,9 @@ int wtox_network_injection_probe(uint32_t results[6]) {
     Socket socket = ns_socket(installed, TOX_AF_INET, TOX_SOCK_STREAM, TOX_PROTO_TCP);
     if (!probe_valid(socket)) { tox_kill(tox); return -5; }
 
-    IP_Port addr = {0}; /* never used as an actual destination */
+    IP_Port addr = {0}; /* synthetic TEST-NET only; no OS networking */
+    addr.ip.family = net_family_ipv4();
+    addr.port = net_htons(33445);
     if (ns_connect(installed, socket, &addr) != -1 ||
         errno != EINPROGRESS || wtox_vtcp_state() != WTOX_VTCP_CONNECTING) {
         tox_kill(tox); return -6;
@@ -208,4 +214,90 @@ int wtox_network_injection_probe(uint32_t results[6]) {
     tox_kill(tox);
     wtox_vtcp_reset();
     return 0;
+}
+
+/*
+ * Stage 2: prove original c-toxcore's TCP relay code originates the fake
+ * connect and sends its own handshake bytes through the injected Network.
+ *
+ * The hostname is the IANA documentation-only IPv4 address 198.51.100.7,
+ * NEVER passed to an OS socket. Any DNS/UDP/system-socket request fails shut.
+ * This is not proof that a real relay accepted or authenticated a handshake.
+ */
+EMSCRIPTEN_KEEPALIVE
+int wtox_network_relay_dial_probe(uint32_t results[8]) {
+    if (!results || wtox_live || sodium_init() < 0) return -1;
+    memset(results, 0, 8 * sizeof(uint32_t));
+    wtox_vtcp_reset();
+    Wtox_Probe counter = {0};
+    Network ns = { .funcs = &wtox_probe_funcs, .obj = &counter };
+    Tox_System system = tox_default_system();
+    system.ns = &ns;
+    Tox_Options_Testing testing = { .operating_system = &system };
+    Tox_Err_Options_New options_error = TOX_ERR_OPTIONS_NEW_OK;
+    Tox_Options *options = tox_options_new(&options_error);
+    if (!options || options_error != TOX_ERR_OPTIONS_NEW_OK) return -2;
+    tox_options_set_udp_enabled(options, false);
+    tox_options_set_local_discovery_enabled(options, false);
+    tox_options_set_ipv6_enabled(options, false);
+    tox_options_set_experimental_disable_dns(options, true);
+    Tox_Err_New create_error = TOX_ERR_NEW_OK;
+    Tox_Err_New_Testing testing_error = TOX_ERR_NEW_TESTING_OK;
+    Tox *tox = tox_new_testing(options, &create_error, &testing, &testing_error);
+    tox_options_free(options);
+    if (!tox || create_error != TOX_ERR_NEW_OK ||
+        testing_error != TOX_ERR_NEW_TESTING_OK) {
+        if (tox) tox_kill(tox);
+        wtox_vtcp_reset();
+        return -3;
+    }
+    /* One synthetic DHT relay key. It is NOT a known or contacted relay. */
+    uint8_t public_key[TOX_PUBLIC_KEY_SIZE];
+    for (size_t i = 0; i < sizeof(public_key); ++i) {
+        public_key[i] = (uint8_t)(i + 1);
+    }
+    Tox_Err_Bootstrap bootstrap_error = TOX_ERR_BOOTSTRAP_OK;
+    const bool added = tox_add_tcp_relay(tox, "198.51.100.7", 33445,
+                                          public_key, &bootstrap_error);
+    results[0] = counter.sockets;
+    results[1] = counter.connects;
+    results[2] = counter.sends;
+    results[3] = counter.recvs;
+    results[4] = counter.closes;
+    results[5] = (uint32_t)added;
+    results[6] = (uint32_t)bootstrap_error;
+    results[7] = (uint32_t)wtox_vtcp_tx_pending();
+    if (!added || bootstrap_error != TOX_ERR_BOOTSTRAP_OK) {
+        tox_kill(tox);
+        wtox_vtcp_reset();
+        return -4;
+    }
+    if (counter.sockets != 1 || counter.connects != 1 ||
+        wtox_vtcp_state() != WTOX_VTCP_CONNECTING) {
+        tox_kill(tox);
+        wtox_vtcp_reset();
+        return -5;
+    }
+    /* Simulate only the async gateway's TCP connect confirmation. */
+    if (wtox_vtcp_connected() != 0) {
+        tox_kill(tox);
+        wtox_vtcp_reset();
+        return -6;
+    }
+    for (unsigned i = 0; i < 5; ++i) {
+        tox_iterate(tox, NULL);
+        if (wtox_vtcp_tx_pending() > 0) break;
+    }
+    const int pending = wtox_vtcp_tx_pending();
+    results[2] = counter.sends;
+    results[3] = counter.recvs;
+    results[4] = counter.closes;
+    results[7] = (uint32_t)pending;
+    /* Real Tox TCP relay handshake is produced locally, but NO remote peer
+       is ever contacted and no handshake or peer connection is verified. */
+    const int status = pending > 0 && counter.sends > 0 ? 0 : -7;
+    tox_kill(tox);
+    wtox_vtcp_reset();
+    sodium_memzero(public_key, sizeof(public_key));
+    return status;
 }

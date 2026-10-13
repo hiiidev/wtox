@@ -135,3 +135,14 @@ This is intentionally below the *real handshake* milestone: Toxcore's
 internal TCP client has not initiated an actual connection, and the
 nonblocking connect completion/get- and set-sockopt semantics still need
 to be implemented and tested for it.
+
+## Internal Toxcore TCP-client-originated test gate
+
+After verifying `tox_new_testing` callback ABI, a second isolated probe
+calls original `tox_add_tcp_relay()` with TEST-NET-2 `198.51.100.7`
+and a synthetic key. Its custom `Network_Funcs` permits only one fake
+TCP socket and port 33445. The JS/browser bridge does not open and
+no OS egress occurs. Native c-toxcore is expected to initiate the connect,
+transition through EWOULDBLOCK, and emit encrypted handshake bytes into
+the bounded WASM transmit FIFO. This stops short of receiving a real
+relay handshake or authenticating a remote key.

@@ -150,3 +150,25 @@ test("genuine Toxcore v0.2.23 accepts isolated Network_Funcs injection, dispatch
     wasm._free(ptr);
   }
 });
+
+test("internal pinned c-toxcore TCP relay originates a virtual connect and handshake bytes without network egress", async () => {
+  const { default: createModule } = await import("../dist/tox_identity.mjs");
+  const wasm = await createModule();
+  assert.equal(typeof wasm._wtox_network_relay_dial_probe, "function");
+  const ptr = wasm._malloc(8 * 4);
+  assert.ok(ptr);
+  try {
+    const code = wasm._wtox_network_relay_dial_probe(ptr);
+    const counters = Array.from({length:8}, (_, i) =>
+      new DataView(wasm.HEAPU8.buffer).getUint32(ptr + i * 4, true));
+    assert.equal(code, 0, "internal TCP relay probe failed: " + code + "; " + counters.join(","));
+    assert.equal(counters[0], 1, "only one synthetic TCP socket is allowed");
+    assert.equal(counters[1], 1, "Toxcore must originate the fake connect");
+    assert.ok(counters[2] >= 1, "Toxcore must emit its own TCP handshake");
+    assert.equal(counters[5], 1, "native tox_add_tcp_relay must accept synthetic route");
+    assert.ok(counters[7] > 0, "the original crypto TCP handshake must reach the virtual TX FIFO");
+  } finally {
+    wasm.HEAPU8.fill(0, ptr, ptr + 32);
+    wasm._free(ptr);
+  }
+});
