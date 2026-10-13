@@ -180,6 +180,23 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
     assert.match(statusBefore,/No friend added/);
     assert.doesNotMatch(native.logs(),/REQUEST_RECEIVED/,
       "no native callback before the user clicks Add Friend");
+    // A well-formed 76-character identifier with a tampered checksum
+    // must be rejected by original tox_friend_add, without locking the UI.
+    const corrupted=native.receiverToxId.slice(0,-1)+
+      (native.receiverToxId.at(-1)==="0"?"1":"0");
+    await page.type("#friend-id",corrupted);
+    await page.click("#request-button");
+    await page.waitForFunction(()=>
+      document.querySelector("#feedback")?.textContent.includes(
+        "original_friend_add_rejected"),{timeout:10000});
+    assert.equal(await page.$eval("#request-button",el=>el.disabled),false,
+      "native validation failure must permit retry");
+    assert.doesNotMatch(native.logs(),/REQUEST_RECEIVED/,
+      "invalid Tox checksum must not reach native receiver");
+    await page.$eval("#friend-id",el=>{
+      el.value="";
+      el.dispatchEvent(new Event("input",{bubbles:true}));
+    });
     await page.type("#friend-id",native.receiverToxId);
     await page.click("#request-button");
     await page.waitForFunction(()=>

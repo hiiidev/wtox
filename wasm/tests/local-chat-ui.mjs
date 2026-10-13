@@ -73,6 +73,7 @@ worker.onmessage=({data})=>{
       break;
     case "ACTION_ERROR":
       alertUser(data.message||"Native action rejected.");
+      updateControls(); // Failed Tox checksum must remain correctable.
       break;
     case "ERROR":
       alertUser(data.message||"Worker failed");
