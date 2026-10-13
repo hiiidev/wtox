@@ -582,3 +582,29 @@ synthetic callback, injected DHT key or a success-looking UI status.
 
 All tests are loopback-only with original upstream c-toxcore; no Cloudflare,
 VPS, public Tox peer or production client is modified.
+
+## Stage 25b: original DHT / Onion first-contact delivery — Linux baseline
+
+This separate, non-browser fixture runs three independent Tox instances from
+the same exact-pinned upstream c-toxcore version inside one disposable Linux
+process. A distinct original Tox identity runs as a DHT bootstrap node; Alice
+and Bob both bootstrap **only using that node's public DHT identity and its
+loopback UDP port**. Alice is **never given Bob's DHT key**, nor is Bob given
+Alice's DHT key by any test fixture. Unlike earlier tests, no calls to
+`set_dht_temp_pk` or synthetic Net_Crypto callback are used.
+
+After each endpoint becomes connected to the genuine DHT, Alice uses the
+original `tox_friend_add` with Bob's standard 38-byte Tox ID. The test must
+observe the original `tox_callback_friend_request` on Bob, verify its
+message bytes and origin public identity, accept using the original
+`tox_friend_add_norequest`, then observe both friends online and transfer
+distinct text in both directions through the original friend message callback.
+It also rejects a corrupted Tox address checksum before any friend is created.
+
+The test-only Network_Funcs for all three instances **bind to 127.0.0.1**
+and reject every sendto/connect outside that IPv4 loopback address.
+This is a concrete native reference for a genuine DHT/Onion delivery path,
+not a browser DHT proof and not qTox/aTox interoperability. The browser
+WASM build still needs an explicit bounded UDP datagram transport (or a
+protocol-compatible TCP Onion bootstrap path) before it can match the
+native reference. No production environment or Cloudflare Worker is involved.

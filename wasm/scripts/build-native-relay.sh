@@ -41,3 +41,12 @@ cc -std=c11 -O2 -D_GNU_SOURCE \
   -o "$DIST/tox-linux-peer"
 test -s "$DIST/tox-linux-peer"
 echo "Pinned Linux Tox client built for browser/native interop"
+
+# Independent DHT + Onion first-contact integration fixture: native original
+# c-toxcore only; its networking callbacks reject non-loopback traffic.
+cc -std=c11 -O2 -D_GNU_SOURCE \
+  -I "$UPSTREAM" "$ROOT/native/tox_local_discovery.c" \
+  "$archive" $(pkg-config --cflags --libs libsodium) -lm -pthread \
+  -o "$DIST/tox-local-discovery"
+test -s "$DIST/tox-local-discovery"
+echo "Original c-toxcore local DHT/Onion discovery fixture built"

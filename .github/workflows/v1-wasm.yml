@@ -41,6 +41,7 @@ jobs:
             wasm/dist/tox_identity.wasm
             wasm/dist/tox-relay-loopback
             wasm/dist/tox-linux-peer
+            wasm/dist/tox-local-discovery
           if-no-files-found: error
           retention-days: 3
 
@@ -70,13 +71,17 @@ jobs:
           test -s wasm/dist/tox_identity.wasm
           test -s wasm/dist/tox-relay-loopback
           test -s wasm/dist/tox-linux-peer
-          chmod +x wasm/dist/tox-relay-loopback wasm/dist/tox-linux-peer
+          test -s wasm/dist/tox-local-discovery
+          chmod +x wasm/dist/tox-relay-loopback wasm/dist/tox-linux-peer wasm/dist/tox-local-discovery
       - name: Test JS WASM-boundary and virtual socket error handling
         working-directory: wasm
         run: npm run test:unit
       - name: Test compiled original WASM identity, friends, events, virtual TCP
         working-directory: wasm
         run: npm run test:wasm
+      - name: Test genuine native DHT and Onion first-contact friend requests
+        working-directory: wasm
+        run: npm run test:discovery
       - name: Test compiled WASM in real Chromium Dedicated Worker
         working-directory: wasm
         run: npm run test:browser
