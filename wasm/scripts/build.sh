@@ -54,7 +54,7 @@ TOX_ARCHIVE="$(find "$WORK/toxcore-build" -name libtoxcore.a -print -quit)"
 emcc "$ROOT/native/tox_identity.c" -I "$WORK/c-toxcore" -I "$PREFIX/include" \
   "$TOX_ARCHIVE" "$PREFIX/lib/libsodium.a" -O2 -o "$DIST/tox_identity.mjs" \
   -s MODULARIZE=1 -s EXPORT_ES6=1 -s ALLOW_MEMORY_GROWTH=1 \
-  -s ENVIRONMENT=web,worker,node -s FILESYSTEM=0 \
+  -s ENVIRONMENT=web,worker,node \
   -s EXPORTED_FUNCTIONS='["_malloc","_free","_wtox_create_encrypted","_wtox_inspect_encrypted"]' \
   -s EXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
   -s ASSERTIONS=1
