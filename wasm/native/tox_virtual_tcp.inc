@@ -1,6 +1,7 @@
 /*
  * Single-stream synchronous virtual TCP research adapter.
- * NOT YET injected into toxcore's Network_Funcs.
+ * Injected only into isolated research Toxcore Network_Funcs; the default
+ * identity Worker remains offline with no network injection.
  * No syscalls, hostname parsing or credentials in this WASM API.
  * All buffers are bound to one live socket and always wiped on close.
  * Return -11 for would-block, -2 for wrong state, -1 for invalid args.

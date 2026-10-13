@@ -13,6 +13,27 @@ static bool wtox_research_replied = false;
 static bool wtox_research_external_relay = false;
 static int wtox_research_route_id = -1;
 
+/* Isolated test-only routed-data inbox. The normal Net_Crypto handler is
+ * replaced ONLY after this research route is active; the instance is killed
+ * after one test exchange and is never used for actual friend messages. */
+#define WTOX_RESEARCH_ROUTE_MAX 128
+static uint8_t wtox_research_route_rx[WTOX_RESEARCH_ROUTE_MAX] = {0};
+static uint16_t wtox_research_route_rx_len = 0;
+static bool wtox_research_capture_enabled = false;
+
+static int wtox_research_route_capture(void *object, int crypt_connection_id,
+                                       const uint8_t *packet, uint16_t length,
+                                       void *userdata) {
+    (void)userdata;
+    if (object != &wtox_research_counters || crypt_connection_id != 0 ||
+        !wtox_research_capture_enabled || !packet || length == 0 ||
+        length > WTOX_RESEARCH_ROUTE_MAX || wtox_research_route_rx_len != 0)
+        return -1;
+    memcpy(wtox_research_route_rx, packet, length);
+    wtox_research_route_rx_len = length;
+    return 0;
+}
+
 EMSCRIPTEN_KEEPALIVE
 void wtox_research_stop(void) {
     if (wtox_research_tox) {
@@ -27,6 +48,9 @@ void wtox_research_stop(void) {
     wtox_research_replied = false;
     wtox_research_external_relay = false;
     wtox_research_route_id = -1;
+    wtox_research_capture_enabled = false;
+    wtox_research_route_rx_len = 0;
+    sodium_memzero(wtox_research_route_rx, sizeof(wtox_research_route_rx));
     wtox_vtcp_close();
 }
 
@@ -186,4 +210,50 @@ int wtox_research_route_online_count(void) {
     TCP_Connections *tcp_c = nc_get_tcp_c(wtox_research_tox->m->net_crypto);
     if (!tcp_c) return -1;
     return (int)tcp_connection_to_online_tcp_relays(tcp_c, wtox_research_route_id);
+}
+
+/* Research-only: after a synthetic route notification, redirect the
+ * TCP_Connections data callback to this bounded fixture inbox. Net_Crypto
+ * normally owns this callback, so this is deliberately NOT a client API. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_enable_route_capture(void) {
+    if (!wtox_research_tox || !wtox_research_external_relay ||
+        wtox_research_route_id < 0 || wtox_research_capture_enabled ||
+        wtox_research_route_online_count() != 1 ||
+        wtox_vtcp_state() != WTOX_VTCP_OPEN) return -1;
+    TCP_Connections *tcp_c = nc_get_tcp_c(wtox_research_tox->m->net_crypto);
+    if (!tcp_c) return -2;
+    set_packet_tcp_connection_callback(tcp_c, wtox_research_route_capture,
+                                       &wtox_research_counters);
+    wtox_research_capture_enabled = true;
+    return 0;
+}
+
+/* This is original TCP_Connections framing, NOT tox_friend_send_message.
+ * The Relay decrypts this transport payload; it is not end-to-end secret. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_send_route_packet(const uint8_t *payload, size_t length) {
+    if (!wtox_research_tox || !wtox_research_capture_enabled ||
+        wtox_research_route_id < 0 || !payload ||
+        length == 0 || length > WTOX_RESEARCH_ROUTE_MAX ||
+        wtox_research_route_online_count() != 1 ||
+        wtox_vtcp_state() != WTOX_VTCP_OPEN) return -1;
+    TCP_Connections *tcp_c = nc_get_tcp_c(wtox_research_tox->m->net_crypto);
+    if (!tcp_c) return -2;
+    return send_packet_tcp_connection(tcp_c, wtox_research_route_id,
+                                      payload, (uint16_t)length);
+}
+
+/* 0: no data yet; >0: received length; negative: invalid call.
+ * Both previous and unused inbox bytes are scrubbed after copying. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_take_route_packet(uint8_t *out, size_t capacity) {
+    if (!wtox_research_tox || !wtox_research_capture_enabled || !out ||
+        capacity < WTOX_RESEARCH_ROUTE_MAX) return -1;
+    if (!wtox_research_route_rx_len) return 0;
+    const int copied = wtox_research_route_rx_len;
+    memcpy(out, wtox_research_route_rx, wtox_research_route_rx_len);
+    sodium_memzero(wtox_research_route_rx, sizeof(wtox_research_route_rx));
+    wtox_research_route_rx_len = 0;
+    return copied;
 }

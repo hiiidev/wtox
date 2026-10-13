@@ -102,8 +102,34 @@ self.addEventListener("message", async ({ data }) => {
           routeProof.routeRequests + ":n" + routeProof.routeNotifications +
           ":online" + h.routeOnlineCount());
       }
-      // This count represents *test-only TCP route registration*; it is
-      // NEVER proof that a friend is online or messages were delivered.
+      // The original native TCP_Connections layer (not a JS WebSocket
+      // frame) now sends this bounded binary route payload. The Node
+      // fixture must independently decrypt it, then encrypt an echo.
+      // Capture intentionally replaces the Net_Crypto callback ONLY in
+      // this single-use synthetic test instance.
+      h.enableRouteCapture();
+      const payload = Uint8Array.from([0, 1, 127, 128, 254, 255]);
+      h.sendRoutePayload(payload);
+      const dataDeadline = Date.now() + 4000;
+      let received = null, dataProof;
+      do {
+        h.iterate();
+        received = h.takeRoutePayload();
+        const proof = await fetch("/__wtox_independent_stats?mode=" + mode,
+                                  {cache: "no-store"});
+        if (!proof.ok) throw Error("route_payload_stats_unavailable");
+        dataProof = await proof.json();
+        if (received !== null && dataProof.routePayloads === 1 &&
+            dataProof.routeEchoes === 1) break;
+        await wait(20);
+      } while (Date.now() < dataDeadline);
+      if (!received || received.length !== payload.length ||
+          !received.every((value, index) => value === payload[index]) ||
+          dataProof.routePayloads !== 1 || dataProof.routeEchoes !== 1) {
+        throw Error("independent_routed_binary_exchange_failed");
+      }
+      // This is *transport-level* route data: Node can decrypt the bytes.
+      // It does not establish Tox friend status or E2E message delivery.
     } else if (stats.closes < 1 || stats.socketState === 2) {
       throw Error("independent_invalid_relay_accepted");
     }

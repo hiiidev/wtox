@@ -21,6 +21,7 @@ import puppeteer from "puppeteer-core";
 const base = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TOKEN = "c".repeat(64); // test-only local fixture token
 const ROUTE_PEER_KEY = Buffer.from(Array.from({length:32}, (_,i) => i+41));
+const ROUTE_PAYLOAD = Buffer.from([0, 1, 127, 128, 254, 255]);
 const mime = new Map([
   ["/tests/relay-independent.html", "text/html; charset=utf-8"],
   ["/tests/relay-independent-runner.mjs", "text/javascript; charset=utf-8"],
@@ -67,6 +68,8 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
   const respondedClientPings = new Map();
   const routedRequests = new Map();
   const routedNotifications = new Map();
+  const routedPayloads = new Map();
+  const routedEchoes = new Map();
   const requestedModes = new Map();
   let origin = "";
   const web = createServer(async (req, res) => {
@@ -89,7 +92,9 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
         pongs: validPongs.get(Number(mode)) || 0,
         nativePingReplies: respondedClientPings.get(Number(mode)) || 0,
         routeRequests: routedRequests.get(Number(mode)) || 0,
-        routeNotifications: routedNotifications.get(Number(mode)) || 0
+        routeNotifications: routedNotifications.get(Number(mode)) || 0,
+        routePayloads: routedPayloads.get(Number(mode)) || 0,
+        routeEchoes: routedEchoes.get(Number(mode)) || 0
       }));
       return;
     }
@@ -177,6 +182,19 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
             sendSecure(Uint8Array.from([1,16,...ROUTE_PEER_KEY]));
             sendSecure(Uint8Array.from([2,16]));
             routedNotifications.set(mode, (routedNotifications.get(mode) || 0) + 1);
+          } else if (decoded[0] === 16 && decoded.length === ROUTE_PAYLOAD.length + 1 &&
+                     routedRequests.get(mode) === 1 &&
+                     routedNotifications.get(mode) === 1 &&
+                     Buffer.from(decoded.subarray(1)).equals(ROUTE_PAYLOAD)) {
+            // The independent Node relay can decrypt transport-only route
+            // data. Re-encrypt a reply with the next server nonce; native
+            // Toxcore must dispatch it through its TCP routing callback.
+            routedPayloads.set(mode, (routedPayloads.get(mode) || 0) + 1);
+            if (routedPayloads.get(mode) !== 1) {
+              invalidPostHandshakePackets++; socket.destroy(); return;
+            }
+            sendSecure(Uint8Array.from([16, ...ROUTE_PAYLOAD]));
+            routedEchoes.set(mode, (routedEchoes.get(mode) || 0) + 1);
           } else if (decoded[0] === 4 && decoded.length === 9) {
             // Original c-toxcore initiates its own encrypted PING promptly
             // after confirmation. A real Relay must answer with the same
@@ -378,6 +396,10 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
     assert.equal(routedRequests.get(1), 1, "fragmented handshake must still permit route request");
     assert.equal(routedNotifications.get(0), 1, "Node must send routing response and notification");
     assert.equal(routedNotifications.get(1), 1, "Node must notify after fragmented handshake");
+    assert.equal(routedPayloads.get(0), 1, "Node must decrypt the original native binary route payload");
+    assert.equal(routedPayloads.get(1), 1, "fragmented handshake must support native route data");
+    assert.equal(routedEchoes.get(0), 1, "Node must respond with encrypted routed data");
+    assert.equal(routedEchoes.get(1), 1, "fragmented handshake must support encrypted routed reply");
     assert.equal(invalidPostHandshakePackets, 0, "post-handshake frames must be authenticated");
     assert.equal(validClientHellos, 4, "Node must independently decrypt all genuine client hellos");
     await page.close();

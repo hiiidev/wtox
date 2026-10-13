@@ -355,3 +355,24 @@ This is a deliberately **artificial route notification** from one
 localhost fixture. There is no second actual Tox client, no real friend
 online status, no payload forwarding or end-to-end messaging. The
 normal browser identity Worker still has no connected native route.
+
+## Eighteenth increment: independently authenticated routed binary round-trip
+
+After the independently keyed Relay handshake, bidirectional encrypted
+PING/PONG and synthetic route registration, original c-toxcore
+`TCP_Connections` now calls `send_packet_tcp_connection` to send a
+six-byte binary payload (including NUL and high-bit bytes). The independent
+localhost Node Relay decrypts it using its own ephemeral session key, checks
+the exact route id and binary payload, and sends a separately encrypted
+routed data response. Original c-toxcore dispatches that response to an
+isolated test-only bounded callback, where the Chromium Worker verifies
+all six bytes without text decoding.
+
+The research runner temporarily replaces the normal Net_Crypto TCP data
+callback **after** the synthetic route is online. This cannot be used for
+real friend messaging and is never imported into the normal identity
+Worker. The fixture intentionally has access to the routed plaintext:
+TCP Relay session encryption is NOT Tox end-to-end friend encryption.
+This proves bidirectional **transport data framing and dispatch**, not
+full Tox peer handshaking, end-to-end messages or qTox/aTox compatibility.
+All TCP/WS listeners remain loopback-only and no Cloudflare/VPS is used.

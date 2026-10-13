@@ -12,7 +12,9 @@ const required = ["_malloc", "_free", "_wtox_research_start",
   "_wtox_research_tick", "_wtox_research_stats",
   "_wtox_research_start_with_relay_public_key",
   "_wtox_research_make_reply", "_wtox_research_stop",
-  "_wtox_research_add_route", "_wtox_research_route_online_count"];
+  "_wtox_research_add_route", "_wtox_research_route_online_count",
+  "_wtox_research_enable_route_capture", "_wtox_research_send_route_packet",
+  "_wtox_research_take_route_packet"];
 const statsNames = ["sockets", "connects", "sends", "recvs", "closes",
   "txPending", "rxBuffered", "socketState", "toxConnection"];
 
@@ -97,6 +99,45 @@ export class RelayResearchHarness {
   routeOnlineCount() {
     if (!this.#started) throw new Error("relay_research_not_started");
     return this.#module._wtox_research_route_online_count();
+  }
+  /** Take over the native TCP data callback ONLY for this isolated fixture. */
+  enableRouteCapture() {
+    if (!this.#started) throw new Error("relay_research_not_started");
+    const code = this.#module._wtox_research_enable_route_capture();
+    if (code !== 0) throw new Error("relay_research_capture_failed:" + code);
+  }
+  /** Send opaque research bytes using original TCP_Connections routing. */
+  sendRoutePayload(bytes) {
+    if (!this.#started) throw new Error("relay_research_not_started");
+    if (!(bytes instanceof Uint8Array) || bytes.length < 1 || bytes.length > 128) {
+      throw new TypeError("invalid_relay_route_payload");
+    }
+    const m = this.#module;
+    const ptr = m._malloc(bytes.length);
+    if (!ptr) throw new Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(bytes, ptr);
+      const code = m._wtox_research_send_route_packet(ptr, bytes.length);
+      if (code !== 0) throw new Error("relay_research_route_send_failed:" + code);
+    } finally {
+      m.HEAPU8.fill(0, ptr, ptr + bytes.length);
+      m._free(ptr);
+    }
+  }
+  /** A null result means no callback packet yet, not an empty packet. */
+  takeRoutePayload() {
+    if (!this.#started) throw new Error("relay_research_not_started");
+    const m = this.#module;
+    const ptr = m._malloc(128);
+    if (!ptr) throw new Error("relay_research_out_of_memory");
+    try {
+      const n = m._wtox_research_take_route_packet(ptr, 128);
+      if (n < 0 || n > 128) throw new Error("relay_research_route_receive_failed:" + n);
+      return n ? m.HEAPU8.slice(ptr, ptr + n) : null;
+    } finally {
+      m.HEAPU8.fill(0, ptr, ptr + 128);
+      m._free(ptr);
+    }
   }
   /** Native-only ephemeral fake server. No secret/private key crosses to JS. */
   makeSyntheticReply(mode = 0) {
