@@ -1,0 +1,26 @@
+name: v1-cloudflare-checks
+on:
+  push:
+    branches: [v1]
+    paths:
+      - "cloudflare/**"
+      - ".github/workflows/v1-cloudflare.yml"
+  workflow_dispatch:
+jobs:
+  edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Cloudflare backend dependencies
+        working-directory: cloudflare
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        working-directory: cloudflare
+        run: npm run typecheck
+      - name: Run Node tests
+        working-directory: cloudflare
+        run: npm test
