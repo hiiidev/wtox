@@ -223,3 +223,26 @@ relay private keys or altered authentication tags.
 
 This runs entirely in WASM using a fake TEST-NET-2 socket. No public TCP
 relay, actual remote authentication, or qTox/aTox online messaging occurs.
+
+## Thirteenth increment: persistent synthetic Relay client and async transport
+
+`native/tox_research_session.inc` uses an **isolated, persistent**
+original c-toxcore instance whose injected `Network_Funcs` objects
+remain valid until explicit shutdown. It connects only to the fake
+`198.51.100.7:33445` endpoint in memory: OS DNS, UDP, listening
+and arbitrary TCP targets remain disallowed.
+
+`browser/relay-research-client.mjs` connects the original native client's
+already-CONNECTING socket to an asynchronous test transport using
+`NativeVirtualTcp.attachNativeConnect()`, without issuing a second
+native begin call. Between discrete `tox_iterate()` invocations,
+the transport may deliver a local synthetic encrypted Relay response.
+Matching keys keep the test TCP session alive; wrong keys and altered MACs
+must close the connection. The native local Relay private key never
+leaves WASM and is wiped on close.
+
+`tests/relay-research.test.mjs` validates those steps with real
+compiled c-toxcore and asynchronous JS callbacks, including shutdown
+while transport readiness is pending. **There is no real external
+Relay server, browser app login integration or verified qTox/aTox peer.**
+This experiment is not imported by the normal identity Dedicated Worker.

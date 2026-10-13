@@ -79,15 +79,33 @@ export class NativeVirtualTcp {
   }
 
   async connect(url, token, { tunnelFactory = openExperimentalTcpTunnel } = {}) {
-    if (this.state !== VirtualTcpState.IDLE &&
+    return this.#connectTransport(url, token, tunnelFactory, false);
+  }
+  /**
+   * TEST ONLY: attach browser async transport to a socket that ORIGINAL
+   * TOXCORE opened through its injected Network_Funcs already. Do not
+   * reset it or call begin() twice. Only the ready transport may mark it OPEN.
+   */
+  async attachNativeConnect(url, token, { tunnelFactory = openExperimentalTcpTunnel } = {}) {
+    return this.#connectTransport(url, token, tunnelFactory, true);
+  }
+  async #connectTransport(url, token, tunnelFactory, nativeInitiated) {
+    if (nativeInitiated) {
+      if (this.state !== VirtualTcpState.CONNECTING) {
+        throw new Error("vtcp_native_connect_not_pending");
+      }
+    } else if (this.state !== VirtualTcpState.IDLE &&
         this.state !== VirtualTcpState.CLOSED &&
         this.state !== VirtualTcpState.FAILED) {
       throw new Error("vtcp_already_open");
     }
     if (typeof tunnelFactory !== "function") throw new TypeError("invalid_tunnel_factory");
+    if (this.#transport) throw new Error("vtcp_transport_already_attached");
     const generation = ++this.#generation;
-    const started = this.#m._wtox_vtcp_begin();
-    if (started !== 0) throw new Error("vtcp_begin_failed");
+    if (!nativeInitiated) {
+      const started = this.#m._wtox_vtcp_begin();
+      if (started !== 0) throw new Error("vtcp_begin_failed");
+    }
     try {
       const transport = await tunnelFactory(url, token, {
         onBytes: bytes => this.#onBytes(bytes, generation),

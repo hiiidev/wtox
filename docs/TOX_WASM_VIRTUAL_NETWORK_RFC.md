@@ -164,3 +164,15 @@ from a local private key matching the advertised fake Relay public key.
 A fragmented valid response must also work, while responses encrypted
 under a different private key or modified MAC must be disconnected. This
 proves local crypto protocol handling, not remote TCP or peer interop.
+
+## Persistent research handshake runner
+
+A long-lived, strictly single-socket Tox research instance now keeps its
+custom `Tox_System.ns` allocated for its entire lifetime. JS attaches an
+async transport **after** native Toxcore initiates connect, pumps the
+client's authentic handshake, and asynchronously injects a locally
+generated encrypted Relay response before the next native iterate.
+Tests cover valid reply, wrong secret, altered MAC and cancelled async
+readiness. This validates asynchronous scheduling and native socket
+ownership; it remains a synthetic offline Relay, not production WSS
+or a real remote TCP relay.
