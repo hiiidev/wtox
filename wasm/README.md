@@ -246,3 +246,9 @@ compiled c-toxcore and asynchronous JS callbacks, including shutdown
 while transport readiness is pending. **There is no real external
 Relay server, browser app login integration or verified qTox/aTox peer.**
 This experiment is not imported by the normal identity Dedicated Worker.
+
+To rerun the full isolated gate locally after compiling original dependencies:
+`cd wasm && npm run build && npm run test:unit && npm run test:wasm &&
+npm run test:browser`. The GitHub workflow builds and tests in separate
+jobs, with the compiled WASM artifact passed between them. No Cloudflare
+secrets or deployment steps are needed.
