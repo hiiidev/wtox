@@ -146,3 +146,13 @@ no OS egress occurs. Native c-toxcore is expected to initiate the connect,
 transition through EWOULDBLOCK, and emit encrypted handshake bytes into
 the bounded WASM transmit FIFO. This stops short of receiving a real
 relay handshake or authenticating a remote key.
+
+## Negative-case relay response gate
+
+A test-only C function pushes incomplete, forged-complete and fragmented
+forged-complete server handshake frames (fixed 96 bytes for the pinned
+c-toxcore version) into the injected virtual receive FIFO and then lets
+the original Toxcore client execute its normal TCP state machine. A
+partial handshake must wait; malformed complete handshakes must be read,
+rejected and disconnected. This is a bounded deterministic test with no
+OS network access and **not** a successful encrypted handshake.

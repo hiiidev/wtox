@@ -197,3 +197,17 @@ queue. A successful result is only an **offline synthetic relay-dial gate**,
 not proof of a completed, authenticated Tox relay handshake. No Cloudflare
 Worker, browser identity traffic, public TCP proxy or qTox messaging should
 be enabled on the strength of that test alone.
+
+## Eleventh increment: inbound invalid TCP Relay handshake (offline-only)
+
+The native synthetic-relay probe now tests inbound server data from the
+**original Toxcore TCP client**: a 17-byte partial reply must remain buffered
+without a read; a full 96-byte forged reply must be consumed and rejected;
+and a 31+65-byte fragmented forged reply must also be rejected. Original
+c-toxcore crypto verifies the response, not the JavaScript transport.
+The test additionally verifies Tox stays offline and closes the invalid
+connection. All data remains in WASM and the destination is IANA TEST-NET
+with a fake Socket; no real network traffic or secrets leave the runner.
+
+Passing these tests is a *negative-case* security result only. It does not
+yet confirm a legitimate remote relay handshake or peer interoperability.

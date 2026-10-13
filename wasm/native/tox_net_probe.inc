@@ -301,3 +301,115 @@ int wtox_network_relay_dial_probe(uint32_t results[8]) {
     sodium_memzero(public_key, sizeof(public_key));
     return status;
 }
+
+/*
+ * Stage 3: exercise the real Tox TCP client's inbound handshake reader with
+ * deliberately invalid synthetic relay data. No real TCP server exists.
+ * mode 0: fragmented/incomplete ciphertext (must remain pending)
+ * mode 1: full-size malformed ciphertext (must reject and disconnect)
+ * mode 2: two fragments that together make malformed ciphertext (reject)
+ *
+ * TCP_SERVER_HANDSHAKE_SIZE is pinned to the original v0.2.23 constant:
+ * nonce 24 + public key 32 + nonce 24 + MAC 16 = 96 bytes.
+ * Test data is synthetic and cannot authenticate as a valid relay.
+ */
+#define WTOX_FAKE_SERVER_HANDSHAKE_SIZE (24 + 32 + 24 + 16)
+EMSCRIPTEN_KEEPALIVE
+int wtox_network_relay_rejection_probe(uint32_t mode, uint32_t results[10]) {
+    if (!results || mode > 2 || wtox_live || sodium_init() < 0) return -1;
+    memset(results, 0, 10 * sizeof(uint32_t));
+    wtox_vtcp_reset();
+    Wtox_Probe counter = {0};
+    Network ns = { .funcs = &wtox_probe_funcs, .obj = &counter };
+    Tox_System system = tox_default_system();
+    system.ns = &ns;
+    Tox_Options_Testing testing = { .operating_system = &system };
+    Tox_Err_Options_New opt_error = TOX_ERR_OPTIONS_NEW_OK;
+    Tox_Options *options = tox_options_new(&opt_error);
+    if (!options || opt_error != TOX_ERR_OPTIONS_NEW_OK) return -2;
+    tox_options_set_udp_enabled(options, false);
+    tox_options_set_ipv6_enabled(options, false);
+    tox_options_set_local_discovery_enabled(options, false);
+    tox_options_set_experimental_disable_dns(options, true);
+    Tox_Err_New err = TOX_ERR_NEW_OK;
+    Tox_Err_New_Testing testing_err = TOX_ERR_NEW_TESTING_OK;
+    Tox *tox = tox_new_testing(options, &err, &testing, &testing_err);
+    tox_options_free(options);
+    if (!tox || err != TOX_ERR_NEW_OK || testing_err != TOX_ERR_NEW_TESTING_OK) {
+        if (tox) tox_kill(tox);
+        wtox_vtcp_reset();
+        return -3;
+    }
+    uint8_t key[TOX_PUBLIC_KEY_SIZE];
+    for (size_t i = 0; i < sizeof(key); ++i) key[i] = (uint8_t)(i + 1);
+    Tox_Err_Bootstrap bootstrap_err = TOX_ERR_BOOTSTRAP_OK;
+    const bool added = tox_add_tcp_relay(tox, "198.51.100.7", 33445, key, &bootstrap_err);
+    sodium_memzero(key, sizeof(key));
+    if (!added || bootstrap_err != TOX_ERR_BOOTSTRAP_OK ||
+        counter.sockets != 1 || counter.connects != 1 ||
+        wtox_vtcp_connected() != 0) {
+        tox_kill(tox);
+        wtox_vtcp_reset();
+        return -4;
+    }
+
+    /* Run original Tox TCP handshake generator. Its locally produced
+       client bytes remain confined to the virtual TX FIFO. */
+    for (unsigned i = 0; i < 8 && counter.sends == 0; ++i) tox_iterate(tox, NULL);
+    const int outbound = wtox_vtcp_tx_pending();
+    if (outbound <= 0 || counter.sends == 0) {
+        tox_kill(tox);
+        wtox_vtcp_reset();
+        return -5;
+    }
+    uint8_t invalid[WTOX_FAKE_SERVER_HANDSHAKE_SIZE];
+    memset(invalid, 0xa5, sizeof(invalid));
+
+    const size_t first = mode == 0 ? 17 : mode == 2 ? 31 : sizeof(invalid);
+    if (wtox_vtcp_rx_push(invalid, first) != (int)first) {
+        tox_kill(tox);
+        wtox_vtcp_reset();
+        return -6;
+    }
+    /* Toxcore's read_tcp_packet must not consume an incomplete frame. */
+    tox_iterate(tox, NULL);
+    const int recvs_after_first = (int)counter.recvs;
+    const int buffered_after_first = WTOX_VTCP_LIMIT - wtox_vtcp_rx_free();
+    if (mode == 2) {
+        const size_t remaining = sizeof(invalid) - first;
+        if (wtox_vtcp_rx_push(invalid + first, remaining) != (int)remaining) {
+            tox_kill(tox);
+            wtox_vtcp_reset();
+            return -7;
+        }
+    }
+    for (unsigned i = 0; i < 12; ++i) tox_iterate(tox, NULL);
+
+    const int rx_remaining = WTOX_VTCP_LIMIT - wtox_vtcp_rx_free();
+    const Tox_Connection connection = tox_self_get_connection_status(tox);
+    results[0] = counter.sockets;
+    results[1] = counter.connects;
+    results[2] = counter.sends;
+    results[3] = counter.recvs;
+    results[4] = counter.closes;
+    results[5] = (uint32_t)buffered_after_first;
+    results[6] = (uint32_t)rx_remaining;
+    results[7] = (uint32_t)connection;
+    results[8] = (uint32_t)recvs_after_first;
+    results[9] = (uint32_t)outbound;
+    int code;
+    if (mode == 0) {
+        code = buffered_after_first == 17 && rx_remaining == 17 &&
+            counter.recvs == 0 && counter.closes == 0 &&
+            connection == TOX_CONNECTION_NONE ? 0 : -8;
+    } else {
+        code = counter.recvs > 0 && rx_remaining == 0 &&
+            counter.closes > 0 && connection == TOX_CONNECTION_NONE &&
+            (mode == 1 || (recvs_after_first == 0 && buffered_after_first == 31))
+            ? 0 : -9;
+    }
+    sodium_memzero(invalid, sizeof(invalid));
+    tox_kill(tox);
+    wtox_vtcp_reset();
+    return code;
+}

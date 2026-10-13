@@ -172,3 +172,37 @@ test("internal pinned c-toxcore TCP relay originates a virtual connect and hands
     wasm._free(ptr);
   }
 });
+
+test("original Tox TCP relay rejects incomplete and tampered synthetic server handshakes", async () => {
+  const { default: createModule } = await import("../dist/tox_identity.mjs");
+  const wasm = await createModule();
+  assert.equal(typeof wasm._wtox_network_relay_rejection_probe, "function");
+  const ptr = wasm._malloc(10 * 4);
+  assert.ok(ptr);
+  try {
+    for (const mode of [0, 1, 2]) {
+      wasm.HEAPU8.fill(0, ptr, ptr + 40);
+      const code = wasm._wtox_network_relay_rejection_probe(mode, ptr);
+      const values = Array.from({ length: 10 },
+        (_, i) => new DataView(wasm.HEAPU8.buffer).getUint32(ptr + i * 4, true));
+      assert.equal(code, 0,
+        "native Toxcore must not accept synthetic relay handshake mode " +
+        mode + ": code=" + code + " counters=" + values.join(","));
+      assert.equal(values[0], 1);
+      assert.equal(values[1], 1);
+      assert.ok(values[9] > 0, "original Toxcore must produce the client handshake");
+      assert.equal(values[7], 0, "no synthetic relay must make Tox report online");
+      if (mode === 0) {
+        assert.equal(values[6], 17, "incomplete server handshake is buffered");
+        assert.equal(values[3], 0, "incomplete frame must not be read");
+      } else {
+        assert.equal(values[6], 0, "full malformed handshake must be consumed");
+        assert.ok(values[3] > 0, "original Toxcore must read the full invalid handshake");
+        assert.ok(values[4] > 0, "Toxcore must close invalid relay connection");
+      }
+    }
+  } finally {
+    wasm.HEAPU8.fill(0, ptr, ptr + 40);
+    wasm._free(ptr);
+  }
+});
