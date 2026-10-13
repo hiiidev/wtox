@@ -257,3 +257,21 @@ int wtox_research_take_route_packet(uint8_t *out, size_t capacity) {
     wtox_research_route_rx_len = 0;
     return copied;
 }
+
+/* Test-only public DHT key used by independently running Chromium clients
+ * when registering reciprocal routes. No secret key is exported. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_get_dht_public(uint8_t out[CRYPTO_PUBLIC_KEY_SIZE]) {
+    if (!wtox_research_tox || !wtox_research_external_relay || !out) return -1;
+    tox_self_get_dht_id(wtox_research_tox, out);
+    return 0;
+}
+
+/* Native TCP connection status, not Tox friend connection status. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_connected_relays(void) {
+    if (!wtox_research_tox || !wtox_research_external_relay) return -1;
+    TCP_Connections *tcp_c = nc_get_tcp_c(wtox_research_tox->m->net_crypto);
+    if (!tcp_c) return -1;
+    return (int)tcp_connected_relays_count(tcp_c);
+}

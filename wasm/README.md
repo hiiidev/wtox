@@ -376,3 +376,27 @@ TCP Relay session encryption is NOT Tox end-to-end friend encryption.
 This proves bidirectional **transport data framing and dispatch**, not
 full Tox peer handshaking, end-to-end messages or qTox/aTox compatibility.
 All TCP/WS listeners remain loopback-only and no Cloudflare/VPS is used.
+
+## Nineteenth increment: two independent native Tox TCP route endpoints (test only)
+
+A NEW, separate `relay-dual.test.mjs` test launches **two Chromium Dedicated
+Workers**, each with its own WASM module, freshly generated native c-toxcore
+Tox instance and original DHT key. The localhost Node TCP fixture holds
+only its own ephemeral Relay secret. Each original native Toxcore authenticates
+that Relay, registers a route to the *other* client's real native DHT public
+key, and receives a server-generated connection notification only after both
+reciprocal routes have registered.
+
+Each original `TCP_Connections` sends a unique binary payload; the Node
+fixture decrypts the Relay transport wrapper, forwards the data to the
+*opposite* authenticated TCP socket with the receiver's session key, and each
+original native TCP data callback verifies the opposite client's bytes in
+Chromium. The fixture explicitly fails unexpected packets and forbids
+arbitrary destinations; two separate clients must authenticate and route.
+
+This is **two native WASM client transport endpoints**, NOT two full online
+Tox friends. Both research clients deliberately replace the normal
+`Net_Crypto` TCP callback with a small test inbox. The Node Relay can inspect
+the routed payload, which is **not** end-to-end encrypted as friend text.
+No qTox/aTox interoperability, DHT discovery, user-facing login, production
+gateway or remote TCP network is enabled or implied.

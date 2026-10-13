@@ -14,7 +14,8 @@ const required = ["_malloc", "_free", "_wtox_research_start",
   "_wtox_research_make_reply", "_wtox_research_stop",
   "_wtox_research_add_route", "_wtox_research_route_online_count",
   "_wtox_research_enable_route_capture", "_wtox_research_send_route_packet",
-  "_wtox_research_take_route_packet"];
+  "_wtox_research_take_route_packet", "_wtox_research_get_dht_public",
+  "_wtox_research_connected_relays"];
 const statsNames = ["sockets", "connects", "sends", "recvs", "closes",
   "txPending", "rxBuffered", "socketState", "toxConnection"];
 
@@ -77,6 +78,25 @@ export class RelayResearchHarness {
   pump() {
     if (!this.#started) throw new Error("relay_research_not_started");
     return this.#tcp.pump();
+  }
+  /** Original client DHT identity; the native TCP hello uses the same key. */
+  dhtPublicKey() {
+    if (!this.#started) throw new Error("relay_research_not_started");
+    const m = this.#module;
+    const ptr = m._malloc(32);
+    if (!ptr) throw new Error("relay_research_out_of_memory");
+    try {
+      const code = m._wtox_research_get_dht_public(ptr);
+      if (code !== 0) throw new Error("relay_research_dht_key_failed:" + code);
+      return m.HEAPU8.slice(ptr, ptr + 32);
+    } finally {
+      m.HEAPU8.fill(0, ptr, ptr + 32);
+      m._free(ptr);
+    }
+  }
+  connectedRelays() {
+    if (!this.#started) throw new Error("relay_research_not_started");
+    return this.#module._wtox_research_connected_relays();
   }
   /** Test-only one-target route registration via ORIGINAL c-toxcore. */
   registerSyntheticRoute(peerPublicKey) {
