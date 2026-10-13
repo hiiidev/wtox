@@ -303,3 +303,22 @@ It doesn't prove DHT, relay routing, peer messaging, or qTox/aTox
 interoperability. All listeners and TCP destinations are restricted to
 `127.0.0.1`; the normal identity Worker and production server remain
 unchanged. The fake Tox destination (`198.51.100.7`) is never dialed.
+
+## Sixteenth increment: independently authenticated post-handshake heartbeat
+
+After a valid *independently keyed* TCP Relay handshake in Chromium, the
+localhost Node TCP fixture now derives a separate ephemeral session key,
+tracks both direction-specific 24-byte big-endian nonces, and sends a
+**length-prefixed, NaCl-authenticated TCP PING** (packet type 4). The
+original browser Toxcore must decrypt it and return an encrypted TCP
+PONG (type 5) containing the **identical 8-byte identifier**. Node
+independently decrypts and validates that native PONG, with separate
+tests for standard and TCP-fragmented handshake replies.
+
+The browser research Worker waits until the Node-side post-handshake
+PONG proof is confirmed, rather than treating an open socket as a
+successful protocol test. Existing wrong-key and tampered-MAC handshake
+negative cases remain mandatory. All sockets remain bound to
+`127.0.0.1`; no actual public Relay, forwarding connection, friend
+request or qTox/aTox exchange is claimed. The normal identity Worker
+and production system never load the fixture.

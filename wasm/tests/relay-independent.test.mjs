@@ -38,6 +38,13 @@ function chrome() {
   }
   throw Error("chromium_not_installed");
 }
+// Toxcore v0.2.23 increments the 24-byte nonce in BIG-endian order.
+function incrementToxNonce(nonce) {
+  for (let i = nonce.length - 1; i >= 0; --i) {
+    nonce[i] = (nonce[i] + 1) & 255;
+    if (nonce[i] !== 0) break;
+  }
+}
 function wsFrame(chunk) {
   const frame = Buffer.allocUnsafe(chunk.length + 6);
   frame[0] = 1;
@@ -53,12 +60,32 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
   const relayKey = nacl.box.keyPair(); // private key NEVER sent to Chromium
   let validClientHellos = 0;
   let incomingHellos = 0;
+  let invalidPostHandshakePackets = 0;
+  const validPongs = new Map();
+  const encryptedPings = new Map();
   const requestedModes = new Map();
   let origin = "";
   const web = createServer(async (req, res) => {
     let pathname;
     try { pathname = new URL(req.url, "http://127.0.0.1").pathname; }
     catch { res.writeHead(400); res.end(); return; }
+    if (req.method === "GET" && pathname === "/__wtox_independent_stats") {
+      const url = new URL(req.url, origin);
+      const mode = url.searchParams.get("mode");
+      if (url.searchParams.size !== 1 || !/^[01]$/.test(mode)) {
+        res.writeHead(404); res.end(); return;
+      }
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"
+      });
+      res.end(JSON.stringify({
+        pings: encryptedPings.get(Number(mode)) || 0,
+        pongs: validPongs.get(Number(mode)) || 0
+      }));
+      return;
+    }
     if (req.method === "GET" && pathname === "/__wtox_independent_public") {
       res.writeHead(200, {
         "Content-Type": "text/plain; charset=utf-8",
@@ -85,29 +112,65 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
   });
   const tcpServer = createTcpServer(socket => {
     let hello = Buffer.alloc(0);
+    let postHandshake = Buffer.alloc(0);
     let answered = false;
+    let mode;
+    let sessionKey;
+    let recvNonce;
+    let sendNonce;
+    let pingId;
+    let pingTimer;
+    socket.on("close", () => {
+      if (pingTimer) clearTimeout(pingTimer);
+      hello.fill(0);
+      postHandshake.fill(0);
+      sessionKey?.fill(0);
+      recvNonce?.fill(0);
+      sendNonce?.fill(0);
+      pingId?.fill(0);
+    });
     socket.on("data", data => {
-      if (answered) return;
+      if (answered) {
+        if (mode > 1 || !sessionKey || !recvNonce) return;
+        postHandshake = Buffer.concat([postHandshake, data]);
+        if (postHandshake.length > 4096) { socket.destroy(); return; }
+        while (postHandshake.length >= 2) {
+          const size = postHandshake.readUInt16BE(0);
+          if (size < 17 || size > 2048) { socket.destroy(); return; }
+          if (postHandshake.length < size + 2) break; // TCP partial frame
+          const encrypted = postHandshake.subarray(2, size + 2);
+          const decoded = nacl.box.open.after(encrypted, recvNonce, sessionKey);
+          if (!decoded || decoded.length !== 9 || decoded[0] !== 5 ||
+              !pingId || !Buffer.from(decoded.subarray(1)).equals(pingId)) {
+            invalidPostHandshakePackets++;
+            socket.destroy();
+            return;
+          }
+          validPongs.set(mode, (validPongs.get(mode) || 0) + 1);
+          incrementToxNonce(recvNonce); // native uses big-endian 24-byte nonce
+          postHandshake = Buffer.from(postHandshake.subarray(size + 2));
+        }
+        return;
+      }
       hello = Buffer.concat([hello, data]);
       if (hello.length > 128) { socket.destroy(); return; }
       if (hello.length < 128) return;
       answered = true;
       incomingHellos++;
-      const mode = requestedModes.get(socket.remotePort);
-      if (![0, 1, 2, 3].includes(mode)) { socket.destroy(); return; }
+      mode = requestedModes.get(socket.remotePort);
+      if (![0,1,2,3].includes(mode)) { socket.destroy(); return; }
       let shared, replyShared, wrongSecret, nonce, plain, ciphertext, ephemeral;
       try {
         shared = nacl.box.before(hello.subarray(0,32), relayKey.secretKey);
         const clientPayload = nacl.box.open.after(
           hello.subarray(56,128), hello.subarray(32,56), shared);
         assert.ok(clientPayload && clientPayload.length === 56,
-          "Independent Node Relay must decrypt original Toxcore client handshake");
+          "Node must independently decrypt original Toxcore client hello");
         validClientHellos++;
-        clientPayload.fill(0);
         ephemeral = nacl.box.keyPair();
         plain = new Uint8Array(56);
         plain.set(ephemeral.publicKey);
-        plain.set(nacl.randomBytes(24),32);
+        plain.set(nacl.randomBytes(24), 32);
         nonce = nacl.randomBytes(24);
         if (mode === 2) {
           wrongSecret = nacl.box.keyPair().secretKey;
@@ -118,29 +181,50 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
         ciphertext = nacl.box.after(plain, nonce, replyShared);
         assert.equal(ciphertext.length, 72);
         const reply = Buffer.concat([Buffer.from(nonce), Buffer.from(ciphertext)]);
-        if (mode === 3) reply[reply.length-1] ^= 1;
+        if (mode === 3) reply[reply.length - 1] ^= 1;
         if (mode === 1) {
           const tail = Buffer.from(reply.subarray(23));
-          socket.write(Buffer.from(reply.subarray(0,23)));
+          socket.write(Buffer.from(reply.subarray(0, 23)));
           setTimeout(() => {
             if (!socket.destroyed) socket.write(tail);
             tail.fill(0);
           }, 35);
-        } else {
-          socket.write(reply);
-        }
+        } else socket.write(Buffer.from(reply));
         reply.fill(0);
+        if (mode <= 1) {
+          // After the native handshake, the client and server derive a NEW
+          // ephemeral shared key. The two nonce streams are independent.
+          sessionKey = nacl.box.before(clientPayload.subarray(0,32), ephemeral.secretKey);
+          recvNonce = Uint8Array.from(clientPayload.subarray(32,56));
+          sendNonce = Uint8Array.from(plain.subarray(32,56));
+          pingId = Buffer.from(nacl.randomBytes(8));
+          pingTimer = setTimeout(() => {
+            if (socket.destroyed) return;
+            const command = Uint8Array.from([4, ...pingId]); // Tox TCP PING
+            const body = nacl.box.after(command, sendNonce, sessionKey);
+            const frame = Buffer.alloc(2 + body.length);
+            frame.writeUInt16BE(body.length, 0);
+            frame.set(body, 2);
+            socket.write(frame);
+            incrementToxNonce(sendNonce);
+            encryptedPings.set(mode, (encryptedPings.get(mode) || 0) + 1);
+            frame.fill(0);
+            command.fill(0);
+            body.fill(0);
+          }, mode === 1 ? 210 : 160);
+        }
+        clientPayload.fill(0);
       } catch {
         socket.destroy();
       } finally {
         hello.fill(0);
-        if (shared) shared.fill(0);
+        shared?.fill(0);
         if (replyShared && replyShared !== shared) replyShared.fill(0);
-        if (wrongSecret) wrongSecret.fill(0);
-        if (nonce) nonce.fill(0);
-        if (plain) plain.fill(0);
-        if (ciphertext) ciphertext.fill(0);
-        if (ephemeral) ephemeral.secretKey.fill(0);
+        wrongSecret?.fill(0);
+        nonce?.fill(0);
+        plain?.fill(0);
+        ciphertext?.fill(0);
+        ephemeral?.secretKey.fill(0);
       }
     });
   });
@@ -226,6 +310,11 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
     }));
     assert.equal(state.state, "passed", state.message+"; pageErrors="+pageErrors.join("/"));
     assert.equal(incomingHellos, 4, "all handshake scenarios must reach Node TCP");
+    assert.equal(encryptedPings.get(0), 1, "independent Relay must send encrypted Tox PING");
+    assert.equal(encryptedPings.get(1), 1, "fragmented handshake must support encrypted Tox PING");
+    assert.equal(validPongs.get(0), 1, "Node must decrypt native Toxcore encrypted PONG");
+    assert.equal(validPongs.get(1), 1, "Node must decrypt PONG after fragmented valid handshake");
+    assert.equal(invalidPostHandshakePackets, 0, "post-handshake frames must be authenticated");
     assert.equal(validClientHellos, 4, "Node must independently decrypt all genuine client hellos");
     await page.close();
   } finally {

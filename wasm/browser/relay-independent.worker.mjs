@@ -46,15 +46,33 @@ self.addEventListener("message", async ({ data }) => {
       await wait(20); // ws data arrives between native iterations
       h.iterate();
       stats = h.stats();
-      if (stats.recvs > 0 && stats.rxBuffered === 0 &&
-          (mode <= 1 ? stats.closes === 0 : stats.closes > 0)) break;
+      if (stats.recvs > 0 && stats.rxBuffered === 0) {
+        if (mode > 1 && stats.closes > 0) break;
+        if (mode <= 1 && stats.closes === 0 && stats.sends >= 2) {
+          // Independent Node owns the post-handshake ephemeral key and
+          // validates original Toxcore's encrypted PONG, not just bytes.
+          const proof = await fetch("/__wtox_independent_stats?mode=" + mode, {
+            cache: "no-store", credentials: "omit"
+          });
+          if (proof.status !== 200) throw Error("encrypted_pong_proof_unavailable");
+          const counts = await proof.json();
+          if (counts.pings === 1 && counts.pongs === 1) break;
+        }
+      }
     } while (Date.now() < end);
     if (!stats || stats.recvs < 1 || stats.rxBuffered !== 0 ||
         stats.sockets !== 1 || stats.connects !== 1 || stats.toxConnection !== 0 ||
         stats.sends < 1) throw Error("independent_handshake_not_processed");
     if (mode <= 1) {
-      if (stats.closes !== 0 || stats.socketState !== 2)
-        throw Error("independent_valid_relay_rejected");
+      if (stats.closes !== 0 || stats.socketState !== 2 ||
+          stats.sends < 2 || stats.recvs < 2) {
+        throw Error("independent_encrypted_ping_pong_failed");
+      }
+      const p = await fetch("/__wtox_independent_stats?mode=" + mode, {cache:"no-store"});
+      const counters = await p.json();
+      if (counters.pings !== 1 || counters.pongs !== 1) {
+        throw Error("independent_pong_not_authenticated");
+      }
     } else if (stats.closes < 1 || stats.socketState === 2) {
       throw Error("independent_invalid_relay_accepted");
     }

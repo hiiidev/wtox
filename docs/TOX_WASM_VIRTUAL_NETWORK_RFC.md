@@ -207,3 +207,14 @@ public-key-encrypted original protocol bytes.
 This remains a **minimal independent handshaking test fixture**,
 not a production Tox relay daemon; full routing and genuine qTox/aTox
 peer interoperability are separate future acceptance gates.
+
+## Post-handshake encrypted-frame gate
+
+The isolated Node-owned Relay fixture extends its authenticated handshake
+with a real Tox TCP encrypted packet. With the new ephemeral
+Curve25519 shared key and direction-specific nonces, Node sends a
+length-prefixed PING command and authenticates the PONG returned by
+the original browser Toxcore. A passing test proves encrypted TCP control
+traffic can cross Chromium Worker → WebSocket → Node TCP → WebSocket
+after the handshake. It does *not* prove routed peer message delivery
+or interoperability with independently running qTox/aTox clients.
