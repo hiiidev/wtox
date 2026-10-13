@@ -1,5 +1,6 @@
 /** Orchestrate two independent WASM Toxcore clients, never fake an echo. */
 const result = document.querySelector("#result");
+const mode = new URL(location.href).searchParams.get("mode") === "crypto" ? "crypto" : "raw";
 const EXPECTED = {
   a: [255, 128, 1, 0, 9],
   b: [0, 1, 128, 255, 7]
@@ -52,13 +53,19 @@ function spawn(role) {
   instances.set("a", a); instances.set("b", b);
   const all = [a, b];
   try {
-    for (const c of all) c.post("START", {role:c.role});
+    for (const c of all) c.post("START", {role:c.role, mode});
     const [ar, br] = await Promise.all(all.map(c => c.wait("READY")));
     if (!/^[0-9a-f]{64}$/.test(ar.publicKey) ||
         !/^[0-9a-f]{64}$/.test(br.publicKey) ||
         ar.publicKey === br.publicKey) throw Error("duplicate_or_invalid_native_dht_id");
-    a.post("ROUTE", {peerPublicKey:br.publicKey});
-    b.post("ROUTE", {peerPublicKey:ar.publicKey});
+    if (mode === "crypto" &&
+        (!/^[0-9a-f]{64}$/.test(ar.cryptoPublicKey) ||
+         !/^[0-9a-f]{64}$/.test(br.cryptoPublicKey) ||
+         ar.cryptoPublicKey === br.cryptoPublicKey)) {
+      throw Error("duplicate_or_invalid_native_net_crypto_public");
+    }
+    a.post("ROUTE", {peerPublicKey:br.publicKey,peerCryptoPublicKey:br.cryptoPublicKey});
+    b.post("ROUTE", {peerPublicKey:ar.publicKey,peerCryptoPublicKey:ar.cryptoPublicKey});
     await Promise.all(all.map(c => c.wait("ROUTED")));
     for (const c of all) c.post("SEND");
     await Promise.all(all.map(c => c.wait("SENT")));
@@ -71,7 +78,9 @@ function spawn(role) {
       }
     }
     result.dataset.state = "passed";
-    result.textContent = "PASS: two independent native WASM clients exchanged routed binary data";
+    result.textContent = mode === "crypto"
+      ? "PASS: two original Net_Crypto sessions authenticated end-to-end and exchanged lossless packets"
+      : "PASS: two independent native WASM clients exchanged routed binary data";
   } finally {
     for (const c of all) c.stop();
   }

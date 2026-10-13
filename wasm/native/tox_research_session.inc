@@ -20,6 +20,33 @@ static int wtox_research_route_id = -1;
 static uint8_t wtox_research_route_rx[WTOX_RESEARCH_ROUTE_MAX] = {0};
 static uint16_t wtox_research_route_rx_len = 0;
 static bool wtox_research_capture_enabled = false;
+/* Research-only native Net_Crypto; never override TCP_Connections callback. */
+static int wtox_research_crypto_id = -1;
+static bool wtox_research_crypto_online = false;
+static uint32_t wtox_research_crypto_connects = 0;
+static uint32_t wtox_research_crypto_disconnects = 0;
+static uint8_t wtox_research_crypto_rx[WTOX_RESEARCH_ROUTE_MAX] = {0};
+static uint16_t wtox_research_crypto_rx_len = 0;
+
+static int wtox_research_crypto_status(void *obj, int id, bool online, void *userdata) {
+    (void)userdata;
+    if (obj != &wtox_research_counters || id != 0) return -1;
+    wtox_research_crypto_online = online;
+    if (online) ++wtox_research_crypto_connects;
+    else ++wtox_research_crypto_disconnects;
+    return 0;
+}
+static int wtox_research_crypto_data(void *obj, int id, const uint8_t *packet,
+                                      uint16_t length, void *userdata) {
+    (void)userdata;
+    if (obj != &wtox_research_counters || id != 0 || !packet ||
+        length < 2 || length > WTOX_RESEARCH_ROUTE_MAX ||
+        packet[0] != PACKET_ID_RANGE_LOSSLESS_CUSTOM_START ||
+        wtox_research_crypto_rx_len != 0) return -1;
+    memcpy(wtox_research_crypto_rx, packet + 1, length - 1);
+    wtox_research_crypto_rx_len = length - 1;
+    return 0;
+}
 
 static int wtox_research_route_capture(void *object, int crypt_connection_id,
                                        const uint8_t *packet, uint16_t length,
@@ -51,6 +78,12 @@ void wtox_research_stop(void) {
     wtox_research_capture_enabled = false;
     wtox_research_route_rx_len = 0;
     sodium_memzero(wtox_research_route_rx, sizeof(wtox_research_route_rx));
+    wtox_research_crypto_id = -1;
+    wtox_research_crypto_online = false;
+    wtox_research_crypto_connects = 0;
+    wtox_research_crypto_disconnects = 0;
+    wtox_research_crypto_rx_len = 0;
+    sodium_memzero(wtox_research_crypto_rx, sizeof(wtox_research_crypto_rx));
     wtox_vtcp_close();
 }
 
@@ -274,4 +307,71 @@ int wtox_research_connected_relays(void) {
     TCP_Connections *tcp_c = nc_get_tcp_c(wtox_research_tox->m->net_crypto);
     if (!tcp_c) return -1;
     return (int)tcp_connected_relays_count(tcp_c);
+}
+
+/* Public Net_Crypto real key is separate from the DHT routing key. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_get_crypto_public(uint8_t *out, size_t len) {
+    if (!wtox_research_tox || !wtox_research_external_relay || !out ||
+        len != CRYPTO_PUBLIC_KEY_SIZE) return -1;
+    memcpy(out, nc_get_self_public_key(wtox_research_tox->m->net_crypto), len);
+    return 0;
+}
+
+/* Native cookie request, crypto handshake, original network handler. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_begin_crypto(const uint8_t *real_pk, const uint8_t *dht_pk,
+                                size_t len) {
+    if (!wtox_research_tox || !wtox_research_external_relay ||
+        !real_pk || !dht_pk || len != CRYPTO_PUBLIC_KEY_SIZE ||
+        wtox_research_route_id != -1 || wtox_research_crypto_id != -1 ||
+        wtox_research_capture_enabled || wtox_vtcp_state() != WTOX_VTCP_OPEN)
+        return -1;
+    Net_Crypto *c = wtox_research_tox->m->net_crypto;
+    TCP_Connections *tcp_c = nc_get_tcp_c(c);
+    if (!tcp_c || tcp_connected_relays_count(tcp_c) != 1) return -2;
+    const int id = new_crypto_connection(c, real_pk, dht_pk);
+    if (id != 0) return -3; /* exactly one isolated research connection */
+    wtox_research_crypto_id = id;
+    if (connection_status_handler(c, id, wtox_research_crypto_status,
+                                  &wtox_research_counters, 0) != 0 ||
+        connection_data_handler(c, id, wtox_research_crypto_data,
+                                &wtox_research_counters, 0) != 0 ||
+        add_tcp_number_relay_connection(tcp_c, 0, 0) != 0) return -4;
+    return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_crypto_status_get(uint32_t out[4]) {
+    if (!wtox_research_tox || wtox_research_crypto_id < 0 || !out) return -1;
+    out[0] = wtox_research_crypto_online ? 1 : 0;
+    out[1] = wtox_research_crypto_connects;
+    out[2] = wtox_research_crypto_disconnects;
+    TCP_Connections *tcp_c = nc_get_tcp_c(wtox_research_tox->m->net_crypto);
+    out[3] = tcp_connection_to_online_tcp_relays(tcp_c, 0);
+    return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_crypto_send(const uint8_t *payload, size_t length) {
+    if (!wtox_research_tox || wtox_research_crypto_id != 0 ||
+        !wtox_research_crypto_online || !payload || length == 0 ||
+        length >= WTOX_RESEARCH_ROUTE_MAX) return -1;
+    uint8_t packet[WTOX_RESEARCH_ROUTE_MAX] = {0};
+    packet[0] = PACKET_ID_RANGE_LOSSLESS_CUSTOM_START;
+    memcpy(packet + 1, payload, length);
+    const int64_t id = write_cryptpacket(wtox_research_tox->m->net_crypto,
+                          wtox_research_crypto_id, packet,
+                          (uint16_t)(length + 1), false);
+    sodium_memzero(packet, sizeof(packet));
+    return id >= 0 ? 0 : -2;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_crypto_recv(uint8_t *out, size_t capacity) {
+    if (!wtox_research_tox || wtox_research_crypto_id != 0 || !out ||
+        capacity < WTOX_RESEARCH_ROUTE_MAX) return -1;
+    if (!wtox_research_crypto_rx_len) return 0;
+    const int n = wtox_research_crypto_rx_len;
+    memcpy(out, wtox_research_crypto_rx, n);
+    sodium_memzero(wtox_research_crypto_rx, sizeof(wtox_research_crypto_rx));
+    wtox_research_crypto_rx_len = 0;
+    return n;
 }

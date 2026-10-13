@@ -19,6 +19,7 @@ function fromHex(value) {
     parseInt(value.slice(i * 2, i * 2 + 2), 16));
 }
 let h, role, timer, phase = "new", started = false, terminated = false;
+let cryptoMode = false;
 function announce(type, extra = {}) {
   self.postMessage({ type, role, ...extra });
 }
@@ -35,15 +36,24 @@ function tick() {
     h.iterate();
     if (phase === "connecting" && h.connectedRelays() === 1) {
       phase = "ready";
-      announce("READY", { publicKey: hex(h.dhtPublicKey()) });
+      announce("READY", { publicKey: hex(h.dhtPublicKey()),
+        cryptoPublicKey: cryptoMode ? hex(h.netCryptoPublicKey()) : null });
     }
-    if (phase === "routing" && h.routeOnlineCount() === 1) {
-      h.enableRouteCapture();
-      phase = "routed";
-      announce("ROUTED");
+    if (phase === "routing") {
+      if (cryptoMode) {
+        const state = h.netCryptoState();
+        if (state.online === 1 && state.routes === 1) {
+          phase = "routed";
+          announce("ROUTED", { cryptoOnline: true });
+        }
+      } else if (h.routeOnlineCount() === 1) {
+        h.enableRouteCapture();
+        phase = "routed";
+        announce("ROUTED");
+      }
     }
     if (phase === "routed" || phase === "sent") {
-      const packet = h.takeRoutePayload();
+      const packet = cryptoMode ? h.takeNetCryptoPayload() : h.takeRoutePayload();
       if (packet) {
         phase = "received";
         announce("RECEIVED", { bytes: Array.from(packet) });
@@ -66,6 +76,8 @@ self.addEventListener("message", async ({data}) => {
       }
       started = true;
       role = data.role;
+      if (data.mode !== "raw" && data.mode !== "crypto") throw Error("invalid_dual_mode");
+      cryptoMode = data.mode === "crypto";
       const response = await fetch("/__wtox_dual_public", {
         credentials: "omit", cache: "no-store", redirect: "error"
       });
@@ -80,10 +92,15 @@ self.addEventListener("message", async ({data}) => {
       timer = setInterval(tick, 15);
       tick();
     } else if (action === "ROUTE" && phase === "ready") {
-      h.registerSyntheticRoute(fromHex(data?.peerPublicKey));
+      if (cryptoMode)
+        h.beginNetCrypto(fromHex(data?.peerCryptoPublicKey),
+                         fromHex(data?.peerPublicKey));
+      else
+        h.registerSyntheticRoute(fromHex(data?.peerPublicKey));
       phase = "routing";
     } else if (action === "SEND" && phase === "routed") {
-      h.sendRoutePayload(PAYLOAD[role]);
+      if (cryptoMode) h.sendNetCryptoPayload(PAYLOAD[role]);
+      else h.sendRoutePayload(PAYLOAD[role]);
       phase = "sent";
       announce("SENT");
     } else if (action === "STOP" && started) {

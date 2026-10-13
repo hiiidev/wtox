@@ -50,9 +50,7 @@ function tunnelFrame(bytes) {
   Buffer.from(bytes).copy(b, 6);
   return b;
 }
-test("two isolated Chromium WASM Toxcore clients route binary payloads through an independently keyed TCP Relay", {
-  timeout: 105000
-}, async () => {
+async function checkIndependentClients(mode) {
   assert.ok(existsSync(join(base, "dist/tox_identity.wasm")), "real compiled WASM required");
   const relay = nacl.box.keyPair();
   const sessions = new Map();
@@ -290,7 +288,7 @@ test("two isolated Chromium WASM Toxcore clients route binary payloads through a
       args:["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"]});
     const page = await browser.newPage(), pageErrors = [];
     page.on("pageerror", e => pageErrors.push(String(e.message).slice(0,110)));
-    await page.goto(origin + "/tests/relay-dual.html", {waitUntil:"load"});
+    await page.goto(origin + "/tests/relay-dual.html?mode=" + mode, {waitUntil:"load"});
     await page.waitForFunction(() =>
       document.querySelector("#result")?.dataset.state !== "pending",
       {timeout:65000});
@@ -301,8 +299,13 @@ test("two isolated Chromium WASM Toxcore clients route binary payloads through a
     assert.equal(metrics.authenticated,2,"two distinct original Tox TCP hellos");
     assert.equal(metrics.routeRequests,2,"two reciprocal native routing requests");
     assert.equal(metrics.notifications,2,"both native routes connected");
-    assert.equal(metrics.forwardAtoB,1,"A payload forwarded to B, not echoed");
-    assert.equal(metrics.forwardBtoA,1,"B payload forwarded to A, not echoed");
+    if (mode === "raw") {
+      assert.equal(metrics.forwardAtoB,1,"A payload forwarded to B, not echoed");
+      assert.equal(metrics.forwardBtoA,1,"B payload forwarded to A, not echoed");
+    } else {
+      assert.ok(metrics.forwardAtoB >= 3, "native Net_Crypto A must exchange multiple E2E packets");
+      assert.ok(metrics.forwardBtoA >= 3, "native Net_Crypto B must exchange multiple E2E packets");
+    }
     assert.equal(metrics.rejected,0,"no protocol-invalid packets");
   } finally {
     if(browser)await browser.close();
@@ -313,4 +316,9 @@ test("two isolated Chromium WASM Toxcore clients route binary payloads through a
     await new Promise(resolve=>tcpServer.close(resolve));
     relay.secretKey.fill(0);
   }
-});
+}
+for (const mode of ["raw", "crypto"]) {
+  test("two original Chromium Toxcore clients: " + mode +
+       " reciprocal Relay communication", {timeout:105000}, async () =>
+       checkIndependentClients(mode));
+}

@@ -15,7 +15,9 @@ const required = ["_malloc", "_free", "_wtox_research_start",
   "_wtox_research_add_route", "_wtox_research_route_online_count",
   "_wtox_research_enable_route_capture", "_wtox_research_send_route_packet",
   "_wtox_research_take_route_packet", "_wtox_research_get_dht_public",
-  "_wtox_research_connected_relays"];
+  "_wtox_research_connected_relays", "_wtox_research_get_crypto_public",
+  "_wtox_research_begin_crypto", "_wtox_research_crypto_status_get",
+  "_wtox_research_crypto_send", "_wtox_research_crypto_recv"];
 const statsNames = ["sockets", "connects", "sends", "recvs", "closes",
   "txPending", "rxBuffered", "socketState", "toxConnection"];
 
@@ -97,6 +99,61 @@ export class RelayResearchHarness {
   connectedRelays() {
     if (!this.#started) throw new Error("relay_research_not_started");
     return this.#module._wtox_research_connected_relays();
+  }
+  /** Original native Net_Crypto public key, not the DHT route key. */
+  netCryptoPublicKey() {
+    if (!this.#started) throw Error("relay_research_not_started");
+    const m=this.#module, p=m._malloc(32);
+    if (!p) throw Error("relay_research_out_of_memory");
+    try {
+      if (m._wtox_research_get_crypto_public(p,32)!==0) throw Error("crypto_public_failed");
+      return m.HEAPU8.slice(p,p+32);
+    } finally {m.HEAPU8.fill(0,p,p+32);m._free(p);}
+  }
+  beginNetCrypto(realKey,dhtKey) {
+    if (!this.#started) throw Error("relay_research_not_started");
+    if (![realKey,dhtKey].every(k=>k instanceof Uint8Array&&k.length===32))
+      throw TypeError("invalid_net_crypto_peer_keys");
+    const m=this.#module,p=m._malloc(64);
+    if (!p) throw Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(realKey,p);m.HEAPU8.set(dhtKey,p+32);
+      const code=m._wtox_research_begin_crypto(p,p+32,32);
+      if(code!==0)throw Error("begin_net_crypto_failed:"+code);
+    } finally {m.HEAPU8.fill(0,p,p+64);m._free(p);}
+  }
+  netCryptoState() {
+    if (!this.#started) throw Error("relay_research_not_started");
+    const m=this.#module,p=m._malloc(16);
+    if (!p) throw Error("relay_research_out_of_memory");
+    try {
+      if(m._wtox_research_crypto_status_get(p)!==0)throw Error("net_crypto_state_failed");
+      const v=new DataView(m.HEAPU8.buffer);
+      return {online:v.getUint32(p,true),connects:v.getUint32(p+4,true),
+        disconnects:v.getUint32(p+8,true),routes:v.getUint32(p+12,true)};
+    } finally {m.HEAPU8.fill(0,p,p+16);m._free(p);}
+  }
+  sendNetCryptoPayload(bytes) {
+    if (!this.#started) throw Error("relay_research_not_started");
+    if (!(bytes instanceof Uint8Array)||bytes.length<1||bytes.length>=128)
+      throw TypeError("invalid_net_crypto_payload");
+    const m=this.#module,p=m._malloc(bytes.length);
+    if(!p)throw Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(bytes,p);
+      const c=m._wtox_research_crypto_send(p,bytes.length);
+      if(c!==0)throw Error("net_crypto_send_failed:"+c);
+    } finally {m.HEAPU8.fill(0,p,p+bytes.length);m._free(p);}
+  }
+  takeNetCryptoPayload() {
+    if (!this.#started) throw Error("relay_research_not_started");
+    const m=this.#module,p=m._malloc(128);
+    if(!p)throw Error("relay_research_out_of_memory");
+    try {
+      const n=m._wtox_research_crypto_recv(p,128);
+      if(n<0||n>128)throw Error("net_crypto_receive_failed:"+n);
+      return n?m.HEAPU8.slice(p,p+n):null;
+    } finally {m.HEAPU8.fill(0,p,p+128);m._free(p);}
   }
   /** Test-only one-target route registration via ORIGINAL c-toxcore. */
   registerSyntheticRoute(peerPublicKey) {

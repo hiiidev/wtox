@@ -400,3 +400,26 @@ Tox friends. Both research clients deliberately replace the normal
 the routed payload, which is **not** end-to-end encrypted as friend text.
 No qTox/aTox interoperability, DHT discovery, user-facing login, production
 gateway or remote TCP network is enabled or implied.
+
+## Twentieth increment: original Net_Crypto end-to-end connection gate
+
+A separate `crypto` mode of the localhost dual-Chromium fixture creates
+two independent original c-toxcore `Net_Crypto` instances. Both clients
+publish only their native DHT and real public keys to the test orchestrator,
+authenticate to the Node-owned TCP Relay, then invoke original
+`new_crypto_connection` and register reciprocal TCP routes.
+
+Unlike the prior transport-only binary proof, the original Net_Crypto TCP
+data callback remains installed. The research runner observes original
+connection-status callbacks and only allows lossless
+`write_cryptpacket` payloads after authenticated peer-to-peer crypto status.
+The test-owned Node Relay decrypts the outer transport layer to route packets
+but does **not** receive either client's ephemeral Net_Crypto secret key or
+decrypt the inner cookie/handshake/session payload. Each native client's
+Net_Crypto data callback must receive the other client's binary data.
+
+**This is an isolated low-level E2E research gate**, not the public Tox
+friend API: `tox_friend_send_message`, `tox_friend_message`, friend
+acceptance, restart/persistence and qTox/aTox online interoperation remain
+separate acceptance criteria. Original online friend status is not claimed,
+and no production Worker or VPS is modified.
