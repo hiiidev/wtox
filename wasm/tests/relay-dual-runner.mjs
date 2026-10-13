@@ -50,8 +50,8 @@ function spawn(role) {
 (async () => {
   const a = spawn("a"), b = spawn("b");
   instances.set("a", a); instances.set("b", b);
+  const all = [a, b];
   try {
-    const all = [a, b];
     for (const c of all) c.post("START", {role:c.role});
     const [ar, br] = await Promise.all(all.map(c => c.wait("READY")));
     if (!/^[0-9a-f]{64}$/.test(ar.publicKey) ||
