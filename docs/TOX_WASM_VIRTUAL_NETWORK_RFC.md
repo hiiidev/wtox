@@ -191,3 +191,19 @@ The synthetic response is constructed inside browser WASM and uploaded as
 **ciphertext-only** to a same-origin, loopback test fixture. This proves
 transport scheduling and native validation but expressly does **not**
 constitute a remotely independently authenticated Tox Relay handshake.
+
+## Independent cryptographic peer gate
+
+After the browser-generated synthetic-response test, a separate
+loopback Node TCP process must now own a newly generated Relay
+long-term X25519 secret, publish only its matching public key, decrypt
+the original WASM Tox TCP client's 128-byte authenticated hello, and
+send its own 96-byte response over WebSocket/TCP. Positive and negative
+tests cover valid, fragmented, wrong-secret, and tampered-MAC responses.
+No Node-owned private key, user identity, savedata or decryption key is
+transferred to the browser; no client secret is sent to Node beyond the
+public-key-encrypted original protocol bytes.
+
+This remains a **minimal independent handshaking test fixture**,
+not a production Tox relay daemon; full routing and genuine qTox/aTox
+peer interoperability are separate future acceptance gates.

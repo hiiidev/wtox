@@ -10,6 +10,7 @@ static Network wtox_research_network = {0};
 static Tox_System wtox_research_system = {0};
 static uint8_t wtox_research_relay_secret[CRYPTO_SECRET_KEY_SIZE] = {0};
 static bool wtox_research_replied = false;
+static bool wtox_research_external_relay = false;
 
 EMSCRIPTEN_KEEPALIVE
 void wtox_research_stop(void) {
@@ -23,11 +24,12 @@ void wtox_research_stop(void) {
     wtox_research_network.funcs = NULL;
     wtox_research_network.obj = NULL;
     wtox_research_replied = false;
+    wtox_research_external_relay = false;
     wtox_vtcp_close();
 }
 
 EMSCRIPTEN_KEEPALIVE
-int wtox_research_start(void) {
+static int wtox_research_start_internal(const uint8_t *external_key) {
     if (wtox_live || wtox_research_tox || sodium_init() < 0) return -1;
     wtox_research_stop();
     wtox_research_network.funcs = &wtox_probe_funcs;
@@ -56,8 +58,14 @@ int wtox_research_start(void) {
         return -3;
     }
     uint8_t public_key[CRYPTO_PUBLIC_KEY_SIZE] = {0};
-    randombytes_buf(wtox_research_relay_secret, sizeof(wtox_research_relay_secret));
-    crypto_derive_public_key(public_key, wtox_research_relay_secret);
+    if (external_key) {
+        /* Real fixture's private key is Node-owned and is never imported. */
+        memcpy(public_key, external_key, CRYPTO_PUBLIC_KEY_SIZE);
+        wtox_research_external_relay = true;
+    } else {
+        randombytes_buf(wtox_research_relay_secret, sizeof(wtox_research_relay_secret));
+        crypto_derive_public_key(public_key, wtox_research_relay_secret);
+    }
     Tox_Err_Bootstrap error = TOX_ERR_BOOTSTRAP_OK;
     const bool added = tox_add_tcp_relay(
         wtox_research_tox, "198.51.100.7", 33445, public_key, &error);
@@ -70,6 +78,17 @@ int wtox_research_start(void) {
         return -4;
     }
     return 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_start(void) {
+    return wtox_research_start_internal(NULL);
+}
+/* Strict public-key-only interface. Key bytes never include private material. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_start_with_relay_public_key(const uint8_t *key, size_t len) {
+    if (!key || len != CRYPTO_PUBLIC_KEY_SIZE) return -1;
+    return wtox_research_start_internal(key);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -101,7 +120,8 @@ int wtox_research_stats(uint32_t out[9]) {
 EMSCRIPTEN_KEEPALIVE
 int wtox_research_make_reply(uint32_t mode, uint8_t reply[TCP_SERVER_HANDSHAKE_SIZE],
                              size_t capacity) {
-    if (!wtox_research_tox || wtox_research_replied || mode > 2 || !reply ||
+    if (!wtox_research_tox || wtox_research_replied ||
+        wtox_research_external_relay || mode > 2 || !reply ||
         capacity < TCP_SERVER_HANDSHAKE_SIZE ||
         wtox_vtcp_state() != WTOX_VTCP_OPEN ||
         wtox_vtcp_tx_pending() < TCP_CLIENT_HANDSHAKE_SIZE) return -1;

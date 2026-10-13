@@ -10,6 +10,7 @@ import { NativeVirtualTcp, VirtualTcpState } from "./native-virtual-tcp.mjs";
 
 const required = ["_malloc", "_free", "_wtox_research_start",
   "_wtox_research_tick", "_wtox_research_stats",
+  "_wtox_research_start_with_relay_public_key",
   "_wtox_research_make_reply", "_wtox_research_stop"];
 const statsNames = ["sockets", "connects", "sends", "recvs", "closes",
   "txPending", "rxBuffered", "socketState", "toxConnection"];
@@ -35,6 +36,29 @@ export class RelayResearchHarness {
     if (this.state !== VirtualTcpState.CONNECTING) {
       this.close();
       throw new Error("relay_research_no_native_connect");
+    }
+  }
+  /** Use only the independent localhost Relay's PUBLIC key; never a secret. */
+  startWithRelayPublicKey(publicKey) {
+    if (this.#started) throw new Error("relay_research_already_started");
+    if (!(publicKey instanceof Uint8Array) || publicKey.length !== 32) {
+      throw new TypeError("invalid_relay_public_key");
+    }
+    const m = this.#module;
+    const ptr = m._malloc(32);
+    if (!ptr) throw new Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(publicKey, ptr);
+      const code = m._wtox_research_start_with_relay_public_key(ptr, 32);
+      if (code !== 0) throw new Error("relay_research_start_failed:" + code);
+      this.#started = true;
+      if (this.state !== VirtualTcpState.CONNECTING) {
+        this.close();
+        throw new Error("relay_research_no_native_connect");
+      }
+    } finally {
+      m.HEAPU8.fill(0, ptr, ptr + 32);
+      m._free(ptr);
     }
   }
   async attach(url, token, options = {}) {

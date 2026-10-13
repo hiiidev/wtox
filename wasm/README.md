@@ -275,3 +275,31 @@ fixed route and fixture token, and **never dials arbitrary destinations**.
 private key and cannot prove a live remote Relay accepted a connection.
 It is research instrumentation, NOT a production gateway or general
 proxy. The normal identity Worker and production site do not import it.
+
+## Fifteenth increment: independently keyed Node TCP handshake fixture
+
+`tests/relay-independent.test.mjs` creates an **independent ephemeral
+Curve25519 keypair in Node**, keeps its long-term relay secret in Node
+memory, and publishes **only the public key** to a single-use Chromium
+Dedicated Worker. The pinned native Toxcore client is bootstrapped with
+that public key via `wtox_research_start_with_relay_public_key`. Unlike
+the prior synthetic echo fixture, **the Node TCP endpoint itself decrypts
+the native Toxcore client hello**, using the standard NaCl
+X25519/XSalsa20-Poly1305 `crypto_box` primitives, and returns a freshly
+authenticated native-format 96-byte Relay handshake response.
+
+The browser's Toxcore verifies the response across the real localhost
+WebSocket → Node TCP → WebSocket path, with four independent tests:
+successful response, TCP-fragmented successful response, an incorrect
+server secret, and a tampered MAC. The latter two must close the native
+connection. Native client Tox keys stay in browser WASM; the Node server
+private key stays in Node and is zeroized after the test. The test also
+asserts that Node independently decrypts all four original client hellos.
+
+**This is stronger than browser-precomputed ciphertext**, but it is still
+a minimal research-only cryptographic TCP handshake fixture, not the
+full original Tox TCP Relay server state machine or a public relay.
+It doesn't prove DHT, relay routing, peer messaging, or qTox/aTox
+interoperability. All listeners and TCP destinations are restricted to
+`127.0.0.1`; the normal identity Worker and production server remain
+unchanged. The fake Tox destination (`198.51.100.7`) is never dialed.
