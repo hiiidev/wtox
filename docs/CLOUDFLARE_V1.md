@@ -77,3 +77,19 @@ via branch-specific CI. No existing Python storage is migrated.
 Next gate: build an emscripten c-toxcore WASM proof and test real TCP-only
 Tox relay interoperability against native qTox/aTox. Until then there is
 no legitimate claim of browser-side native Tox compatibility.
+
+## Experimental TCP relay dialers (internal only)
+
+`packages/protocol/src/relay-policy.ts` validates exact, operator-supplied
+Tox TCP relay endpoints (public IPv4 literal + port + native Tox public key).
+No hostname resolution or unapproved destination is permitted. Special-use
+and private address ranges are rejected to reduce SSRF surface; an explicit
+operator allowlist is still required. Do not use a publicly routable relay
+merely because its address passes syntax validation.
+
+`cloudflare/src/tcp-relay.ts` uses Cloudflare outbound TCP; Node has an
+equivalent internal dialer. Neither is wired into a public WebSocket route.
+They do **not** yet implement binary WSS framing, browser virtual sockets,
+Tox key pinning, or connection-level quotas. A real qTox/aTox interoperability
+test remains mandatory. Until authorization and quotas are implemented,
+the public relay API MUST continue returning HTTP 501.
