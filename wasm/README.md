@@ -187,3 +187,13 @@ responds, validates a key or delivers messages. Internal Toxcore socket
 life-cycle, readiness/backpressure handling, real handshake and multi-relay
 support are still pending. The default persistent browser Tox instance
 continues to be offline-only.
+
+### Gate before any live transport
+
+CI must verify the *internal-relay* probe on the exact pinned WASM:
+original Toxcore's own TCP code must create the virtual socket, request
+nonblocking connect and write handshake bytes into the capped native TX
+queue. A successful result is only an **offline synthetic relay-dial gate**,
+not proof of a completed, authenticated Tox relay handshake. No Cloudflare
+Worker, browser identity traffic, public TCP proxy or qTox messaging should
+be enabled on the strength of that test alone.
