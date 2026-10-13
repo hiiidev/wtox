@@ -214,7 +214,7 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
       [...document.querySelectorAll("#messages li")].some(el=>
         el.textContent.includes("Friend: wTox native original friend reply")),
       {timeout:30000});
-    const bubbles=await page.$eval("#messages li",all=>
+    const bubbles=await page.$$eval("#messages li",all=>
       all.map(el=>({message:el.textContent,kind:el.className})));
     assert.ok(bubbles.some(x=>x.kind==="me" &&
       x.message==="You: wTox browser original friend text"),
