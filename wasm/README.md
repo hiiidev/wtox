@@ -704,3 +704,39 @@ fake an online friend or inject DHT identity.
 This test is a LOCAL isolated research feature, not public Tox network
 availability and not qTox/aTox UI interoperability. `main`, production
 VPS, and Cloudflare stay untouched.
+
+## Stage 26 (opt-in): interactive native WASM localhost chat UI
+
+The independent tests/local-chat.html page is a **standalone research
+prototype**, not the React/Python production login or the public website.
+It controls a dedicated browser/local-chat.worker.mjs with actual
+c-toxcore UDP+DHT+Onion calls through the earlier, bounded WebSocket/OS UDP
+loopback fixture. Neither native identity secret nor Tox savedata leaves the
+browser WASM. All traffic remains confined to GitHub Actions localhost and
+the previously permitted three native test ports.
+
+User operations are real: the page shows an ephemeral native Tox ID after
+its independently authenticated DHT bootstrap, accepts a full 76-character
+peer Tox ID, calls original tox_friend_add, shows "request queued" without
+claiming delivery, then enables text sending **only after original
+tox_friend_get_connection_status reports an online friend**. Messages
+come from original tox_callback_friend_message through the WASM bridge.
+A successful send means accepted by online Toxcore, **not remote receipt**.
+No user-entered content is inserted into HTML markup; DOM uses textContent.
+
+tests/local-chat.test.mjs runs a real Chromium browser against an original
+independent Linux-native first-contact Tox receiver. Puppeteer types the
+receiver's actual Tox ID into the form, clicks Add Friend, waits for
+native online status, types an outgoing message and asserts that a genuine
+native reply reaches the visible DOM. The test also verifies offline send
+buttons are disabled and the native receiver logs a real friend request
+with the correct browser public key. The Node test only transports frames,
+not Tox protocol content.
+
+**Deliberate limitations:** the UI is not included in the production
+React bundle or served by the VPS. It uses a disposable identity, a
+fixture-only local DHT bootstrap, one friend and messages up to 128 bytes.
+It has **no encrypted identity persistence, reconnect/restart workflow,
+attachments, public DHT connectivity or unmodified qTox/aTox UI
+interoperability** yet. Those require separate work. Nothing here deploys
+Cloudflare, modifies main, or accesses the production VPS.

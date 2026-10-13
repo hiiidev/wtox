@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>wTox Native WASM — isolated localhost chat</title>
+<link rel="stylesheet" href="./local-chat.css">
+</head>
+<body>
+<main>
+<header>
+  <div><h1>wTox native browser chat</h1>
+  <p class="muted">Isolated CI research demo · Original Toxcore WASM · localhost only</p></div>
+  <span id="network-status" class="status" role="status">Connecting to local DHT…</span>
+</header>
+<section class="panel" aria-labelledby="identity-title">
+  <h2 id="identity-title">This browser identity</h2>
+  <p class="muted">Ephemeral identity — not saved or shared with the production wTox account.</p>
+  <code id="my-tox-id" data-state="pending">Waiting for native Toxcore…</code>
+  <div class="stack"><button id="disconnect" type="button" class="secondary">Disconnect test session</button></div>
+</section>
+<section class="panel" aria-labelledby="friend-title">
+  <h2 id="friend-title">Add a native Tox friend</h2>
+  <p class="muted">The request is only <strong>queued</strong> until the remote Toxcore receives and accepts it.</p>
+  <form id="friend-form">
+    <label for="friend-id">Full 76-character Tox ID</label>
+    <input id="friend-id" name="friend-id" type="text" maxlength="76" required
+           pattern="[0-9A-Fa-f]{76}" spellcheck="false" autocomplete="off"
+           aria-describedby="friend-help">
+    <p id="friend-help" class="muted">Enter a test peer's full Tox ID. Do not use private keys.</p>
+    <label for="request-text">Request message</label>
+    <input id="request-text" type="text" maxlength="128"
+           value="wTox stage25e original Onion browser request" required>
+    <div class="stack"><button id="request-button" type="submit" disabled>Send friend request</button>
+      <span id="friend-status" class="status" role="status">No friend added</span></div>
+  </form>
+</section>
+<section class="panel" aria-labelledby="chat-title">
+  <h2 id="chat-title">Live native Tox messages</h2>
+  <ul id="messages" aria-label="Native Tox messages" aria-live="polite"></ul>
+  <form id="message-form">
+    <label for="message-text">Message (maximum 128 UTF-8 bytes)</label>
+    <textarea id="message-text" required maxlength="128" placeholder="Write a message" disabled></textarea>
+    <div class="stack"><button id="send-button" type="submit" disabled>Send text</button></div>
+  </form>
+  <p id="feedback" class="muted" role="status" aria-live="polite"></p>
+</section>
+</main>
+<script type="module" src="./local-chat-ui.mjs"></script>
+</body></html>
