@@ -5,6 +5,10 @@
   "scripts": {
     "build": "bash scripts/build.sh",
     "test:unit": "node --test tests/unit.test.mjs",
-    "test:wasm": "node --test tests/wasm-smoke.test.mjs"
+    "test:wasm": "node --test tests/wasm-smoke.test.mjs",
+    "test:browser": "node --test tests/browser-smoke.test.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "24.20.0"
   }
 }

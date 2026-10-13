@@ -26,6 +26,7 @@ cd wasm
 npm run test:unit
 npm run build
 npm run test:wasm
+npm run test:browser  # requires npm install + system Chrome/Chromium
 ```
 
 The script checks exact upstream commits:
@@ -56,3 +57,12 @@ Normal browsers have no native socket APIs. The follow-up is a separately
 audited virtual-socket adapter plus WSS network bridge and native qTox/aTox
 friend request/text tests. Until then, neither the Cloudflare nor Node API
 exposes relay routes publicly; no private key moves to a server.
+
+## Browser gate
+
+The Chromium gate launches a **real dedicated browser worker** loading the
+compiled Emscripten ES module and .wasm via a loopback HTTP server with a
+strict CSP. It checks encrypted backup creation, same-ID restoration and
+wrong-password rejection. It never contacts Cloudflare or a Tox relay.
+This does not claim network/Tox interoperability and is not integrated into
+the existing React login.
