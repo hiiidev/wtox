@@ -57,3 +57,47 @@ test("real Toxcore WASM retains a live session, iterates and restores nickname f
   session.close();
   encryptedBackup.fill(0);
 });
+
+
+test("native friend request persists in encrypted savedata, and offline send fails closed", async () => {
+  const { default: createModule } = await import("../dist/tox_identity.mjs");
+  const m = await createModule();
+  const identity = new BrowserToxIdentity(m);
+  const password = "native-tox-friend-persistence-test-passphrase";
+  // Distinct genuine Tox identity, never a fabricated 38-byte ID.
+  const peer = await identity.createEncryptedBackup(password);
+  const session = new BrowserToxSession(m);
+  try {
+    const own = session.startNew();
+    assert.notEqual(own.toxId, peer.toxId);
+    const number = session.addFriend(peer.toxId, "Hello from browser WASM");
+    assert.equal(Number.isInteger(number), true);
+    assert.deepEqual(session.friends(), [{
+      number, publicKey: peer.toxId.slice(0, 64)
+    }]);
+    assert.throws(() => session.addFriend(peer.toxId, "again"), /tox_friend_add_failed/);
+    assert.throws(() => session.addFriend(own.toxId, "self"), /tox_friend_add_failed/);
+    assert.throws(() => session.addFriend("bogus", "test"), /invalid_tox_identifier/);
+    assert.throws(() => session.addFriend(peer.toxId, ""), /invalid_friend_request_length/);
+    assert.throws(() => session.sendText(number, "Offline: must not fake success"), /tox_friend_send_failed/);
+    const backup = session.exportEncrypted(password).encryptedBackup;
+    session.close();
+    const restored = session.restoreEncrypted(backup, password);
+    assert.equal(restored.toxId, own.toxId);
+    assert.deepEqual(session.friends(), [{
+      number, publicKey: peer.toxId.slice(0, 64)
+    }]);
+    session.deleteFriend(number);
+    assert.deepEqual(session.friends(), []);
+    assert.throws(() => session.deleteFriend(number), /tox_friend_delete_failed/);
+    // An explicitly trusted public key may be accepted without an outbound
+    // friend request. Production UI must require the user's consent.
+    const accepted = session.acceptFriend(peer.toxId.slice(0, 64));
+    assert.equal(session.friends().some(f => f.number === accepted), true);
+    session.deleteFriend(accepted);
+    backup.fill(0);
+  } finally {
+    session.close();
+    peer.encryptedBackup.fill(0);
+  }
+});

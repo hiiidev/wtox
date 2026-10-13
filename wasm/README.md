@@ -87,3 +87,20 @@ provides no working TCP virtual socket / bootstrap nodes. Iteration
 alone does not imply peer connectivity. The old Python chat service and
 production React login remain untouched. Never advertise this as a
 native qTox/aTox-compatible browser messenger until real-network tests pass.
+
+## Sixth increment: native friend-list and outbound text interface
+
+The singleton WASM Tox instance now exposes original `tox_friend_add`,
+`tox_friend_add_norequest`, `tox_self_get_friend_list`,
+`tox_friend_get_public_key`, `tox_friend_delete` and
+`tox_friend_send_message`. The browser wrapper validates Tox address/key
+hex lengths, byte-bounds friend requests (921) and messages (1372), and
+copies buffers only through the isolated WASM Worker.
+
+Test gates create **two real Tox identities**, add a genuine friend offline,
+export encrypted `.tox`, close, reopen, and verify the friend public key
+survives. Browser Chromium tests repeat the flow and assert that a message
+sent while offline **throws an error rather than claiming delivery**.
+`SESSION_ACCEPT_FRIEND` requires explicit user acceptance in the future
+UI; the raw API is only for research. Incoming callbacks and native online
+messaging are still unimplemented; no claim of qTox/aTox networking.

@@ -8,7 +8,27 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const required = ["_malloc", "_free", ...["start_new", "restore_encrypted", "savedata_size",
   "export_encrypted", "set_name", "get_name", "iterate", "iteration_interval",
-  "close"].map(k => "_wtox_session_" + k)];
+  "close", "friend_add", "friend_accept", "friend_count", "friend_list",
+  "friend_public_key", "friend_delete", "send_text"].map(k => "_wtox_session_" + k)];
+
+const ADDRESS_HEX = /^[0-9A-Fa-f]{76}$/;
+const KEY_HEX = /^[0-9A-Fa-f]{64}$/;
+function parseHex(value, pattern) {
+  if (typeof value !== "string" || !pattern.test(value)) {
+    throw new TypeError("invalid_tox_identifier");
+  }
+  const result = new Uint8Array(value.length / 2);
+  for (let i = 0; i < result.length; i++) {
+    result[i] = parseInt(value.slice(2 * i, 2 * i + 2), 16);
+  }
+  return result;
+}
+function friendNumber(number) {
+  if (!Number.isInteger(number) || number < 0 || number > 0xffffffff) {
+    throw new TypeError("invalid_friend_number");
+  }
+  return number;
+}
 const hex = data => Array.from(data, n => n.toString(16).padStart(2, "0")).join("").toUpperCase();
 function allocate(m, bytes) {
   const size = Math.max(1, bytes.byteLength);
@@ -149,6 +169,101 @@ export class BrowserToxSession {
   iterate() {
     this.#state(true);
     if (this.#m._wtox_session_iterate() !== 0) throw new Error("tox_iterate_failed");
+  }
+
+  addFriend(toxId, request = "Hello from wTox") {
+    this.#state(true);
+    const address = parseHex(toxId, ADDRESS_HEX);
+    if (typeof request !== "string") throw new TypeError("invalid_friend_request");
+    const text = encoder.encode(request);
+    if (text.length < 1 || text.length > 921) {
+      text.fill(0);
+      throw new RangeError("invalid_friend_request_length");
+    }
+    const m = this.#m;
+    let a, t, out;
+    try {
+      a = allocate(m, address);
+      t = allocate(m, text);
+      out = allocate(m, new Uint8Array(4));
+      const code = m._wtox_session_friend_add(a.ptr, t.ptr, text.length, out.ptr);
+      if (code !== 0) throw new Error("tox_friend_add_failed:" + code);
+      return new DataView(m.HEAPU8.buffer).getUint32(out.ptr, true);
+    } finally {
+      text.fill(0);
+      for (const b of [out, t, a]) wipeFree(m, b);
+    }
+  }
+  /** Only use after explicit user acceptance of an incoming request. */
+  acceptFriend(publicKey) {
+    this.#state(true);
+    const bytes = parseHex(publicKey, KEY_HEX);
+    const m = this.#m;
+    let key, out;
+    try {
+      key = allocate(m, bytes);
+      out = allocate(m, new Uint8Array(4));
+      const code = m._wtox_session_friend_accept(key.ptr, out.ptr);
+      if (code !== 0) throw new Error("tox_friend_accept_failed:" + code);
+      return new DataView(m.HEAPU8.buffer).getUint32(out.ptr, true);
+    } finally { for (const b of [out, key]) wipeFree(m, b); }
+  }
+  friends() {
+    this.#state(true);
+    const m = this.#m;
+    const count = m._wtox_session_friend_count();
+    if (!Number.isInteger(count) || count < 0 || count > 512) {
+      throw new Error("invalid_tox_friend_count");
+    }
+    if (count === 0) return [];
+    const list = allocate(m, new Uint8Array(count * 4));
+    let pub;
+    try {
+      const returned = m._wtox_session_friend_list(list.ptr, count);
+      if (returned !== count) throw new Error("tox_friend_list_failed");
+      pub = allocate(m, new Uint8Array(32));
+      const view = new DataView(m.HEAPU8.buffer);
+      const result = [];
+      for (let i = 0; i < count; i++) {
+        const number = view.getUint32(list.ptr + 4 * i, true);
+        if (m._wtox_session_friend_public_key(number, pub.ptr) !== 0) {
+          throw new Error("tox_friend_get_public_key_failed");
+        }
+        result.push({
+          number,
+          publicKey: hex(m.HEAPU8.slice(pub.ptr, pub.ptr + 32))
+        });
+      }
+      return result;
+    } finally { for (const b of [pub, list]) wipeFree(m, b); }
+  }
+  deleteFriend(number) {
+    this.#state(true);
+    const code = this.#m._wtox_session_friend_delete(friendNumber(number));
+    if (code !== 0) throw new Error("tox_friend_delete_failed:" + code);
+  }
+  /** Fails natively when the friend is offline; NEVER claims delivery. */
+  sendText(number, message) {
+    this.#state(true);
+    friendNumber(number);
+    if (typeof message !== "string") throw new TypeError("invalid_message");
+    const bytes = encoder.encode(message);
+    if (bytes.length < 1 || bytes.length > 1372) {
+      bytes.fill(0);
+      throw new RangeError("invalid_message_length");
+    }
+    const m = this.#m;
+    let input, out;
+    try {
+      input = allocate(m, bytes);
+      out = allocate(m, new Uint8Array(4));
+      const code = m._wtox_session_send_text(number, input.ptr, bytes.length, out.ptr);
+      if (code !== 0) throw new Error("tox_friend_send_failed:" + code);
+      return new DataView(m.HEAPU8.buffer).getUint32(out.ptr, true);
+    } finally {
+      bytes.fill(0);
+      for (const b of [out, input]) wipeFree(m, b);
+    }
   }
   close() {
     if (!this.#active) return;

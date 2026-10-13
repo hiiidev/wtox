@@ -97,3 +97,15 @@ real Tox peer or private key is involved. Passing means the *browser
 transport* works, NOT that native c-toxcore is connected to that transport.
 
 The Node test job needs system Google Chrome/Chromium on its runner.
+
+## Browser WASM contact-state milestone (no server required)
+
+Original toxcore friend add/list/delete and text-send APIs are now exposed
+inside the Dedicated Worker. A test creates two original Tox IDs and checks
+native friend relationships survive an encrypted `.tox` export/import.
+**Sending while offline fails explicitly.** This is *not* evidence of Tox
+TCP interoperability; the virtual socket and bootstrap steps remain pending.
+
+Cloudflare staging deployment is paused. When the maintainer creates an
+isolated Worker in their own account, it can be tested separately without
+changing the `main` branch or production VPS.

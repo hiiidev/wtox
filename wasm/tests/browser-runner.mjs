@@ -65,6 +65,27 @@ async function smoke() {
   const nickname = "wTox 网页身份";
   const named = await rpc("SESSION_SET_NAME", { name: nickname });
   if (named.name !== nickname) throw Error("tox_live_name_failed");
+  // Native friend management works without connecting to a Tox peer.
+  const added = await rpc("SESSION_ADD_FRIEND", {
+    toxId: created.toxId,
+    request: "Hello from Chromium"
+  });
+  const contacts = await rpc("SESSION_LIST_FRIENDS", {});
+  if (!Number.isInteger(added.number) ||
+      contacts.friends.length !== 1 ||
+      contacts.friends[0].number !== added.number ||
+      contacts.friends[0].publicKey !== created.toxId.slice(0, 64)) {
+    throw Error("browser_friend_add_or_list_failed");
+  }
+  let blocked = false;
+  try {
+    await rpc("SESSION_SEND_TEXT", {
+      number: added.number, text: "offline must reject"
+    });
+  } catch (error) {
+    blocked = String(error.message).startsWith("tox_friend_send_failed");
+  }
+  if (!blocked) throw Error("offline_delivery_was_falsely_reported");
   const exported = await rpc("SESSION_EXPORT_ENCRYPTED", { password });
   if (!(exported.encryptedBackup instanceof Uint8Array) ||
       exported.encryptedBackup.length <= 80) throw Error("invalid_live_export");
@@ -85,6 +106,14 @@ async function smoke() {
   if (reopened.toxId !== active.toxId || readName.name !== nickname) {
     throw Error("live_tox_identity_not_restored");
   }
+  const restoredFriends = await rpc("SESSION_LIST_FRIENDS", {});
+  if (restoredFriends.friends.length !== 1 ||
+      restoredFriends.friends[0].publicKey !== created.toxId.slice(0, 64)) {
+    throw Error("native_friend_not_restored");
+  }
+  await rpc("SESSION_DELETE_FRIEND", { number: added.number });
+  const afterDelete = await rpc("SESSION_LIST_FRIENDS", {});
+  if (afterDelete.friends.length !== 0) throw Error("friend_delete_failed");
   await rpc("SESSION_CLOSE", {});
   exported.encryptedBackup.fill(0);
   result.dataset.state = "passed";

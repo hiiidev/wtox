@@ -70,6 +70,22 @@ self.addEventListener("message", async event => {
     } else if (message.action === "SESSION_EXPORT_ENCRYPTED") {
       const result = session.exportEncrypted(message.password);
       self.postMessage({ id: message.id, ok: true, ...result }, [result.encryptedBackup.buffer]);
+
+    } else if (message.action === "SESSION_ADD_FRIEND") {
+      const number = session.addFriend(message.toxId, message.request);
+      self.postMessage({ id: message.id, ok: true, number });
+    } else if (message.action === "SESSION_ACCEPT_FRIEND") {
+      const number = session.acceptFriend(message.publicKey);
+      self.postMessage({ id: message.id, ok: true, number });
+    } else if (message.action === "SESSION_LIST_FRIENDS") {
+      const friends = session.friends();
+      self.postMessage({ id: message.id, ok: true, friends });
+    } else if (message.action === "SESSION_DELETE_FRIEND") {
+      session.deleteFriend(message.number);
+      self.postMessage({ id: message.id, ok: true });
+    } else if (message.action === "SESSION_SEND_TEXT") {
+      const messageId = session.sendText(message.number, message.text);
+      self.postMessage({ id: message.id, ok: true, messageId });
     } else if (message.action === "SESSION_CLOSE") {
       stopPolling();
       session.close();

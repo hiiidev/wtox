@@ -94,3 +94,83 @@ EMSCRIPTEN_KEEPALIVE
 void wtox_session_close(void) {
     if (wtox_live) { tox_kill(wtox_live); wtox_live = NULL; }
 }
+
+
+/* Friend APIs preserve native Tox semantics and error handling.
+ * They do NOT bypass Toxcore's native encryption, nor imply online status.
+ * The 512-friend cap bounds host-managed snapshot allocations for this POC.
+ */
+#define WTOX_MAX_FRIENDS 512
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_session_friend_add(const uint8_t address[TOX_ADDRESS_SIZE],
+                            const uint8_t *message, size_t message_len,
+                            uint32_t *friend_number) {
+    if (!wtox_live || !address || !message || !friend_number ||
+        message_len == 0 || message_len > TOX_MAX_FRIEND_REQUEST_LENGTH)
+        return -1;
+    Tox_Err_Friend_Add err = TOX_ERR_FRIEND_ADD_OK;
+    Tox_Friend_Number number = tox_friend_add(wtox_live, address,
+                                             message, message_len, &err);
+    if (err != TOX_ERR_FRIEND_ADD_OK) return -(int)err - 10;
+    *friend_number = number;
+    return 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_session_friend_accept(const uint8_t public_key[TOX_PUBLIC_KEY_SIZE],
+                               uint32_t *friend_number) {
+    if (!wtox_live || !public_key || !friend_number) return -1;
+    Tox_Err_Friend_Add err = TOX_ERR_FRIEND_ADD_OK;
+    Tox_Friend_Number number = tox_friend_add_norequest(wtox_live, public_key, &err);
+    if (err != TOX_ERR_FRIEND_ADD_OK) return -(int)err - 10;
+    *friend_number = number;
+    return 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_session_friend_count(void) {
+    if (!wtox_live) return -1;
+    size_t count = tox_self_get_friend_list_size(wtox_live);
+    return count <= WTOX_MAX_FRIENDS ? (int)count : -2;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_session_friend_list(uint32_t *out, size_t capacity) {
+    if (!wtox_live) return -1;
+    size_t count = tox_self_get_friend_list_size(wtox_live);
+    if (count > WTOX_MAX_FRIENDS) return -2;
+    if (count > capacity || (count > 0 && !out)) return -3;
+    if (count > 0) tox_self_get_friend_list(wtox_live, out);
+    return (int)count;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_session_friend_public_key(uint32_t friend_number,
+                                   uint8_t key[TOX_PUBLIC_KEY_SIZE]) {
+    if (!wtox_live || !key) return -1;
+    Tox_Err_Friend_Get_Public_Key err = TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK;
+    bool ok = tox_friend_get_public_key(wtox_live, friend_number, key, &err);
+    return ok && err == TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK ? 0 : -2;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_session_friend_delete(uint32_t friend_number) {
+    if (!wtox_live) return -1;
+    Tox_Err_Friend_Delete err = TOX_ERR_FRIEND_DELETE_OK;
+    bool ok = tox_friend_delete(wtox_live, friend_number, &err);
+    return ok && err == TOX_ERR_FRIEND_DELETE_OK ? 0 : -2;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_session_send_text(uint32_t friend_number, const uint8_t *text,
+                           size_t text_len, uint32_t *message_id) {
+    if (!wtox_live || !text || !message_id ||
+        text_len == 0 || text_len > TOX_MAX_MESSAGE_LENGTH) return -1;
+    Tox_Err_Friend_Send_Message err = TOX_ERR_FRIEND_SEND_MESSAGE_OK;
+    Tox_Friend_Message_Id id = tox_friend_send_message(wtox_live,
+        friend_number, TOX_MESSAGE_TYPE_NORMAL, text, text_len, &err);
+    if (err != TOX_ERR_FRIEND_SEND_MESSAGE_OK) return -(int)err - 10;
+    *message_id = id;
+    return 0;
+}
