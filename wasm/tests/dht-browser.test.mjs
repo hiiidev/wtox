@@ -91,7 +91,8 @@ test("original Chromium WASM Toxcore reaches UDP DHT bootstrap status through ge
       if(req.method==="GET"&&path==="/__wtox_dht_target"){
         res.writeHead(200,{"Content-Type":"application/json",
           "Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});
-        res.end(JSON.stringify({token:TOKEN,port:nativePort,publicKey:native.key}));
+        res.end(JSON.stringify({token:TOKEN,port:nativePort,
+          proxyPort:osSocket.address().port,publicKey:native.key}));
         return;
       }
       if(req.method!=="GET"||!mime.has(path)){res.writeHead(404);res.end();return;}
@@ -119,7 +120,8 @@ test("original Chromium WASM Toxcore reaches UDP DHT bootstrap status through ge
         ++metrics.clients;
         let authed=false;
         const receive=(bytes,from)=>{
-          if(from.address!=="127.0.0.1" || from.port!==nativePort ||
+          if(from.address!=="127.0.0.1" ||
+             ![nativePort,osSocket.address().port].includes(from.port) ||
              !bytes.length || bytes.length>2048) {
             ++metrics.invalid;return;
           }
@@ -145,12 +147,13 @@ test("original Chromium WASM Toxcore reaches UDP DHT bootstrap status through ge
           }
           const bytes=Buffer.from(message);
           if(!binary || bytes.length<6 || bytes.length>2053 ||
-             bytes[0]!==1 || bytes.readUInt16BE(1)!==nativePort ||
+             bytes[0]!==1 ||
+             ![nativePort,osSocket.address().port].includes(bytes.readUInt16BE(1)) ||
              bytes.readUInt16BE(3)!==bytes.length-5) {
             ++metrics.invalid;ws.close(1008);return;
           }
           ++metrics.sent;
-          osSocket.send(bytes.subarray(5),nativePort,"127.0.0.1");
+          osSocket.send(bytes.subarray(5),bytes.readUInt16BE(1),"127.0.0.1");
         });
       });
     });

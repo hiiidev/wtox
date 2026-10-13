@@ -29,10 +29,13 @@ async function connect(url,token) {
   });
   return ws;
 }
-async function run({url,token,port,publicKey}) {
+async function run({url,token,port,proxyPort,publicKey}) {
   fail(/^ws:\/\/127\.0\.0\.1:\d+\/__wtox_dht_bridge$/.test(url),"dht_url_not_loopback");
   fail(typeof token==="string"&&/^[a-f0-9]{64}$/.test(token),"bad_test_token");
   fail(Number.isInteger(port)&&port>1024&&port<=65535,"invalid_local_dht_port");
+  fail(Number.isInteger(proxyPort)&&proxyPort>1024&&proxyPort<=65535 &&
+       proxyPort!==port,"invalid_loopback_mapping_port");
+  const allowed=new Set([port,proxyPort]);
   const key=hexToBytes(publicKey);
   const m=await createModule();
   const buffer=m._malloc(MAX),meta=m._malloc(2),keyPtr=m._malloc(32);
@@ -47,12 +50,13 @@ async function run({url,token,port,publicKey}) {
       if(!(data instanceof ArrayBuffer)){++framesInvalid;return;}
       const frame=new Uint8Array(data);
       if(frame.length<6 || frame[0]!==1 ||
-         ((frame[1]<<8)|frame[2])!==port ||
+         !allowed.has((frame[1]<<8)|frame[2]) ||
          ((frame[3]<<8)|frame[4])!==frame.length-5 ||
          frame.length>MAX+5){++framesInvalid;return;}
       const bytes=frame.subarray(5);
       m.HEAPU8.set(bytes,buffer);
-      if(m._wtox_vudp_probe_push(buffer,bytes.length,port)!==bytes.length)
+      if(m._wtox_vudp_probe_push(buffer,bytes.length,
+          (frame[1]<<8)|frame[2])!==bytes.length)
         ++framesInvalid;
       else ++received;
     };
@@ -68,7 +72,7 @@ async function run({url,token,port,publicKey}) {
         fail(n>=0 && n<=MAX,"original_native_dht_tx_invalid");
         if(n===0)break;
         const dest=new DataView(m.HEAPU8.buffer).getUint16(meta,true);
-        fail(dest===port,"unexpected_native_udp_destination:"+dest);
+        fail(allowed.has(dest),"unexpected_native_udp_destination:"+dest);
         const packet=new Uint8Array(5+n);
         packet[0]=1;packet[1]=dest>>>8;packet[2]=dest&255;
         packet[3]=n>>>8;packet[4]=n&255;
