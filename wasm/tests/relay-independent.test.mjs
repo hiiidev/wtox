@@ -205,7 +205,10 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
             const frame = Buffer.alloc(2 + body.length);
             frame.writeUInt16BE(body.length, 0);
             frame.set(body, 2);
-            socket.write(frame);
+            // Node may retain the write buffer until it reaches the kernel.
+            // Clone it so immediate sensitive-buffer wiping cannot alter
+            // an in-flight authenticated TCP control frame.
+            socket.write(Buffer.from(frame));
             incrementToxNonce(sendNonce);
             encryptedPings.set(mode, (encryptedPings.get(mode) || 0) + 1);
             frame.fill(0);

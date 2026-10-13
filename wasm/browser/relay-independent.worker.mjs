@@ -66,7 +66,11 @@ self.addEventListener("message", async ({ data }) => {
     if (mode <= 1) {
       if (stats.closes !== 0 || stats.socketState !== 2 ||
           stats.sends < 2 || stats.recvs < 2) {
-        throw Error("independent_encrypted_ping_pong_failed");
+        const p = await fetch("/__wtox_independent_stats?mode=" + mode, {cache:"no-store"});
+        const counts = p.ok ? await p.json() : {pings:-1,pongs:-1};
+        throw Error("independent_encrypted_ping_pong_failed:s" + stats.sends +
+          ":r" + stats.recvs + ":c" + stats.closes + ":v" + stats.socketState +
+          ":p" + counts.pings + ":o" + counts.pongs);
       }
       const p = await fetch("/__wtox_independent_stats?mode=" + mode, {cache:"no-store"});
       const counters = await p.json();
