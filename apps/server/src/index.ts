@@ -8,6 +8,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { routeRequest } from "../../../packages/protocol/src/router.ts";
 import { openSqliteMailbox } from "./sqlite-mailbox.ts";
+import { installExperimentalTcpBridge } from "./experimental-tcp-bridge.ts";
 
 const port = Number(process.env.PORT ?? "8787");
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("invalid_PORT");
@@ -36,6 +37,21 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({ error: "bad_request" }));
   }
 });
+// Only enable for local development; never expose the bearer token in public JS.
+if (process.env.WTOX_EXPERIMENTAL_TCP_BRIDGE === "1") {
+  if (host !== "127.0.0.1") throw Error("experimental_bridge_requires_loopback");
+  const relay = {
+    host: process.env.WTOX_RELAY_HOST ?? "",
+    port: Number(process.env.WTOX_RELAY_PORT ?? 0),
+    publicKey: process.env.WTOX_RELAY_PUBLIC_KEY ?? ""
+  };
+  installExperimentalTcpBridge(server, {
+    origin: process.env.WTOX_EXPERIMENTAL_ORIGIN ?? "",
+    token: process.env.WTOX_EXPERIMENTAL_TOKEN ?? "",
+    endpoint: relay,
+    allowlist: [relay]
+  });
+}
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
 server.maxHeadersCount = 100;

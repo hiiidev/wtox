@@ -49,3 +49,25 @@ authenticated sender/recipient access are still unimplemented.
 Switching between Cloudflare and self-hosting requires later data export,
 key-directory migration and inbox replay/ACK strategy. The shared types
 only guarantee API shape parity, not completed seamless migration.
+
+## Local TCP-only WebSocket research bridge
+
+By default `/__wtox_v1_experimental/tcp` is **disabled**, and public
+`/api/v1/relay` still returns 501. The experiment is permitted ONLY if
+`WTOX_EXPERIMENTAL_TCP_BRIDGE=1` AND `HOST=127.0.0.1`.
+Set `WTOX_EXPERIMENTAL_ORIGIN=http://127.0.0.1:<page-port>`,
+`WTOX_EXPERIMENTAL_TOKEN=<32 random bytes as 64 hex>`,
+`WTOX_RELAY_HOST=<admin-approved public IPv4 literal>`,
+`WTOX_RELAY_PORT=<port>`, `WTOX_RELAY_PUBLIC_KEY=<64 hex>`.
+
+The WebSocket handshake validates exact Origin; a token must be received as
+the first message before dialing a fixed operator-approved TCP endpoint.
+Do not put the token in a URL or public website bundle.
+Limits: 4 concurrent sessions, 5s authentication deadline, 120s connection
+lifetime, 8MiB total traffic/session, 64KiB binary chunks, 512KiB backlog
+cap. This is insufficient for public deployment without device-signed auth,
+per-IP controls, and security review.
+
+The test connects the `wasm/browser/tcp-tunnel.mjs` byte adapter through
+the bridge to a localhost TCP echo server using test-only socket injection.
+That is NOT a Toxcore socket adapter, and does not prove qTox/aTox interop.

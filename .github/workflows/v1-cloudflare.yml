@@ -5,6 +5,7 @@ on:
     paths:
       - "cloudflare/**"
       - "apps/server/**"
+      - "wasm/browser/tcp-tunnel.mjs"
       - "packages/protocol/**"
       - "deploy/compose.v1.yml"
       - ".github/workflows/v1-cloudflare.yml"

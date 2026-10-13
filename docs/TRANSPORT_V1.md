@@ -75,3 +75,14 @@ Further information:
 https://github.com/TokTok/c-toxcore/blob/master/toxcore/tox.h
 https://developers.cloudflare.com/workers/reference/protocols/
 https://developer.mozilla.org/en-US/docs/Web/API/WebTransport_API
+
+## Fourth increment: local WebSocket to TCP echo test
+
+`apps/server/src/experimental-tcp-bridge.ts` is a **disabled-by-default**,
+localhost-only bearer-protected experimental WSS/TCP forwarding route.
+`wasm/browser/tcp-tunnel.mjs` implements the binary byte-stream
+browser API. An integration test verifies real Node WebSocket connections
+and byte fidelity through a loopback TCP echo server. The real Tox TCP relay
+destination remains operator-fixed and public-IP allowlisted. None of this
+connects to c-toxcore's native socket abstraction, and no real Tox peer
+handshake has been validated. Cloudflare's public relay endpoint is disabled.
