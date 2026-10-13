@@ -19,8 +19,11 @@ test("native WASM virtual TCP: ordering, partial I/O, backpressure, EOF and reco
     closed: false,
     send(bytes) {
       if (blocked) throw new Error("tcp_tunnel_backpressure");
-      sent.push(bytes.slice());
-      queueMicrotask(() => callbacks[0].onBytes(bytes.slice()));
+      // The transport takes ownership synchronously, like WebSocket.send:
+      // the adapter wipes its temporary copy after send() returns.
+      const echoed = bytes.slice();
+      sent.push(echoed.slice());
+      queueMicrotask(() => callbacks[0].onBytes(echoed));
     },
     close() { this.closed = true; }
   };
