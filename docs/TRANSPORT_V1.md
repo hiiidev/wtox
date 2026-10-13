@@ -86,3 +86,14 @@ and byte fidelity through a loopback TCP echo server. The real Tox TCP relay
 destination remains operator-fixed and public-IP allowlisted. None of this
 connects to c-toxcore's native socket abstraction, and no real Tox peer
 handshake has been validated. Cloudflare's public relay endpoint is disabled.
+
+## Browser transport acceptance gate
+
+`apps/server/tests/tcp-browser.test.mjs` drives a real Chromium page
+through `wasm/browser/tcp-tunnel.mjs` -> Node WebSocket bridge -> local
+TCP echo -> browser, checking byte fidelity for NUL and high-bit bytes.
+The test is loopback-only, operator destination is test-injected, and no
+real Tox peer or private key is involved. Passing means the *browser
+transport* works, NOT that native c-toxcore is connected to that transport.
+
+The Node test job needs system Google Chrome/Chromium on its runner.
