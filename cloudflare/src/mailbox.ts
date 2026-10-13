@@ -10,6 +10,7 @@
  * this store does NOT prove the sender actually encrypted anything.
  */
 import { DurableObject } from "cloudflare:workers";
+import type { Env } from "./index.ts";
 
 export const MESSAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_PENDING = 500;
@@ -31,8 +32,8 @@ function validate(input: EnvelopeInput): void {
   }
 }
 
-export class EncryptedMailbox extends DurableObject {
-  constructor(ctx: DurableObjectState, env: unknown) {
+export class EncryptedMailbox extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS messages (" +
