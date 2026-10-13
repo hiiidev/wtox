@@ -18,6 +18,6 @@ export function dialApprovedToxRelay(
   // Tox itself uses an authenticated encrypted transport over this raw TCP.
   // A TLS-wrapping socket here would not speak the native Tox relay protocol.
   return connect({ hostname: candidate.host, port: candidate.port }, {
-    secureTransport: "off"
+    secureTransport: "off", allowHalfOpen: false
   });
 }
