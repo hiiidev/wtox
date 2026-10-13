@@ -42,6 +42,7 @@ jobs:
             wasm/dist/tox-relay-loopback
             wasm/dist/tox-linux-peer
             wasm/dist/tox-local-discovery
+            wasm/dist/tox-udp-bootstrap
           if-no-files-found: error
           retention-days: 3
 
@@ -72,7 +73,8 @@ jobs:
           test -s wasm/dist/tox-relay-loopback
           test -s wasm/dist/tox-linux-peer
           test -s wasm/dist/tox-local-discovery
-          chmod +x wasm/dist/tox-relay-loopback wasm/dist/tox-linux-peer wasm/dist/tox-local-discovery
+          test -s wasm/dist/tox-udp-bootstrap
+          chmod +x wasm/dist/tox-relay-loopback wasm/dist/tox-linux-peer wasm/dist/tox-local-discovery wasm/dist/tox-udp-bootstrap
       - name: Test JS WASM-boundary and virtual socket error handling
         working-directory: wasm
         run: npm run test:unit

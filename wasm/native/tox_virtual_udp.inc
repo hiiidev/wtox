@@ -273,3 +273,35 @@ int wtox_vudp_probe_stats(uint32_t out[8])
     out[6]=vudp_sent;out[7]=vudp_received;
     return 0;
 }
+
+/* Stage 25d: original DHT bootstrap, not synthetic UDP echo. The only
+ * reachable address is the isolated loopback UDP endpoint. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_bootstrap(uint16_t port, const uint8_t *public_key, size_t length)
+{
+    if (!vudp_tox || !vudp_port_valid(port) || !public_key ||
+        length != TOX_PUBLIC_KEY_SIZE) return -1;
+    Tox_Err_Bootstrap error = TOX_ERR_BOOTSTRAP_OK;
+    bool ok=tox_bootstrap(vudp_tox,"127.0.0.1",port,public_key,&error);
+    return ok && error==TOX_ERR_BOOTSTRAP_OK ? 0 : -2;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_tick(void)
+{
+    if (!vudp_tox) return -1;
+    tox_iterate(vudp_tox,NULL);
+    return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_connection(void)
+{
+    if (!vudp_tox) return -1;
+    return (int)tox_self_get_connection_status(vudp_tox);
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_dht_public(uint8_t *out, size_t capacity)
+{
+    if (!vudp_tox || !out || capacity != TOX_PUBLIC_KEY_SIZE) return -1;
+    tox_self_get_dht_id(vudp_tox,out);
+    return 0;
+}

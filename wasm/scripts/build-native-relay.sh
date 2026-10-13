@@ -50,3 +50,12 @@ cc -std=c11 -O2 -D_GNU_SOURCE \
   -o "$DIST/tox-local-discovery"
 test -s "$DIST/tox-local-discovery"
 echo "Original c-toxcore local DHT/Onion discovery fixture built"
+
+# An independently running original Toxcore bootstrap identity.
+# This process is 127.0.0.1 UDP ONLY, with no production/public listener.
+cc -std=c11 -O2 -D_GNU_SOURCE \
+  -I "$UPSTREAM" "$ROOT/native/tox_udp_bootstrap.c" \
+  "$archive" $(pkg-config --cflags --libs libsodium) -lm -pthread \
+  -o "$DIST/tox-udp-bootstrap"
+test -s "$DIST/tox-udp-bootstrap"
+echo "Pinned original loopback-only UDP DHT bootstrap compiled"

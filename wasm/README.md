@@ -641,3 +641,32 @@ the client does not yet bootstrap its original DHT against an upstream
 node, run an end-to-end Onion request, or discover another browser peer.
 The existing independent native DHT/Onion reference test stays separate.
 No production Worker, user account, Cloudflare deployment or VPS changes.
+
+## Stage 25d: original browser WASM DHT bootstrap over bounded UDP
+
+This stage advances beyond loopback Echo: an independently running,
+unmodified pinned c-toxcore **native** Linux `Tox` instance binds its
+DHT UDP socket on `127.0.0.1` and exposes only its public DHT identity
+to the isolated browser fixture. The Linux native network callbacks forbid
+binding to or contacting any non-loopback address.
+
+Inside a real Chromium Dedicated Worker, the original **WASM** c-toxcore
+instance enables UDP and calls the public original `tox_bootstrap` API
+against that public DHT key and numeric loopback address. Each iteration
+calls original `tox_iterate`. The browser's bounded virtual UDP queue
+carries real DHT datagrams byte-for-byte through an authenticated, single-
+destination WebSocket bridge to a real OS UDP socket. Node only transports
+datagrams; it does not generate Tox/DHT replies or inspect/decrypt payloads.
+
+The test requires the native `tox_self_get_connection_status` to become
+`TOX_CONNECTION_UDP`, plus multiple native UDP datagrams traversing the
+bridge in both directions. A WebSocket connection, any outgoing UDP
+traffic alone, or a synthetic status flag cannot pass this test. This is
+strictly a localhost research path with one isolated bootstrap address,
+not a generic UDP proxy or a deployed network service.
+
+**Not yet proven by stage 25d:** delivery of a browser-originated
+`tox_friend_add` through Onion to an independent desktop client,
+acceptance, restart/reconnect, or real qTox/aTox interoperation. The next
+gate must demonstrate these explicitly without artificial peer DHT key
+injection. `main`, Cloudflare and production VPS are never touched.
