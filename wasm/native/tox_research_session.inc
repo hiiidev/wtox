@@ -11,6 +11,7 @@ static Tox_System wtox_research_system = {0};
 static uint8_t wtox_research_relay_secret[CRYPTO_SECRET_KEY_SIZE] = {0};
 static bool wtox_research_replied = false;
 static bool wtox_research_external_relay = false;
+static int wtox_research_route_id = -1;
 
 EMSCRIPTEN_KEEPALIVE
 void wtox_research_stop(void) {
@@ -25,6 +26,7 @@ void wtox_research_stop(void) {
     wtox_research_network.obj = NULL;
     wtox_research_replied = false;
     wtox_research_external_relay = false;
+    wtox_research_route_id = -1;
     wtox_vtcp_close();
 }
 
@@ -153,4 +155,35 @@ cleanup:
     sodium_memzero(plain, sizeof(plain));
     if (code < 0) sodium_memzero(reply, capacity);
     return code;
+}
+
+
+/* Research ONLY: ask original c-toxcore TCP_Connections to issue its OWN
+ * encrypted ROUTING_REQUEST for one synthetic peer public key. The Relay
+ * must already be connected and authenticated. Never report the real
+ * Tox friend connection as online on this basis. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_add_route(const uint8_t *peer_key, size_t len) {
+    if (!wtox_research_tox || !wtox_research_external_relay ||
+        !peer_key || len != CRYPTO_PUBLIC_KEY_SIZE ||
+        wtox_research_route_id != -1 || wtox_vtcp_state() != WTOX_VTCP_OPEN)
+        return -1;
+    TCP_Connections *tcp_c = nc_get_tcp_c(wtox_research_tox->m->net_crypto);
+    if (!tcp_c || tcp_connected_relays_count(tcp_c) != 1) return -2;
+    const int connection = new_tcp_connection_to(tcp_c, peer_key, 0);
+    if (connection < 0) return -3;
+    wtox_research_route_id = connection;
+    if (add_tcp_number_relay_connection(tcp_c, connection, 0) != 0) {
+        wtox_research_route_id = -1;
+        kill_tcp_connection_to(tcp_c, connection);
+        return -4;
+    }
+    return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_route_online_count(void) {
+    if (!wtox_research_tox || wtox_research_route_id < 0) return -1;
+    TCP_Connections *tcp_c = nc_get_tcp_c(wtox_research_tox->m->net_crypto);
+    if (!tcp_c) return -1;
+    return (int)tcp_connection_to_online_tcp_relays(tcp_c, wtox_research_route_id);
 }

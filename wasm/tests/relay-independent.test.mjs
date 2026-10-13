@@ -20,6 +20,7 @@ import puppeteer from "puppeteer-core";
 
 const base = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TOKEN = "c".repeat(64); // test-only local fixture token
+const ROUTE_PEER_KEY = Buffer.from(Array.from({length:32}, (_,i) => i+41));
 const mime = new Map([
   ["/tests/relay-independent.html", "text/html; charset=utf-8"],
   ["/tests/relay-independent-runner.mjs", "text/javascript; charset=utf-8"],
@@ -64,6 +65,8 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
   const validPongs = new Map();
   const encryptedPings = new Map();
   const respondedClientPings = new Map();
+  const routedRequests = new Map();
+  const routedNotifications = new Map();
   const requestedModes = new Map();
   let origin = "";
   const web = createServer(async (req, res) => {
@@ -84,7 +87,9 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
       res.end(JSON.stringify({
         pings: encryptedPings.get(Number(mode)) || 0,
         pongs: validPongs.get(Number(mode)) || 0,
-        nativePingReplies: respondedClientPings.get(Number(mode)) || 0
+        nativePingReplies: respondedClientPings.get(Number(mode)) || 0,
+        routeRequests: routedRequests.get(Number(mode)) || 0,
+        routeNotifications: routedNotifications.get(Number(mode)) || 0
       }));
       return;
     }
@@ -122,6 +127,19 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
     let sendNonce;
     let pingId;
     let pingTimer;
+    // Encrypt one original Tox TCP control frame with Node-owned
+    // ephemeral relay shared key and increment send nonce exactly once.
+    function sendSecure(payload) {
+      if (!sessionKey || !sendNonce || socket.destroyed) return;
+      const sealed = nacl.box.after(payload, sendNonce, sessionKey);
+      const frame = Buffer.alloc(2 + sealed.length);
+      frame.writeUInt16BE(sealed.length, 0);
+      frame.set(sealed, 2);
+      socket.write(Buffer.from(frame));
+      incrementToxNonce(sendNonce);
+      frame.fill(0);
+      sealed.fill(0);
+    }
     socket.on("close", () => {
       if (pingTimer) clearTimeout(pingTimer);
       hello.fill(0);
@@ -142,12 +160,24 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
           if (postHandshake.length < size + 2) break; // TCP partial frame
           const encrypted = postHandshake.subarray(2, size + 2);
           const decoded = nacl.box.open.after(encrypted, recvNonce, sessionKey);
-          if (!decoded || decoded.length !== 9) {
+          if (!decoded || decoded.length < 2) {
             invalidPostHandshakePackets++;
             socket.destroy();
             return;
           }
-          if (decoded[0] === 4) {
+          if (decoded[0] === 0 && decoded.length === 33 &&
+              Buffer.from(decoded.subarray(1)).equals(ROUTE_PEER_KEY)) {
+            // Original c-toxcore (TCP_Connections) issued this encrypted
+            // routing request, NOT the JS client. Assign the first route
+            // id, 16, and send a server-owned encrypted confirmation.
+            routedRequests.set(mode, (routedRequests.get(mode) || 0) + 1);
+            if (routedRequests.get(mode) !== 1) {
+              invalidPostHandshakePackets++; socket.destroy(); return;
+            }
+            sendSecure(Uint8Array.from([1,16,...ROUTE_PEER_KEY]));
+            sendSecure(Uint8Array.from([2,16]));
+            routedNotifications.set(mode, (routedNotifications.get(mode) || 0) + 1);
+          } else if (decoded[0] === 4 && decoded.length === 9) {
             // Original c-toxcore initiates its own encrypted PING promptly
             // after confirmation. A real Relay must answer with the same
             // 8-byte identifier, before our delayed server-initiated PING.
@@ -162,7 +192,7 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
             response.fill(0);
             encryptedPong.fill(0);
             pong.fill(0);
-          } else if (decoded[0] === 5 && pingId &&
+          } else if (decoded[0] === 5 && decoded.length === 9 && pingId &&
                      Buffer.from(decoded.subarray(1)).equals(pingId)) {
             validPongs.set(mode, (validPongs.get(mode) || 0) + 1);
           } else {
@@ -344,6 +374,10 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
       "Node must answer original Toxcore-initiated encrypted PING");
     assert.ok((respondedClientPings.get(1) || 0) >= 1,
       "Node must also answer native PING after fragmented handshake");
+    assert.equal(routedRequests.get(0), 1, "native Tox must request route over authenticated relay");
+    assert.equal(routedRequests.get(1), 1, "fragmented handshake must still permit route request");
+    assert.equal(routedNotifications.get(0), 1, "Node must send routing response and notification");
+    assert.equal(routedNotifications.get(1), 1, "Node must notify after fragmented handshake");
     assert.equal(invalidPostHandshakePackets, 0, "post-handshake frames must be authenticated");
     assert.equal(validClientHellos, 4, "Node must independently decrypt all genuine client hellos");
     await page.close();

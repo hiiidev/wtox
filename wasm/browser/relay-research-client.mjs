@@ -11,7 +11,8 @@ import { NativeVirtualTcp, VirtualTcpState } from "./native-virtual-tcp.mjs";
 const required = ["_malloc", "_free", "_wtox_research_start",
   "_wtox_research_tick", "_wtox_research_stats",
   "_wtox_research_start_with_relay_public_key",
-  "_wtox_research_make_reply", "_wtox_research_stop"];
+  "_wtox_research_make_reply", "_wtox_research_stop",
+  "_wtox_research_add_route", "_wtox_research_route_online_count"];
 const statsNames = ["sockets", "connects", "sends", "recvs", "closes",
   "txPending", "rxBuffered", "socketState", "toxConnection"];
 
@@ -74,6 +75,28 @@ export class RelayResearchHarness {
   pump() {
     if (!this.#started) throw new Error("relay_research_not_started");
     return this.#tcp.pump();
+  }
+  /** Test-only one-target route registration via ORIGINAL c-toxcore. */
+  registerSyntheticRoute(peerPublicKey) {
+    if (!this.#started) throw new Error("relay_research_not_started");
+    if (!(peerPublicKey instanceof Uint8Array) || peerPublicKey.length !== 32) {
+      throw new TypeError("invalid_synthetic_peer_key");
+    }
+    const m = this.#module;
+    const ptr = m._malloc(32);
+    if (!ptr) throw new Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(peerPublicKey, ptr);
+      const code = m._wtox_research_add_route(ptr, 32);
+      if (code !== 0) throw new Error("relay_research_route_failed:" + code);
+    } finally {
+      m.HEAPU8.fill(0, ptr, ptr + 32);
+      m._free(ptr);
+    }
+  }
+  routeOnlineCount() {
+    if (!this.#started) throw new Error("relay_research_not_started");
+    return this.#module._wtox_research_route_online_count();
   }
   /** Native-only ephemeral fake server. No secret/private key crosses to JS. */
   makeSyntheticReply(mode = 0) {

@@ -79,6 +79,31 @@ self.addEventListener("message", async ({ data }) => {
           counters.nativePingReplies < 1) {
         throw Error("independent_pong_not_authenticated");
       }
+
+      // Ask ORIGINAL c-toxcore TCP_Connections to emit a real encrypted
+      // ROUTING_REQUEST for one synthetic peer key, and wait for the
+      // Node-owned relay's ROUTING_RESPONSE + CONNECTION_NOTIFICATION.
+      const syntheticPeer = Uint8Array.from({length:32}, (_,i) => i+41);
+      h.registerSyntheticRoute(syntheticPeer);
+      const until = Date.now() + 4000;
+      let routeProof;
+      do {
+        h.iterate();
+        const proof = await fetch("/__wtox_independent_stats?mode=" + mode, {cache:"no-store"});
+        routeProof = await proof.json();
+        if (routeProof.routeRequests === 1 &&
+            routeProof.routeNotifications === 1 &&
+            h.routeOnlineCount() === 1) break;
+        await wait(20);
+      } while (Date.now() < until);
+      if (routeProof.routeRequests !== 1 ||
+          routeProof.routeNotifications !== 1 || h.routeOnlineCount() !== 1) {
+        throw Error("independent_routing_exchange_failed:q" +
+          routeProof.routeRequests + ":n" + routeProof.routeNotifications +
+          ":online" + h.routeOnlineCount());
+      }
+      // This count represents *test-only TCP route registration*; it is
+      // NEVER proof that a friend is online or messages were delivered.
     } else if (stats.closes < 1 || stats.socketState === 2) {
       throw Error("independent_invalid_relay_accepted");
     }

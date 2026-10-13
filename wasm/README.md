@@ -337,3 +337,21 @@ both independent directions to succeed.
 
 This remains local loopback Tox TCP control-plane research, not peer
 message or public Relay interoperability.
+
+## Seventeenth increment: encrypted TCP route-request and synthetic notification gate
+
+The test-only persistent original Toxcore instance now uses
+`nc_get_tcp_c` and **original** `new_tcp_connection_to` /
+`add_tcp_number_relay_connection` to register a single synthetic peer
+against the already-confirmed virtual TCP Relay. Native Toxcore itself
+sends the encrypted `ROUTING_REQUEST` (packet type 0) from the TCP
+connection machinery; the independent Node fixture authenticates the
+target key and replies with `ROUTING_RESPONSE` (1, route id 16) and
+`CONNECTION_NOTIFICATION` (2, id 16), with distinct encrypted frames
+and incremented nonces. The Chromium test waits for the original native
+TCP route state to report one registered connected relay.
+
+This is a deliberately **artificial route notification** from one
+localhost fixture. There is no second actual Tox client, no real friend
+online status, no payload forwarding or end-to-end messaging. The
+normal browser identity Worker still has no connected native route.
