@@ -28,6 +28,44 @@ static uint32_t wtox_research_crypto_disconnects = 0;
 static uint8_t wtox_research_crypto_rx[WTOX_RESEARCH_ROUTE_MAX] = {0};
 static uint16_t wtox_research_crypto_rx_len = 0;
 
+/* A separate, real Messenger friend path. Never take over original callbacks.
+ * Exists only in this ephemeral, single-peer, localhost research instance. */
+static int wtox_research_friendcon_id = -1;
+static bool wtox_research_friend_route_attached = false;
+static bool wtox_research_friend_online = false;
+static uint32_t wtox_research_friend_online_events = 0;
+static uint32_t wtox_research_friend_offline_events = 0;
+static uint32_t wtox_research_friend_messages = 0;
+static uint32_t wtox_research_friend_dropped = 0;
+static uint8_t wtox_research_friend_inbox[WTOX_RESEARCH_ROUTE_MAX] = {0};
+static uint16_t wtox_research_friend_inbox_len = 0;
+
+static void wtox_research_on_friend_status(Tox *tox, Tox_Friend_Number number,
+                                           Tox_Connection status, void *unused) {
+    (void)unused;
+    if (tox != wtox_research_tox || wtox_research_friendcon_id < 0 ||
+        number != 0) return;
+    wtox_research_friend_online = status != TOX_CONNECTION_NONE;
+    if (wtox_research_friend_online) ++wtox_research_friend_online_events;
+    else ++wtox_research_friend_offline_events;
+}
+static void wtox_research_on_friend_message(Tox *tox, Tox_Friend_Number number,
+                                            Tox_Message_Type type,
+                                            const uint8_t *message, size_t len,
+                                            void *unused) {
+    (void)unused;
+    if (tox != wtox_research_tox || number != 0 ||
+        wtox_research_friendcon_id < 0 || type != TOX_MESSAGE_TYPE_NORMAL ||
+        !message || len == 0 || len > WTOX_RESEARCH_ROUTE_MAX ||
+        wtox_research_friend_inbox_len != 0) {
+        ++wtox_research_friend_dropped;
+        return;
+    }
+    memcpy(wtox_research_friend_inbox, message, len);
+    wtox_research_friend_inbox_len = (uint16_t)len;
+    ++wtox_research_friend_messages;
+}
+
 static int wtox_research_crypto_status(void *obj, int id, bool online, void *userdata) {
     (void)userdata;
     if (obj != &wtox_research_counters || id != 0) return -1;
@@ -84,6 +122,15 @@ void wtox_research_stop(void) {
     wtox_research_crypto_disconnects = 0;
     wtox_research_crypto_rx_len = 0;
     sodium_memzero(wtox_research_crypto_rx, sizeof(wtox_research_crypto_rx));
+    wtox_research_friendcon_id = -1;
+    wtox_research_friend_route_attached = false;
+    wtox_research_friend_online = false;
+    wtox_research_friend_online_events = 0;
+    wtox_research_friend_offline_events = 0;
+    wtox_research_friend_messages = 0;
+    wtox_research_friend_dropped = 0;
+    wtox_research_friend_inbox_len = 0;
+    sodium_memzero(wtox_research_friend_inbox, sizeof(wtox_research_friend_inbox));
     wtox_vtcp_close();
 }
 
@@ -154,6 +201,20 @@ EMSCRIPTEN_KEEPALIVE
 int wtox_research_tick(void) {
     if (!wtox_research_tox) return -1;
     tox_iterate(wtox_research_tox, NULL);
+    if (wtox_research_friendcon_id >= 0 && !wtox_research_friend_route_attached) {
+        Friend_Connections *fr_c = wtox_research_tox->m->fr_c;
+        const int crypto_id = friend_connection_crypt_connection_id(
+            fr_c, wtox_research_friendcon_id);
+        if (crypto_id >= 0) {
+            /* One friend and one Relay only; the first native Net_Crypto
+             * connection owns TCP_Connections slot zero. */
+            if (crypto_id != 0 ||
+                add_tcp_number_relay_connection(
+                    nc_get_tcp_c(wtox_research_tox->m->net_crypto),
+                    0, 0) != 0) return -2;
+            wtox_research_friend_route_attached = true;
+        }
+    }
     return 0;
 }
 
@@ -374,4 +435,84 @@ int wtox_research_crypto_recv(uint8_t *out, size_t capacity) {
     sodium_memzero(wtox_research_crypto_rx, sizeof(wtox_research_crypto_rx));
     wtox_research_crypto_rx_len = 0;
     return n;
+}
+
+/* Real native Messenger friend path for two isolated Chromium clients.
+ * Only their PUBLIC Tox and DHT keys cross the test orchestrator. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_add_native_friend(const uint8_t *real_pk,
+                                     const uint8_t *dht_pk, size_t len) {
+    if (!wtox_research_tox || !wtox_research_external_relay ||
+        wtox_research_friendcon_id >= 0 || wtox_research_crypto_id >= 0 ||
+        wtox_research_route_id >= 0 || wtox_research_capture_enabled ||
+        !real_pk || !dht_pk || len != CRYPTO_PUBLIC_KEY_SIZE ||
+        wtox_vtcp_state() != WTOX_VTCP_OPEN) return -1;
+    uint8_t self_pk[TOX_PUBLIC_KEY_SIZE] = {0};
+    tox_self_get_public_key(wtox_research_tox, self_pk);
+    const bool invalid = memcmp(self_pk, real_pk, sizeof(self_pk)) == 0;
+    sodium_memzero(self_pk, sizeof(self_pk));
+    if (invalid) return -2;
+    Tox_Err_Friend_Add error = TOX_ERR_FRIEND_ADD_OK;
+    const Tox_Friend_Number number =
+        tox_friend_add_norequest(wtox_research_tox, real_pk, &error);
+    if (error != TOX_ERR_FRIEND_ADD_OK || number != 0) return -3;
+    const int friendcon_id =
+        getfriend_conn_id_pk(wtox_research_tox->m->fr_c, real_pk);
+    if (friendcon_id != 0) return -4;
+    wtox_research_friendcon_id = friendcon_id;
+    tox_callback_friend_connection_status(wtox_research_tox,
+                                           wtox_research_on_friend_status);
+    tox_callback_friend_message(wtox_research_tox,
+                                 wtox_research_on_friend_message);
+    /* This is only local test peer discovery: production clients must
+     * obtain DHT keys from their normal onion/DHT transport. */
+    set_dht_temp_pk(wtox_research_tox->m->fr_c, friendcon_id, dht_pk, NULL);
+    return 0;
+}
+
+/* The status here is ORIGINAL tox_friend_get_connection_status, not
+ * a synthetic Relay route count or low-level crypto-online flag. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_native_friend_stats(uint32_t out[6]) {
+    if (!wtox_research_tox || wtox_research_friendcon_id < 0 || !out)
+        return -1;
+    Tox_Err_Friend_Query error = TOX_ERR_FRIEND_QUERY_OK;
+    const Tox_Connection status =
+        tox_friend_get_connection_status(wtox_research_tox, 0, &error);
+    if (error != TOX_ERR_FRIEND_QUERY_OK) return -2;
+    out[0] = (uint32_t)status;
+    out[1] = wtox_research_friend_online_events;
+    out[2] = wtox_research_friend_offline_events;
+    out[3] = wtox_research_friend_messages;
+    out[4] = wtox_research_friend_dropped;
+    out[5] = wtox_research_friend_route_attached ? 1 : 0;
+    return 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_native_send_text(const uint8_t *message, size_t len,
+                                    uint32_t *id_out) {
+    if (!wtox_research_tox || wtox_research_friendcon_id < 0 ||
+        !wtox_research_friend_route_attached ||
+        !wtox_research_friend_online || !message || !id_out ||
+        len == 0 || len > WTOX_RESEARCH_ROUTE_MAX) return -1;
+    Tox_Err_Friend_Send_Message error = TOX_ERR_FRIEND_SEND_MESSAGE_OK;
+    Tox_Friend_Message_Id id = tox_friend_send_message(
+        wtox_research_tox, 0, TOX_MESSAGE_TYPE_NORMAL, message, len, &error);
+    if (error != TOX_ERR_FRIEND_SEND_MESSAGE_OK) return -(int)error - 10;
+    *id_out = id;
+    return 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wtox_research_native_take_message(uint8_t *out, size_t capacity) {
+    if (!wtox_research_tox || wtox_research_friendcon_id < 0 ||
+        !out || capacity < WTOX_RESEARCH_ROUTE_MAX) return -1;
+    if (!wtox_research_friend_inbox_len) return 0;
+    const int len = wtox_research_friend_inbox_len;
+    memcpy(out, wtox_research_friend_inbox, len);
+    sodium_memzero(wtox_research_friend_inbox,
+                   sizeof(wtox_research_friend_inbox));
+    wtox_research_friend_inbox_len = 0;
+    return len;
 }

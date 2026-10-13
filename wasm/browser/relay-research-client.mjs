@@ -17,7 +17,9 @@ const required = ["_malloc", "_free", "_wtox_research_start",
   "_wtox_research_take_route_packet", "_wtox_research_get_dht_public",
   "_wtox_research_connected_relays", "_wtox_research_get_crypto_public",
   "_wtox_research_begin_crypto", "_wtox_research_crypto_status_get",
-  "_wtox_research_crypto_send", "_wtox_research_crypto_recv"];
+  "_wtox_research_crypto_send", "_wtox_research_crypto_recv",
+  "_wtox_research_add_native_friend", "_wtox_research_native_friend_stats",
+  "_wtox_research_native_send_text", "_wtox_research_native_take_message"];
 const statsNames = ["sockets", "connects", "sends", "recvs", "closes",
   "txPending", "rxBuffered", "socketState", "toxConnection"];
 
@@ -152,6 +154,55 @@ export class RelayResearchHarness {
     try {
       const n=m._wtox_research_crypto_recv(p,128);
       if(n<0||n>128)throw Error("net_crypto_receive_failed:"+n);
+      return n?m.HEAPU8.slice(p,p+n):null;
+    } finally {m.HEAPU8.fill(0,p,p+128);m._free(p);}
+  }
+  /** Original Tox Friend API: accept native peer without network friend request. */
+  addNativeFriend(realPk, dhtPk) {
+    if (!this.#started) throw Error("relay_research_not_started");
+    if (![realPk,dhtPk].every(x=>x instanceof Uint8Array && x.length===32))
+      throw TypeError("invalid_native_friend_public_keys");
+    const m=this.#module, p=m._malloc(64);
+    if (!p) throw Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(realPk,p); m.HEAPU8.set(dhtPk,p+32);
+      const code=m._wtox_research_add_native_friend(p,p+32,32);
+      if (code!==0) throw Error("native_friend_add_failed:"+code);
+    } finally {m.HEAPU8.fill(0,p,p+64);m._free(p);}
+  }
+  nativeFriendState() {
+    if (!this.#started) throw Error("relay_research_not_started");
+    const m=this.#module,p=m._malloc(24);
+    if (!p) throw Error("relay_research_out_of_memory");
+    try {
+      const code=m._wtox_research_native_friend_stats(p);
+      if(code!==0)throw Error("native_friend_stats_failed:"+code);
+      const v=new DataView(m.HEAPU8.buffer);
+      const names=["status","onlineEvents","offlineEvents","messages","dropped","attached"];
+      return Object.fromEntries(names.map((x,i)=>[x,v.getUint32(p+4*i,true)]));
+    } finally {m.HEAPU8.fill(0,p,p+24);m._free(p);}
+  }
+  sendNativeFriendText(bytes) {
+    if (!this.#started) throw Error("relay_research_not_started");
+    if (!(bytes instanceof Uint8Array)||bytes.length<1||bytes.length>128)
+      throw TypeError("invalid_native_friend_text");
+    const m=this.#module,idOffset=(bytes.length+3)&~3;
+    const p=m._malloc(idOffset+4);
+    if (!p) throw Error("relay_research_out_of_memory");
+    try {
+      m.HEAPU8.set(bytes,p);
+      const code=m._wtox_research_native_send_text(p,bytes.length,p+idOffset);
+      if(code!==0)throw Error("native_friend_send_failed:"+code);
+      return new DataView(m.HEAPU8.buffer).getUint32(p+idOffset,true);
+    } finally {m.HEAPU8.fill(0,p,p+idOffset+4);m._free(p);}
+  }
+  takeNativeFriendMessage() {
+    if (!this.#started) throw Error("relay_research_not_started");
+    const m=this.#module,p=m._malloc(128);
+    if (!p) throw Error("relay_research_out_of_memory");
+    try {
+      const n=m._wtox_research_native_take_message(p,128);
+      if(n<0||n>128)throw Error("native_friend_receive_failed:"+n);
       return n?m.HEAPU8.slice(p,p+n):null;
     } finally {m.HEAPU8.fill(0,p,p+128);m._free(p);}
   }

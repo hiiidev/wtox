@@ -303,8 +303,8 @@ async function checkIndependentClients(mode) {
       assert.equal(metrics.forwardAtoB,1,"A payload forwarded to B, not echoed");
       assert.equal(metrics.forwardBtoA,1,"B payload forwarded to A, not echoed");
     } else {
-      assert.ok(metrics.forwardAtoB >= 3, "native Net_Crypto A must exchange multiple E2E packets");
-      assert.ok(metrics.forwardBtoA >= 3, "native Net_Crypto B must exchange multiple E2E packets");
+      assert.ok(metrics.forwardAtoB >= 3, "native Tox A must exchange multiple E2E packets");
+      assert.ok(metrics.forwardBtoA >= 3, "native Tox B must exchange multiple E2E packets");
     }
     assert.equal(metrics.rejected,0,"no protocol-invalid packets");
   } finally {
@@ -317,7 +317,7 @@ async function checkIndependentClients(mode) {
     relay.secretKey.fill(0);
   }
 }
-for (const mode of ["raw", "crypto"]) {
+for (const mode of ["raw", "crypto", "friend"]) {
   test("two original Chromium Toxcore clients: " + mode +
        " reciprocal Relay communication", {timeout:105000}, async () =>
        checkIndependentClients(mode));

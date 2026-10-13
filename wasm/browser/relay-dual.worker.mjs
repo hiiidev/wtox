@@ -10,6 +10,10 @@ const PAYLOAD = {
   a: Uint8Array.from([0, 1, 128, 255, 7]),
   b: Uint8Array.from([255, 128, 1, 0, 9])
 };
+const FRIEND_TEXT = {
+  a: "From-A: original Tox friend message",
+  b: "From-B: original Tox friend message"
+};
 const hex = data => Array.from(data, value => value.toString(16).padStart(2, "0")).join("");
 function fromHex(value) {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) {
@@ -19,7 +23,7 @@ function fromHex(value) {
     parseInt(value.slice(i * 2, i * 2 + 2), 16));
 }
 let h, role, timer, phase = "new", started = false, terminated = false;
-let cryptoMode = false;
+let cryptoMode = false, friendMode = false;
 function announce(type, extra = {}) {
   self.postMessage({ type, role, ...extra });
 }
@@ -37,10 +41,17 @@ function tick() {
     if (phase === "connecting" && h.connectedRelays() === 1) {
       phase = "ready";
       announce("READY", { publicKey: hex(h.dhtPublicKey()),
-        cryptoPublicKey: cryptoMode ? hex(h.netCryptoPublicKey()) : null });
+        cryptoPublicKey: (cryptoMode || friendMode) ? hex(h.netCryptoPublicKey()) : null });
     }
     if (phase === "routing") {
-      if (cryptoMode) {
+      if (friendMode) {
+        const state = h.nativeFriendState();
+        if (state.status !== 0 && state.onlineEvents > 0 &&
+            state.attached === 1 && state.dropped === 0) {
+          phase = "routed";
+          announce("ROUTED", { friendOnline: true });
+        }
+      } else if (cryptoMode) {
         const state = h.netCryptoState();
         if (state.online === 1 && state.routes === 1) {
           phase = "routed";
@@ -53,7 +64,8 @@ function tick() {
       }
     }
     if (phase === "routed" || phase === "sent") {
-      const packet = cryptoMode ? h.takeNetCryptoPayload() : h.takeRoutePayload();
+      const packet = friendMode ? h.takeNativeFriendMessage()
+        : cryptoMode ? h.takeNetCryptoPayload() : h.takeRoutePayload();
       if (packet) {
         phase = "received";
         announce("RECEIVED", { bytes: Array.from(packet) });
@@ -76,8 +88,9 @@ self.addEventListener("message", async ({data}) => {
       }
       started = true;
       role = data.role;
-      if (data.mode !== "raw" && data.mode !== "crypto") throw Error("invalid_dual_mode");
+      if (!["raw", "crypto", "friend"].includes(data.mode)) throw Error("invalid_dual_mode");
       cryptoMode = data.mode === "crypto";
+      friendMode = data.mode === "friend";
       const response = await fetch("/__wtox_dual_public", {
         credentials: "omit", cache: "no-store", redirect: "error"
       });
@@ -92,14 +105,18 @@ self.addEventListener("message", async ({data}) => {
       timer = setInterval(tick, 15);
       tick();
     } else if (action === "ROUTE" && phase === "ready") {
-      if (cryptoMode)
+      if (friendMode)
+        h.addNativeFriend(fromHex(data?.peerCryptoPublicKey),
+                          fromHex(data?.peerPublicKey));
+      else if (cryptoMode)
         h.beginNetCrypto(fromHex(data?.peerCryptoPublicKey),
                          fromHex(data?.peerPublicKey));
       else
         h.registerSyntheticRoute(fromHex(data?.peerPublicKey));
       phase = "routing";
     } else if (action === "SEND" && phase === "routed") {
-      if (cryptoMode) h.sendNetCryptoPayload(PAYLOAD[role]);
+      if (friendMode) h.sendNativeFriendText(new TextEncoder().encode(FRIEND_TEXT[role]));
+      else if (cryptoMode) h.sendNetCryptoPayload(PAYLOAD[role]);
       else h.sendRoutePayload(PAYLOAD[role]);
       phase = "sent";
       announce("SENT");

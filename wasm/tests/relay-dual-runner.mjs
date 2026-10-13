@@ -1,6 +1,12 @@
 /** Orchestrate two independent WASM Toxcore clients, never fake an echo. */
 const result = document.querySelector("#result");
-const mode = new URL(location.href).searchParams.get("mode") === "crypto" ? "crypto" : "raw";
+const requestedMode = new URL(location.href).searchParams.get("mode");
+const mode = ["raw", "crypto", "friend"].includes(requestedMode)
+  ? requestedMode : "raw";
+const FRIEND_TEXT = {
+  a: "From-A: original Tox friend message",
+  b: "From-B: original Tox friend message"
+};
 const EXPECTED = {
   a: [255, 128, 1, 0, 9],
   b: [0, 1, 128, 255, 7]
@@ -58,7 +64,7 @@ function spawn(role) {
     if (!/^[0-9a-f]{64}$/.test(ar.publicKey) ||
         !/^[0-9a-f]{64}$/.test(br.publicKey) ||
         ar.publicKey === br.publicKey) throw Error("duplicate_or_invalid_native_dht_id");
-    if (mode === "crypto" &&
+    if (mode !== "raw" &&
         (!/^[0-9a-f]{64}$/.test(ar.cryptoPublicKey) ||
          !/^[0-9a-f]{64}$/.test(br.cryptoPublicKey) ||
          ar.cryptoPublicKey === br.cryptoPublicKey)) {
@@ -72,13 +78,18 @@ function spawn(role) {
     const packets = await Promise.all(all.map(c => c.wait("RECEIVED")));
     for (const [i, c] of all.entries()) {
       const got = packets[i].bytes;
-      if (!Array.isArray(got) || got.length !== EXPECTED[c.role].length ||
-          !got.every((v, j) => v === EXPECTED[c.role][j])) {
+      const expected = mode === "friend"
+        ? Array.from(new TextEncoder().encode(FRIEND_TEXT[c.role === "a" ? "b" : "a"]))
+        : EXPECTED[c.role];
+      if (!Array.isArray(got) || got.length !== expected.length ||
+          !got.every((v, j) => v === expected[j])) {
         throw Error("dual_native_route_payload_mismatch_" + c.role);
       }
     }
     result.dataset.state = "passed";
-    result.textContent = mode === "crypto"
+    result.textContent = mode === "friend"
+      ? "PASS: two original Tox friends online and tox_friend_send_message callback delivered text"
+      : mode === "crypto"
       ? "PASS: two original Net_Crypto sessions authenticated end-to-end and exchanged lossless packets"
       : "PASS: two independent native WASM clients exchanged routed binary data";
   } finally {

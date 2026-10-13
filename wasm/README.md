@@ -423,3 +423,27 @@ friend API: `tox_friend_send_message`, `tox_friend_message`, friend
 acceptance, restart/persistence and qTox/aTox online interoperation remain
 separate acceptance criteria. Original online friend status is not claimed,
 and no production Worker or VPS is modified.
+
+## Twenty-first increment: original Tox friend text over dual native clients
+
+An isolated third Chromium test mode builds on the authenticated two-client
+TCP Relay test. Both independent native Tox instances use the **public**
+identity and DHT keys that each Toxcore itself generates. Each adds the
+other with original `tox_friend_add_norequest`, and supplies the other native
+DHT key to the existing `Friend_Connections` discovery callback. Once
+the native friend manager creates its own `Net_Crypto` connection, the
+existing research Relay is attached to that connection, with all original
+Messenger and `Net_Crypto` packet handlers left installed.
+
+The test waits for original `tox_friend_get_connection_status` and a
+genuine `tox_callback_friend_connection_status` online event on BOTH
+clients before calling `tox_friend_send_message`. It then requires the
+opposite client to receive the exact text through original
+`tox_callback_friend_message` (not a transport or crypto test callback).
+
+This establishes a **local two-native-client friend message acceptance
+gate**, not Internet-discovered or public-client interop. The test deliberately
+injects public DHT discovery information, allows only two loopback clients,
+and uses a Node-owned, test-only TCP Relay. No browser production transport
+or Cloudflare worker is added; no qTox/aTox interoperability, remote Relay,
+savedata reconnect or arbitrary contact discovery is claimed.
