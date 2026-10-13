@@ -59,7 +59,7 @@ int wtox_create_encrypted(const uint8_t *password, size_t password_len,
                           uint8_t address[TOX_ADDRESS_SIZE],
                           uint8_t *encrypted, size_t encrypted_capacity,
                           size_t *written) {
-    if (!valid_password(password) || address == NULL || encrypted == NULL ||
+    if (!valid_password(password, password_len) || address == NULL || encrypted == NULL ||
         written == NULL || sodium_init() < 0) {
         return -1;
     }
@@ -106,7 +106,7 @@ EMSCRIPTEN_KEEPALIVE
 int wtox_inspect_encrypted(const uint8_t *backup, size_t backup_len,
                            const uint8_t *password, size_t password_len,
                            uint8_t address[TOX_ADDRESS_SIZE]) {
-    if (!valid_password(password) || backup == NULL || address == NULL ||
+    if (!valid_password(password, password_len) || backup == NULL || address == NULL ||
         backup_len <= TOX_PASS_ENCRYPTION_EXTRA_LENGTH ||
         backup_len > MAX_RAW_SAVEDATA + TOX_PASS_ENCRYPTION_EXTRA_LENGTH ||
         sodium_init() < 0) return -1;
