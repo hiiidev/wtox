@@ -3,6 +3,7 @@
  * Network_Funcs. Single socket, 16 x 2048 byte queues, loopback-only.
  * This is a prerequisite transport test, NOT DHT discovery or production.
  */
+#include <toxcore/DHT.h>
 #define WTOX_VUDP_SOCKET 0x5755
 #define WTOX_VUDP_MAX 2048
 #define WTOX_VUDP_SLOTS 16
@@ -16,6 +17,7 @@ static Wtox_Udp_Datagram vudp_rx[WTOX_VUDP_SLOTS];
 static unsigned vudp_tx_head, vudp_tx_count, vudp_rx_head, vudp_rx_count;
 static bool vudp_socket_open, vudp_socket_bound;
 static uint16_t vudp_local_port;
+static uint16_t vudp_bootstrap_port;
 static Tox *vudp_tox;
 static Network vudp_network;
 static Tox_System vudp_system;
@@ -151,6 +153,7 @@ void wtox_vudp_probe_stop(void)
     vudp_flush();
     vudp_socket_open=vudp_socket_bound=false;
     vudp_local_port=0;
+    vudp_bootstrap_port=0;
     vudp_rejected=vudp_backpressure=vudp_sent=vudp_received=0;
 }
 EMSCRIPTEN_KEEPALIVE
@@ -283,7 +286,9 @@ int wtox_vudp_native_bootstrap(uint16_t port, const uint8_t *public_key, size_t 
         length != TOX_PUBLIC_KEY_SIZE) return -1;
     Tox_Err_Bootstrap error = TOX_ERR_BOOTSTRAP_OK;
     bool ok=tox_bootstrap(vudp_tox,"127.0.0.1",port,public_key,&error);
-    return ok && error==TOX_ERR_BOOTSTRAP_OK ? 0 : -2;
+    if (!ok || error != TOX_ERR_BOOTSTRAP_OK) return -2;
+    vudp_bootstrap_port=port;
+    return 0;
 }
 EMSCRIPTEN_KEEPALIVE
 int wtox_vudp_native_tick(void)
@@ -303,5 +308,30 @@ int wtox_vudp_native_dht_public(uint8_t *out, size_t capacity)
 {
     if (!vudp_tox || !out || capacity != TOX_PUBLIC_KEY_SIZE) return -1;
     tox_self_get_dht_id(vudp_tox,out);
+    return 0;
+}
+
+/* The upstream Tox self connection enum excludes LAN-only UDP peers from
+ * UDP_CONNECTED. For isolated 127.0.0.1 DHT, use the authenticated DHT
+ * client closelist instead of demanding false "public UDP" connectivity.
+ * Compare native original DHT identity, source port and valid IPv4 entry. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_bootstrap_verified(const uint8_t *key, size_t len)
+{
+    if (!vudp_tox || !key || len!=TOX_PUBLIC_KEY_SIZE ||
+        !vudp_port_valid(vudp_bootstrap_port)) return -1;
+    const DHT *dht=vudp_tox->m->dht;
+    if(!dht)return -2;
+    const Client_data *list=dht_get_close_clientlist(dht);
+    if(!list)return -2;
+    for(uint32_t i=0;i<LCLIENT_LIST;i++){
+        const Client_data *peer=&list[i];
+        if(peer->assoc4.timestamp!=0 &&
+           net_family_is_ipv4(peer->assoc4.ip_port.ip.family) &&
+           peer->assoc4.ip_port.ip.v4.uint32==get_ip4_loopback().uint32 &&
+           net_ntohs(peer->assoc4.ip_port.port)==vudp_bootstrap_port &&
+           sodium_memcmp(peer->public_key,key,TOX_PUBLIC_KEY_SIZE)==0)
+            return 1;
+    }
     return 0;
 }

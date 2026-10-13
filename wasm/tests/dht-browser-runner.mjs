@@ -16,12 +16,12 @@ function fail(error) {
       if(data?.type==="ERROR"){fail(data.error);return;}
       if(data?.type!=="DONE")return;
       const r=data.outcome;
-      if(r?.realToxUdpConnected!==true || r.state!==2){
-        fail("original_tox_dht_not_connected");return;
+      if(r?.authenticatedDhtNeighbor!==true){
+        fail("original_tox_dht_bootstrap_peer_not_verified");return;
       }
       result.dataset.state="passed";
-      result.textContent="PASS: original Toxcore DHT UDP connected, sent="
-        +r.sent+" received="+r.received+" against independent native bootstrap";
+      result.textContent="PASS: original Toxcore authenticated localhost DHT neighbor, sent="
+        +r.sent+" received="+r.received+" connection_enum="+r.state;
       worker.terminate();
     };
     worker.onerror=e=>fail("dht_worker_exception:"+e.message);

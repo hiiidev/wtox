@@ -658,10 +658,16 @@ carries real DHT datagrams byte-for-byte through an authenticated, single-
 destination WebSocket bridge to a real OS UDP socket. Node only transports
 datagrams; it does not generate Tox/DHT replies or inspect/decrypt payloads.
 
-The test requires the native `tox_self_get_connection_status` to become
-`TOX_CONNECTION_UDP`, plus multiple native UDP datagrams traversing the
-bridge in both directions. A WebSocket connection, any outgoing UDP
-traffic alone, or a synthetic status flag cannot pass this test. This is
+The test requires the genuine c-toxcore DHT close-client table to contain
+the independently started bootstrap's authenticated public key at the
+expected loopback IP and UDP port, plus multiple actual UDP datagrams
+traversing the bridge in both directions. A WebSocket connection, any
+outgoing UDP traffic alone, or a synthetic status flag cannot pass the test.
+IMPORTANT: original `dht_non_lan_connected` deliberately reports false
+when *only* LAN peers exist; consequently `tox_self_get_connection_status`
+may correctly return `TOX_CONNECTION_TCP` (1) for this localhost-only
+DHT even when original encrypted DHT UDP traffic and closelist are valid.
+The test does NOT mislabel this result as public UDP connectivity. This is
 strictly a localhost research path with one isolated bootstrap address,
 not a generic UDP proxy or a deployed network service.
 

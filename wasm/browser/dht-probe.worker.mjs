@@ -83,14 +83,17 @@ async function run({url,token,port,proxyPort,publicKey}) {
       const state=m._wtox_vudp_native_connection();
       // This must be a REAL original Tox connection status, not a boolean
       // derived from packet counts or WebSocket ready state.
-      if(state===2 && sent>=2 && received>=2 && framesInvalid===0){
-        return {state,sent,received,realToxUdpConnected:true};
+      const verified=m._wtox_vudp_native_bootstrap_verified(keyPtr,32);
+      fail(verified>=0,"original_native_dht_closelist_query_failed");
+      if(verified===1 && sent>=2 && received>=2 && framesInvalid===0){
+        return {state,sent,received,authenticatedDhtNeighbor:true};
       }
       await new Promise(resolve=>setTimeout(resolve,16));
     }
     throw Error("original_dht_bootstrap_timeout:sent="+sent+
                 ":received="+received+
                 ":connection="+m._wtox_vudp_native_connection()+
+                ":neighbor="+m._wtox_vudp_native_bootstrap_verified(keyPtr,32)+
                 ":bad="+framesInvalid);
   } finally {
     ws?.close();
