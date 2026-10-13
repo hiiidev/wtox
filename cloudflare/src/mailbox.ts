@@ -11,26 +11,7 @@
  */
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./index.ts";
-
-export const MESSAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-export const MAX_PENDING = 500;
-export const MAX_ENVELOPE_CHARS = 22_000;
-
-export type EnvelopeInput = { id: string; ciphertext: string };
-export type EnvelopeRecord = EnvelopeInput & { createdAt: number; expiresAt: number };
-
-const ID = /^[0-9a-f]{32}$/;
-const OPAQUE = /^[A-Za-z0-9_-]+$/;
-
-function validate(input: EnvelopeInput): void {
-  if (!input || typeof input.id !== "string" || !ID.test(input.id) ||
-      typeof input.ciphertext !== "string" ||
-      input.ciphertext.length < 24 ||
-      input.ciphertext.length > MAX_ENVELOPE_CHARS ||
-      !OPAQUE.test(input.ciphertext)) {
-    throw new TypeError("invalid_ciphertext_envelope");
-  }
-}
+import { MESSAGE_TTL_MS, MAX_PENDING, assertEnvelope, assertAckIds, assertReadLimit, type EnvelopeInput, type EnvelopeRecord } from "../../packages/protocol/src/mailbox.ts";
 
 export class EncryptedMailbox extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -63,7 +44,7 @@ export class EncryptedMailbox extends DurableObject<Env> {
   }
 
   async putEnvelope(input: EnvelopeInput): Promise<{ status: "stored" | "duplicate" }> {
-    validate(input);
+    assertEnvelope(input);
     const now = Date.now();
     this.prune(now);
     const existing = this.ctx.storage.sql.exec<{ id: string }>(
@@ -84,9 +65,7 @@ export class EncryptedMailbox extends DurableObject<Env> {
   }
 
   async listEnvelopes(limit = 100): Promise<EnvelopeRecord[]> {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      throw new RangeError("invalid_limit");
-    }
+    assertReadLimit(limit);
     this.prune(Date.now());
     const rows = this.ctx.storage.sql.exec<{
       id: string; ciphertext: string; created_at: number; expires_at: number
@@ -101,10 +80,7 @@ export class EncryptedMailbox extends DurableObject<Env> {
   }
 
   async ackEnvelopes(ids: string[]): Promise<{ ok: true }> {
-    if (!Array.isArray(ids) || ids.length > 100 ||
-        ids.some(id => typeof id !== "string" || !ID.test(id))) {
-      throw new TypeError("invalid_ack_ids");
-    }
+    assertAckIds(ids);
     for (const id of new Set(ids)) {
       this.ctx.storage.sql.exec("DELETE FROM messages WHERE id=?", id);
     }

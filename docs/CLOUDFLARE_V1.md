@@ -60,3 +60,20 @@ Cloudflare and push platform behavior).
 Cloudflare Workers are not a native UDP Tox node or unrestricted server
 socket listener. Their outbound TCP and WebSocket APIs must be tested with
 real relays; a successful WASM compilation alone does not establish support.
+
+## Second increment: portable internal mailbox and Node.js adapter
+
+Added `packages/protocol` for common API and envelope validation;
+Cloudflare Durable Objects still use local SQLite, while self-hosted
+`apps/server` implements the same store contract using node:sqlite.
+Both have the same public health/capabilities API and **both keep private
+mailbox and Tox bridge endpoints disabled** until cryptographic auth exists.
+
+Self-hosted Compose: `docker compose -f deploy/compose.v1.yml up --build -d`.
+It binds to 127.0.0.1 and is not a production chat server. Test compilation,
+mailbox isolation, expiration, idempotency, quotas, and fail-closed routing
+via branch-specific CI. No existing Python storage is migrated.
+
+Next gate: build an emscripten c-toxcore WASM proof and test real TCP-only
+Tox relay interoperability against native qTox/aTox. Until then there is
+no legitimate claim of browser-side native Tox compatibility.

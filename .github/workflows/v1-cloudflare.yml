@@ -4,6 +4,9 @@ on:
     branches: [v1]
     paths:
       - "cloudflare/**"
+      - "apps/server/**"
+      - "packages/protocol/**"
+      - "deploy/compose.v1.yml"
       - ".github/workflows/v1-cloudflare.yml"
   workflow_dispatch:
 jobs:
@@ -23,4 +26,22 @@ jobs:
         run: npm run typecheck
       - name: Run Node tests
         working-directory: cloudflare
+        run: npm test
+
+  selfhost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install Node.js adapter build tools
+        working-directory: apps/server
+        run: npm install --no-audit --no-fund
+      - name: Typecheck Node.js adapter
+        working-directory: apps/server
+        run: npm run typecheck
+      - name: Test SQLite, TTL, isolation, quota and API parity
+        working-directory: apps/server
         run: npm test
