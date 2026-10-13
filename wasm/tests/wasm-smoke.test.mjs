@@ -206,3 +206,39 @@ test("original Tox TCP relay rejects incomplete and tampered synthetic server ha
     wasm._free(ptr);
   }
 });
+
+test("real Toxcore verifies authenticated synthetic Relay handshake; rejects wrong key and altered MAC", async () => {
+  const { default: createModule } = await import("../dist/tox_identity.mjs");
+  const wasm = await createModule();
+  assert.equal(typeof wasm._wtox_network_relay_authenticated_probe, "function");
+  const ptr = wasm._malloc(40);
+  assert.ok(ptr);
+  try {
+    for (const [mode, label] of [[0,"valid"],[1,"fragmented valid"],[2,"wrong relay key"],[3,"tampered MAC"]]) {
+      wasm.HEAPU8.fill(0, ptr, ptr + 40);
+      const code = wasm._wtox_network_relay_authenticated_probe(mode, ptr);
+      const counts = Array.from({length:10}, (_,i) =>
+        new DataView(wasm.HEAPU8.buffer).getUint32(ptr+i*4,true));
+      assert.equal(code, 0, label + ": native probe=" + code + " counters=" + counts.join(","));
+      assert.equal(counts[0], 1);
+      assert.equal(counts[1], 1);
+      assert.ok(counts[2] >= 1, label + ": original client emitted handshake");
+      assert.ok(counts[3] >= 1, label + ": original client read server response");
+      assert.equal(counts[7], 0, label + ": native receive queue was consumed");
+      assert.equal(counts[9], 0, label + ": a fake relay is not an online Tox peer");
+      if (mode <= 1) {
+        assert.equal(counts[4], 0, label + ": authenticated handshake remains open");
+        assert.equal(counts[8], 2, label + ": virtual stream remains OPEN");
+      } else {
+        assert.ok(counts[4] >= 1, label + ": invalid response must close the socket");
+      }
+      if (mode === 1) {
+        assert.equal(counts[5], 0, "partial authenticated reply cannot be read");
+        assert.equal(counts[6], 23, "first 23 bytes must remain buffered");
+      }
+    }
+  } finally {
+    wasm.HEAPU8.fill(0, ptr, ptr + 40);
+    wasm._free(ptr);
+  }
+});

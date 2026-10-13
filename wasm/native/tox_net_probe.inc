@@ -12,6 +12,8 @@
 #include <sys/socket.h>
 #include <toxcore/net.h>
 #include <toxcore/tox_private.h>
+#include <toxcore/crypto_core.h>
+#include <toxcore/TCP_common.h>
 
 #define WTOX_PROBE_SOCKET 0x5754
 typedef struct Wtox_Probe {
@@ -409,6 +411,138 @@ int wtox_network_relay_rejection_probe(uint32_t mode, uint32_t results[10]) {
             ? 0 : -9;
     }
     sodium_memzero(invalid, sizeof(invalid));
+    tox_kill(tox);
+    wtox_vtcp_reset();
+    return code;
+}
+
+/* Offline, test-only original Tox TCP cryptographic response. No OS I/O.
+ * mode 0=valid, 1=fragmented valid, 2=wrong relay private key,
+ * 3=valid ciphertext with tampered MAC. Never enables production networking.
+ */
+EMSCRIPTEN_KEEPALIVE
+int wtox_network_relay_authenticated_probe(uint32_t mode, uint32_t result[10]) {
+    if (!result || mode > 3 || wtox_live || sodium_init() < 0) return -1;
+    memset(result, 0, 10 * sizeof(uint32_t));
+    wtox_vtcp_reset();
+    Wtox_Probe counter = {0};
+    Network ns = { .funcs = &wtox_probe_funcs, .obj = &counter };
+    Tox_System system = tox_default_system();
+    system.ns = &ns;
+    Tox_Options_Testing testing = { .operating_system = &system };
+    Tox_Err_Options_New opt_err = TOX_ERR_OPTIONS_NEW_OK;
+    Tox_Options *opts = tox_options_new(&opt_err);
+    if (!opts || opt_err != TOX_ERR_OPTIONS_NEW_OK) return -2;
+    tox_options_set_udp_enabled(opts, false);
+    tox_options_set_local_discovery_enabled(opts, false);
+    tox_options_set_ipv6_enabled(opts, false);
+    tox_options_set_experimental_disable_dns(opts, true);
+    Tox_Err_New new_err = TOX_ERR_NEW_OK;
+    Tox_Err_New_Testing test_err = TOX_ERR_NEW_TESTING_OK;
+    Tox *tox = tox_new_testing(opts, &new_err, &testing, &test_err);
+    tox_options_free(opts);
+    if (!tox || new_err != TOX_ERR_NEW_OK || test_err != TOX_ERR_NEW_TESTING_OK) {
+        if (tox) tox_kill(tox);
+        wtox_vtcp_reset();
+        return -3;
+    }
+
+    uint8_t relay_secret[CRYPTO_SECRET_KEY_SIZE] = {0};
+    uint8_t reply_secret[CRYPTO_SECRET_KEY_SIZE] = {0};
+    uint8_t relay_public[CRYPTO_PUBLIC_KEY_SIZE] = {0};
+    uint8_t ephemeral_secret[CRYPTO_SECRET_KEY_SIZE] = {0};
+    uint8_t shared[CRYPTO_SHARED_KEY_SIZE] = {0};
+    uint8_t plain[TCP_HANDSHAKE_PLAIN_SIZE] = {0};
+    uint8_t response[TCP_SERVER_HANDSHAKE_SIZE] = {0};
+    uint8_t request[TCP_CLIENT_HANDSHAKE_SIZE] = {0};
+    int code = 0;
+
+    randombytes_buf(relay_secret, sizeof(relay_secret));
+    crypto_derive_public_key(relay_public, relay_secret);
+    Tox_Err_Bootstrap bootstrap_err = TOX_ERR_BOOTSTRAP_OK;
+    if (!tox_add_tcp_relay(tox, "198.51.100.7", 33445,
+                           relay_public, &bootstrap_err) ||
+        bootstrap_err != TOX_ERR_BOOTSTRAP_OK ||
+        counter.sockets != 1 || counter.connects != 1 ||
+        wtox_vtcp_connected() != 0) {
+        code = -4;
+        goto cleanup;
+    }
+    for (unsigned i = 0; i < 8 && wtox_vtcp_tx_pending() == 0; ++i)
+        tox_iterate(tox, NULL);
+    if (wtox_vtcp_tx_pending() != TCP_CLIENT_HANDSHAKE_SIZE ||
+        wtox_vtcp_tx_peek(request, sizeof(request)) != sizeof(request) ||
+        wtox_vtcp_tx_consume(sizeof(request)) != 0) {
+        code = -5;
+        goto cleanup;
+    }
+
+    /* Authenticate the original Tox client hello with the test relay's
+       matching long-term private key (or an intentionally wrong key). */
+    if (mode == 2) randombytes_buf(reply_secret, sizeof(reply_secret));
+    else memcpy(reply_secret, relay_secret, sizeof(reply_secret));
+    if (encrypt_precompute(request, reply_secret, shared) != 0) {
+        code = -6;
+        goto cleanup;
+    }
+    randombytes_buf(ephemeral_secret, sizeof(ephemeral_secret));
+    crypto_derive_public_key(plain, ephemeral_secret);
+    randombytes_buf(plain + CRYPTO_PUBLIC_KEY_SIZE, CRYPTO_NONCE_SIZE);
+    randombytes_buf(response, CRYPTO_NONCE_SIZE);
+    const int encrypted_len = encrypt_data_symmetric(
+        system.mem, shared, response, plain, sizeof(plain),
+        response + CRYPTO_NONCE_SIZE);
+    if (encrypted_len != (int)(sizeof(response) - CRYPTO_NONCE_SIZE)) {
+        code = -7;
+        goto cleanup;
+    }
+    if (mode == 3) response[sizeof(response) - 1] ^= 1;
+    const size_t first = mode == 1 ? 23 : sizeof(response);
+    if (wtox_vtcp_rx_push(response, first) != (int)first) {
+        code = -8;
+        goto cleanup;
+    }
+    tox_iterate(tox, NULL);
+    const uint32_t first_recvs = counter.recvs;
+    const int first_rx = WTOX_VTCP_LIMIT - wtox_vtcp_rx_free();
+    if (mode == 1) {
+        if (wtox_vtcp_rx_push(response + first, sizeof(response) - first)
+            != (int)(sizeof(response) - first)) {
+            code = -9;
+            goto cleanup;
+        }
+    }
+    for (unsigned i = 0; i < 8; ++i) tox_iterate(tox, NULL);
+    result[0] = counter.sockets;
+    result[1] = counter.connects;
+    result[2] = counter.sends;
+    result[3] = counter.recvs;
+    result[4] = counter.closes;
+    result[5] = first_recvs;
+    result[6] = (uint32_t)first_rx;
+    result[7] = (uint32_t)(WTOX_VTCP_LIMIT - wtox_vtcp_rx_free());
+    result[8] = (uint32_t)wtox_vtcp_state();
+    result[9] = (uint32_t)tox_self_get_connection_status(tox);
+    if (counter.recvs < 1 || result[7] != 0 ||
+        result[9] != TOX_CONNECTION_NONE ||
+        (mode == 1 && (first_recvs != 0 || first_rx != 23))) {
+        code = -10;
+    } else if (mode <= 1) {
+        if (counter.closes != 0 || wtox_vtcp_state() != WTOX_VTCP_OPEN)
+            code = -11;
+    } else {
+        if (counter.closes == 0 || wtox_vtcp_state() == WTOX_VTCP_OPEN)
+            code = -12;
+    }
+
+cleanup:
+    sodium_memzero(relay_secret, sizeof(relay_secret));
+    sodium_memzero(reply_secret, sizeof(reply_secret));
+    sodium_memzero(ephemeral_secret, sizeof(ephemeral_secret));
+    sodium_memzero(shared, sizeof(shared));
+    sodium_memzero(plain, sizeof(plain));
+    sodium_memzero(response, sizeof(response));
+    sodium_memzero(request, sizeof(request));
     tox_kill(tox);
     wtox_vtcp_reset();
     return code;

@@ -211,3 +211,15 @@ with a fake Socket; no real network traffic or secrets leave the runner.
 
 Passing these tests is a *negative-case* security result only. It does not
 yet confirm a legitimate remote relay handshake or peer interoperability.
+
+## Twelfth increment: locally authenticated TCP Relay response
+
+The isolated `wtox_network_relay_authenticated_probe` reads a real native
+Tox client hello, derives the correct Curve25519 shared key from a locally
+generated Relay private/public keypair, and encrypts a matching server
+response using original Toxcore primitives. The original client must
+accept valid full and fragmented responses, while rejecting mismatched
+relay private keys or altered authentication tags.
+
+This runs entirely in WASM using a fake TEST-NET-2 socket. No public TCP
+relay, actual remote authentication, or qTox/aTox online messaging occurs.

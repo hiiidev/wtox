@@ -156,3 +156,11 @@ the original Toxcore client execute its normal TCP state machine. A
 partial handshake must wait; malformed complete handshakes must be read,
 rejected and disconnected. This is a bounded deterministic test with no
 OS network access and **not** a successful encrypted handshake.
+
+## Offline positive cryptographic handshake gate
+
+Original Toxcore should verify an authenticated synthetic server response
+from a local private key matching the advertised fake Relay public key.
+A fragmented valid response must also work, while responses encrypted
+under a different private key or modified MAC must be disconnected. This
+proves local crypto protocol handling, not remote TCP or peer interop.
