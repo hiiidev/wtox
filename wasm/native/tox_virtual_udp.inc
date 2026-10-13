@@ -18,6 +18,7 @@ static unsigned vudp_tx_head, vudp_tx_count, vudp_rx_head, vudp_rx_count;
 static bool vudp_socket_open, vudp_socket_bound;
 static uint16_t vudp_local_port;
 static uint16_t vudp_bootstrap_port;
+static Tox *vudp_tox;
 static bool vudp_friend_requested=false;
 static uint32_t vudp_friend_online_events=0;
 static uint32_t vudp_friend_inbound=0;
@@ -42,7 +43,6 @@ static void vudp_friend_text_cb(Tox *tox, Tox_Friend_Number id,
     vudp_friend_message_length=(uint16_t)len;
     ++vudp_friend_inbound;
 }
-static Tox *vudp_tox;
 static Network vudp_network;
 static Tox_System vudp_system;
 static uint32_t vudp_rejected, vudp_backpressure, vudp_sent, vudp_received;
