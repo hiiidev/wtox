@@ -56,7 +56,8 @@ self.addEventListener("message", async ({ data }) => {
           });
           if (proof.status !== 200) throw Error("encrypted_pong_proof_unavailable");
           const counts = await proof.json();
-          if (counts.pings === 1 && counts.pongs === 1) break;
+          if (counts.pings === 1 && counts.pongs === 1 &&
+              counts.nativePingReplies >= 1) break;
         }
       }
     } while (Date.now() < end);
@@ -74,7 +75,8 @@ self.addEventListener("message", async ({ data }) => {
       }
       const p = await fetch("/__wtox_independent_stats?mode=" + mode, {cache:"no-store"});
       const counters = await p.json();
-      if (counters.pings !== 1 || counters.pongs !== 1) {
+      if (counters.pings !== 1 || counters.pongs !== 1 ||
+          counters.nativePingReplies < 1) {
         throw Error("independent_pong_not_authenticated");
       }
     } else if (stats.closes < 1 || stats.socketState === 2) {

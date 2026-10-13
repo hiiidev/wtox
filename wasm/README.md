@@ -322,3 +322,18 @@ negative cases remain mandatory. All sockets remain bound to
 `127.0.0.1`; no actual public Relay, forwarding connection, friend
 request or qTox/aTox exchange is claimed. The normal identity Worker
 and production system never load the fixture.
+
+### Bidirectional heartbeat correction
+
+In the first post-handshake browser run, original c-toxcore immediately
+initiated its own encrypted TCP PING. The minimal Node fixture initially
+treated that legitimate packet as unexpected and disconnected. The
+independent Node fixture now decrypts a client-initiated PING and returns
+an authenticated PONG with the same 8-byte identifier, incrementing the
+Node-to-client nonce. It then initiates its **own** PING using the next
+nonce; original Toxcore returns its own authenticated PONG using the
+next client-to-server nonce. The browser and Node assertions require
+both independent directions to succeed.
+
+This remains local loopback Tox TCP control-plane research, not peer
+message or public Relay interoperability.

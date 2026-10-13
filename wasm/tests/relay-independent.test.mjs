@@ -63,6 +63,7 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
   let invalidPostHandshakePackets = 0;
   const validPongs = new Map();
   const encryptedPings = new Map();
+  const respondedClientPings = new Map();
   const requestedModes = new Map();
   let origin = "";
   const web = createServer(async (req, res) => {
@@ -82,7 +83,8 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
       });
       res.end(JSON.stringify({
         pings: encryptedPings.get(Number(mode)) || 0,
-        pongs: validPongs.get(Number(mode)) || 0
+        pongs: validPongs.get(Number(mode)) || 0,
+        nativePingReplies: respondedClientPings.get(Number(mode)) || 0
       }));
       return;
     }
@@ -140,13 +142,34 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
           if (postHandshake.length < size + 2) break; // TCP partial frame
           const encrypted = postHandshake.subarray(2, size + 2);
           const decoded = nacl.box.open.after(encrypted, recvNonce, sessionKey);
-          if (!decoded || decoded.length !== 9 || decoded[0] !== 5 ||
-              !pingId || !Buffer.from(decoded.subarray(1)).equals(pingId)) {
+          if (!decoded || decoded.length !== 9) {
             invalidPostHandshakePackets++;
             socket.destroy();
             return;
           }
-          validPongs.set(mode, (validPongs.get(mode) || 0) + 1);
+          if (decoded[0] === 4) {
+            // Original c-toxcore initiates its own encrypted PING promptly
+            // after confirmation. A real Relay must answer with the same
+            // 8-byte identifier, before our delayed server-initiated PING.
+            const pong = Uint8Array.from([5, ...decoded.subarray(1)]);
+            const encryptedPong = nacl.box.after(pong, sendNonce, sessionKey);
+            const response = Buffer.alloc(2 + encryptedPong.length);
+            response.writeUInt16BE(encryptedPong.length, 0);
+            response.set(encryptedPong, 2);
+            socket.write(Buffer.from(response));
+            incrementToxNonce(sendNonce);
+            respondedClientPings.set(mode, (respondedClientPings.get(mode) || 0) + 1);
+            response.fill(0);
+            encryptedPong.fill(0);
+            pong.fill(0);
+          } else if (decoded[0] === 5 && pingId &&
+                     Buffer.from(decoded.subarray(1)).equals(pingId)) {
+            validPongs.set(mode, (validPongs.get(mode) || 0) + 1);
+          } else {
+            invalidPostHandshakePackets++;
+            socket.destroy();
+            return;
+          }
           incrementToxNonce(recvNonce); // native uses big-endian 24-byte nonce
           postHandshake = Buffer.from(postHandshake.subarray(size + 2));
         }
@@ -317,6 +340,10 @@ test("Chromium Toxcore authenticates an independently keyed Node TCP Relay fixtu
     assert.equal(encryptedPings.get(1), 1, "fragmented handshake must support encrypted Tox PING");
     assert.equal(validPongs.get(0), 1, "Node must decrypt native Toxcore encrypted PONG");
     assert.equal(validPongs.get(1), 1, "Node must decrypt PONG after fragmented valid handshake");
+    assert.ok((respondedClientPings.get(0) || 0) >= 1,
+      "Node must answer original Toxcore-initiated encrypted PING");
+    assert.ok((respondedClientPings.get(1) || 0) >= 1,
+      "Node must also answer native PING after fragmented handshake");
     assert.equal(invalidPostHandshakePackets, 0, "post-handshake frames must be authenticated");
     assert.equal(validClientHellos, 4, "Node must independently decrypt all genuine client hellos");
     await page.close();
