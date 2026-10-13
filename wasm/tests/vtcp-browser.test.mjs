@@ -1,10 +1,11 @@
 /**
- * Loopback-only actual Chromium + actual compiled WASM + Node WebSocket echo.
+ * Loopback-only actual Chromium + actual compiled WASM + Node TCP echo through an authenticated WebSocket.
  * The bridge uses the existing v1 auth/frame format; no Tox relay handshake.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { createServer as createTcpServer, connect as connectTcp } from "node:net";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -59,6 +60,8 @@ test("native WASM virtual TCP streams exact bytes through browser WebSocket and 
     }
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const tcpServer = createTcpServer(socket => socket.pipe(socket));
+  await new Promise(resolve => tcpServer.listen(0, "127.0.0.1", resolve));
   const origin = "http://127.0.0.1:" + server.address().port;
   const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxPayload: 65542 });
   server.on("upgrade", (request, socket, head) => {
@@ -70,6 +73,9 @@ test("native WASM virtual TCP streams exact bytes through browser WebSocket and 
     }
     wss.handleUpgrade(request, socket, head, ws => {
       let authenticated = false;
+      let tcp = null;
+      ws.on("close", () => tcp?.destroy());
+      ws.on("error", () => tcp?.destroy());
       ws.on("message", (message, isBinary) => {
         if (!authenticated) {
           if (isBinary || message.length > 512) { ws.close(1008); return; }
@@ -80,10 +86,29 @@ test("native WASM virtual TCP streams exact bytes through browser WebSocket and 
             }
           } catch { ws.close(1008); return; }
           authenticated = true;
-          ws.send(JSON.stringify({ type: "ready" }));
+          // This is a genuine local Node TCP socket, not a JS-only echo.
+          tcp = connectTcp(tcpServer.address().port, "127.0.0.1");
+          tcp.once("connect", () => {
+            if (ws.readyState === 1) ws.send(JSON.stringify({ type: "ready" }));
+          });
+          tcp.on("data", chunk => {
+            if (ws.readyState !== 1) return;
+            for (let i = 0; i < chunk.length; i += 16384) {
+              const payload = chunk.subarray(i, i + 16384);
+              const frame = new Uint8Array(payload.length + 6);
+              frame[0] = 1; frame[1] = 1;
+              new DataView(frame.buffer).setUint32(2, payload.length, false);
+              frame.set(payload, 6);
+              ws.send(frame);
+            }
+          });
+          tcp.on("error", () => ws.close(1011));
+          tcp.on("close", () => { if (ws.readyState === 1) ws.close(1000); });
           return;
         }
-        if (!isBinary) { ws.close(1008); return; }
+        if (!isBinary || !tcp?.writable || tcp.writableLength > 512 * 1024) {
+          ws.close(1008); return;
+        }
         const data = new Uint8Array(message);
         const length = data.length >= 6 ?
           new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(2, false) : -1;
@@ -91,8 +116,7 @@ test("native WASM virtual TCP streams exact bytes through browser WebSocket and 
             length !== data.length - 6) {
           ws.close(1008); return;
         }
-        // Echo exactly the canonical TCP frame over a real WS socket.
-        ws.send(data);
+        tcp.write(data.subarray(6));
       });
     });
   });
@@ -120,5 +144,6 @@ test("native WASM virtual TCP streams exact bytes through browser WebSocket and 
     for (const ws of wss.clients) ws.terminate();
     await new Promise(resolve => wss.close(resolve));
     await new Promise(resolve => server.close(resolve));
+    await new Promise(resolve => tcpServer.close(resolve));
   }
 });
