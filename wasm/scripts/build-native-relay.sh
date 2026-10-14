@@ -68,3 +68,12 @@ cc -std=c11 -O2 -D_GNU_SOURCE \
   -o "$DIST/tox-udp-friend-receiver"
 test -s "$DIST/tox-udp-friend-receiver"
 echo "Pinned original local first-contact receiver built"
+
+# Independent original Linux c-toxcore + ToxEncryptSave identity-file
+# cross-runtime fixture. Does not run a GUI or connect to any network.
+cc -std=c11 -O2 -D_GNU_SOURCE \
+  -I "$UPSTREAM" "$ROOT/native/tox_save_interop.c" \
+  "$archive" $(pkg-config --cflags --libs libsodium) -lm -pthread \
+  -o "$DIST/tox-save-interop"
+test -s "$DIST/tox-save-interop"
+echo "Independent Linux Tox savedata/ToxEncryptSave fixture built"

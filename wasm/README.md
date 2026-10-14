@@ -811,3 +811,38 @@ This is **not** automatic restoration after reopening the browser and
 **not** public qTox/aTox interoperability; the backup must remain with the
 user and be re-selected with its password. Production React, Cloudflare,
 VPS, and `main` remain untouched.
+
+## Stage 29: independent native c-toxcore / browser-WASM savedata interoperability
+
+A NEW, separately compiled Linux CLI in `native/tox_save_interop.c` uses
+unmodified pinned c-toxcore `tox_new`, `tox_get_savedata`, `tox_pass_encrypt`,
+`tox_pass_decrypt` and `tox_friend_get_public_key`. It does NOT invoke the
+wTox WebAssembly ABI, and does NOT simulate a Tox profile parser.
+
+`native-wasm-save-interop.test.mjs` tests both directions through real
+binary **standard ToxEncryptSave** files in a private temporary folder:
+
+- **Native Linux → WASM:** a fresh native identity gets one original friend
+  and a profile name; Linux encrypts the genuine savedata with a fixed
+  clearly test-only password. The independent original WASM imports it
+  through the same UDP-enabled `tox_new_testing` path used in the browser.
+  It must preserve the **entire 38-byte Tox ID, exact 32-byte friend's key,
+  one saved friend, and genuine offline status**.
+- **WASM → Native Linux:** the restored native-origin profile is re-encrypted
+  by WebAssembly and decrypted/validated by the independent Linux
+  `tox_pass_decrypt` + `tox_new`. A separate brand-new WebAssembly
+  identity then adds a real original Tox friend, writes a standard encrypted
+  file, and the Linux CLI must import and validate that different identity
+  and actual stored friend's public key.
+- Both implementations reject tampered ciphertext; wrong passwords and
+  wrong expected identities cannot validate as successful imports.
+
+The fixed passphrase is a disposable CI TEST FIXTURE, never a production
+secret. Only ephemeral synthetic Tox profiles are used; the temporary
+files are removed after testing. No private key is printed. This checks
+**cross-runtime standard c-toxcore savedata/crypto compatibility**, an
+important prerequisite for qTox-style profiles, but does **NOT** yet run
+or certify an unmodified qTox GUI/aTox application. Their actual app-level
+import/export behaviour and public-network compatibility remain untested.
+The branch stays local-only; main, Cloudflare, VPS and production users are
+not involved.

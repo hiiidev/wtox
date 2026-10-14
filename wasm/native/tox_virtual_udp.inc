@@ -481,6 +481,17 @@ int wtox_vudp_native_friend_state(uint32_t out[4])
     out[3]=vudp_friend_inbound;
     return 0;
 }
+/* Return only the *public* key stored by original Toxcore.
+ * This makes independent native/WASM friend-roster interop testable. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_friend_public_key(uint8_t *out,size_t capacity)
+{
+    if(!vudp_tox || !vudp_friend_requested || !out ||
+       capacity!=TOX_PUBLIC_KEY_SIZE)return -1;
+    Tox_Err_Friend_Get_Public_Key err=TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK;
+    bool ok=tox_friend_get_public_key(vudp_tox,0,out,&err);
+    return ok && err==TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK ? 0 : -2;
+}
 EMSCRIPTEN_KEEPALIVE
 int wtox_vudp_native_friend_send(const uint8_t *message,size_t length)
 {
