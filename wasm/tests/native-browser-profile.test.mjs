@@ -24,6 +24,7 @@ const mime=new Map([
   ["/tests/local-chat-ui.mjs","text/javascript; charset=utf-8"],
   ["/tests/local-chat.css","text/css; charset=utf-8"],
   ["/browser/local-chat.worker.mjs","text/javascript; charset=utf-8"],
+  ["/browser/bounded-udp-inbox.mjs","text/javascript; charset=utf-8"],
   ["/dist/tox_identity.mjs","text/javascript; charset=utf-8"],
   ["/dist/tox_identity.wasm","application/wasm"]
 ]);
@@ -182,9 +183,20 @@ test("real Chromium file picker imports encrypted .tox created by independently 
     const page=await browser.newPage(),pageErrors=[];
     page.on("pageerror",e=>pageErrors.push(e.message.slice(0,200)));
     await page.goto(origin+"/tests/local-chat.html",{waitUntil:"load"});
-    await page.waitForFunction(()=>
-      document.querySelector("#my-tox-id")?.dataset.state==="ready",
-      {timeout:60000});
+    try {
+      await page.waitForFunction(()=>
+        document.querySelector("#my-tox-id")?.dataset.state==="ready",
+        {timeout:60000});
+    } catch (error) {
+      const debug=await page.evaluate(()=>({
+        network:document.querySelector("#network-status")?.textContent,
+        feedback:document.querySelector("#feedback")?.textContent,
+        id:document.querySelector("#my-tox-id")?.textContent
+      }));
+      throw Error("native_browser_profile_setup_failed "+JSON.stringify({
+        debug,pageErrors,underlying:String(error)
+      }));
+    }
     const initialId=await page.$eval("#my-tox-id",el=>el.textContent);
     assert.match(initialId,/^[A-F0-9]{76}$/);
     assert.notEqual(initialId,nativeProfileId);
