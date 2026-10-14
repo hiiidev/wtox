@@ -7,7 +7,7 @@
     "test:unit": "node --test tests/unit.test.mjs tests/events.test.mjs tests/udp-inbox.test.mjs",
     "test:wasm": "node --test --test-concurrency=1 tests/wasm-smoke.test.mjs tests/vtcp-wasm.test.mjs tests/relay-research.test.mjs tests/vudp-wasm.test.mjs tests/vudp-backup.test.mjs tests/native-wasm-save-interop.test.mjs",
     "test:discovery": "node --test --test-concurrency=1 tests/native-discovery.test.mjs",
-    "test:browser": "node --test --test-concurrency=1 tests/browser-smoke.test.mjs tests/vtcp-browser.test.mjs tests/relay-browser.test.mjs tests/relay-independent.test.mjs tests/relay-dual.test.mjs tests/relay-upstream.test.mjs tests/relay-linux.test.mjs tests/udp-browser.test.mjs tests/dht-browser.test.mjs tests/dht-friend.test.mjs tests/local-chat.test.mjs"
+    "test:browser": "node --test --test-concurrency=1 tests/browser-smoke.test.mjs tests/vtcp-browser.test.mjs tests/relay-browser.test.mjs tests/relay-independent.test.mjs tests/relay-dual.test.mjs tests/relay-upstream.test.mjs tests/relay-linux.test.mjs tests/udp-browser.test.mjs tests/dht-browser.test.mjs tests/dht-friend.test.mjs tests/local-chat.test.mjs tests/native-browser-profile.test.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "24.20.0",

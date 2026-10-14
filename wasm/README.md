@@ -870,3 +870,25 @@ byte-for-byte preservation including a 2048-byte packet, saturation,
 validation, eventual draining, and zeroization. The existing Chromium full
 page reload/test still exercises the real DHT/Onion path, not simulated
 network success.
+
+## Stage 30: independent Linux-created profile through Chromium file picker
+
+A further CI compatibility gate runs the **independently compiled native
+Linux original c-toxcore** executable to create an encrypted standard `.tox`
+file with a real profile name and an original friend relationship. The test
+does NOT generate the file from WASM or create fake JSON savedata.
+
+A fresh, isolated Chromium tab starts an unrelated, ephemeral UDP/DHT
+original c-toxcore WASM identity, selects the externally generated Linux
+binary profile using the actual HTML file input, and enters the native
+test-only ToxEncryptSave password. The browser's **original WASM**
+savedata inspector rejects a deliberately wrong password and keeps the
+fresh identity. With explicit empty-identity replacement consent and the
+correct password, the genuine Linux-created full 38-byte Tox ID and saved
+friend relationship appear in the UI. The imported friend stays offline:
+no fabricated connection state, no inserted DHT keys, and no fake message.
+
+The downloaded fixture remains local to GitHub Actions, and is deleted
+after use. This is **real browser UI import of independently produced
+original c-toxcore standard .tox binary files**, not an unmodified
+qTox/aTox executable or public-Tox compatibility certification.
