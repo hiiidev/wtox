@@ -198,7 +198,7 @@ async function main(config){
       }
     }
 
-    const deadline=Date.now()+100000;
+    const deadline=Date.now()+190000;
     while(!closeRequested){
       ensure(Date.now()<deadline,"local_manual_chat_session_timeout");
       ensure(ws.readyState===WebSocket.OPEN,"transport_disconnected");

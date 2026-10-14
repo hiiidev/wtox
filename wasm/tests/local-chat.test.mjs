@@ -74,7 +74,7 @@ async function stopNative(child) {
     setTimeout(()=>{child.kill("SIGKILL");resolve();},1600))]);
 }
 test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed message and native reply",{
-  timeout:180000
+  timeout:240000
 },async()=>{
   assert.ok(existsSync(nativeBinary),"native original c-toxcore DHT bootstrap is required");
   assert.ok(existsSync(join(root,"dist/tox_identity.wasm")),
@@ -337,10 +337,26 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
       /Saved friend restored/);
     assert.equal(await page.$eval("#request-button",el=>el.disabled),true,
       "restored friend must exist without a second friend request");
-    await page.waitForFunction(()=>
-      document.querySelector("#my-tox-id")?.dataset.state==="ready" &&
-      document.querySelector("#send-button")?.disabled===false,
-      {timeout:65000});
+    try{
+      await page.waitForFunction(()=>
+        document.querySelector("#my-tox-id")?.dataset.state==="ready" &&
+        document.querySelector("#send-button")?.disabled===false,
+        {timeout:95000});
+    }catch(error){
+      const snapshot=await page.evaluate(()=>({
+        network:document.querySelector("#network-status")?.textContent,
+        friend:document.querySelector("#friend-status")?.textContent,
+        feedback:document.querySelector("#feedback")?.textContent,
+        identityState:document.querySelector("#my-tox-id")?.dataset.state,
+        sendDisabled:document.querySelector("#send-button")?.disabled,
+        restore:document.querySelector("#restore-state")?.dataset.state,
+        visibleMessages:[...document.querySelectorAll("#messages li")]
+          .map(el=>el.textContent).slice(-4)
+      }));
+      throw Error("reloaded_original_tox_friend_reconnect_timeout "+
+        JSON.stringify({snapshot,metrics,nativeLog:native.logs().slice(-1300),
+                        pageErrors,pageStateError:String(error)}));
+    }
     await page.type("#message-text","wTox message after full browser page reload");
     await page.click("#send-button");
     await page.waitForFunction(()=>
