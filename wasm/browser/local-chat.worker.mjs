@@ -158,7 +158,16 @@ async function main(config){
                "original_network_identity_missing");
         const expected=hex(m.HEAPU8.slice(addressPtr,addressPtr+38));
         const recovered=hex(m.HEAPU8.slice(id,id+38));
-        ensure(recovered===expected,"backup_identity_mismatch");
+        // Page-reload recovery: the newly minted, still EMPTY identity may
+        // be replaced, but only with an explicit separate user confirmation.
+        // Never replace an established friend or online Tox session.
+        if(recovered!==expected){
+          ensure(command.replaceFresh===true && !requested && !online,
+                 "backup_identity_mismatch");
+          ensure(m._wtox_vudp_native_friend_state(meta)===0 &&
+            new DataView(m.HEAPU8.buffer).getUint32(meta,true)===0,
+            "cannot_replace_identity_with_friends");
+        }
         m._wtox_vudp_probe_stop();
         started=false;
         const status=m._wtox_vudp_restore_encrypted(
@@ -167,7 +176,7 @@ async function main(config){
         started=true;
         ensure(m._wtox_vudp_native_address(addressPtr,38)===0,
                "restored_network_identity_missing");
-        ensure(hex(m.HEAPU8.slice(addressPtr,addressPtr+38))===expected,
+        ensure(hex(m.HEAPU8.slice(addressPtr,addressPtr+38))===recovered,
                "native_identity_changed_after_restore");
         ensure(m._wtox_vudp_native_friend_state(meta)===0,
                "restored_friend_query_failed");
@@ -178,7 +187,8 @@ async function main(config){
         sent=received=0;
         ensure(m._wtox_vudp_native_bootstrap(port,keyPtr,32)===0,
                "restored_native_dht_bootstrap_failed");
-        notice("RESTORED",{toxId:expected,friendRestored:requested});
+        notice("RESTORED",{toxId:recovered,friendRestored:requested,
+                            replacedFreshIdentity:recovered!==expected});
       }finally{
         secret.fill(0);
         if(p){m.HEAPU8.fill(0,p,p+secret.length);m._free(p);}

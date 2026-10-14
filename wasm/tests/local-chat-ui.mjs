@@ -87,6 +87,9 @@ worker.onmessage=({data})=>{
       break;
     }
     case "RESTORED":
+      if(data.replacedFreshIdentity===true)
+        appendMessage("System","Restored previous identity from encrypted backup; discovering saved friend.","system");
+      $("replace-fresh").checked=false;
       ready=false;
       online=false;
       requested=data.friendRestored===true;
@@ -176,7 +179,8 @@ $("backup-restore-form").addEventListener("submit",async event=>{
   $("restore-state").textContent="Validating encrypted backup...";
   try{
     const bytes=new Uint8Array(await file.arrayBuffer());
-    worker.postMessage({action:"RESTORE",backup:bytes,password},[bytes.buffer]);
+    worker.postMessage({action:"RESTORE",backup:bytes,password,
+      replaceFresh:$("replace-fresh").checked},[bytes.buffer]);
   }catch(e){alertUser("Cannot read encrypted .tox file: "+String(e.message||e));}
 });
 $("disconnect").addEventListener("click",closeSession);

@@ -74,7 +74,7 @@ async function stopNative(child) {
     setTimeout(()=>{child.kill("SIGKILL");resolve();},1600))]);
 }
 test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed message and native reply",{
-  timeout:135000
+  timeout:180000
 },async()=>{
   assert.ok(existsSync(nativeBinary),"native original c-toxcore DHT bootstrap is required");
   assert.ok(existsSync(join(root,"dist/tox_identity.wasm")),
@@ -115,14 +115,14 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
     });
     await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
     const origin="http://127.0.0.1:"+server.address().port;
-    let used=false;
+    let connected=false;
     server.on("upgrade",(req,sock,head)=>{
-      if(used || req.url!=="/__wtox_dht_bridge" ||
+      if(connected || metrics.clients>=2 || req.url!=="/__wtox_dht_bridge" ||
          req.headers.origin!==origin ||
          req.headers["sec-websocket-protocol"]!=="wtox-udp-v1"){
         sock.destroy();return;
       }
-      used=true;
+      connected=true;
       wss.handleUpgrade(req,sock,head,ws=>{
         ++metrics.clients;
         let authed=false;
@@ -141,7 +141,10 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
           ws.send(frame);
         };
         osSocket.on("message",receive);
-        ws.on("close",()=>osSocket.off("message",receive));
+        ws.on("close",()=>{
+          osSocket.off("message",receive);
+          connected=false;
+        });
         ws.on("message",(message,binary)=>{
           if(!authed){
             if(binary||message.length>256){ws.close(1008);return;}
@@ -289,6 +292,64 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
       all.map(x=>x.textContent));
     assert.ok(history.includes("You: wTox browser message after restored identity"));
     assert.ok(history.includes("Friend: wTox native reply after restored identity"));
+    // Close entire document AND its Dedicated Worker. Restore from the
+    // ciphertext downloaded earlier into an independently created new
+    // native Toxcore session — not the previous in-page instance.
+    await page.goto("about:blank",{waitUntil:"load"});
+    for(let i=0;i<80&&connected;i++)
+      await new Promise(resolve=>setTimeout(resolve,25));
+    assert.equal(connected,false,
+      "previous WebSocket and Worker must drain before new browser instance");
+    assert.equal(wss.clients.size,0,
+      "no retained authenticated bridge socket across browser reload");
+    await page.goto(origin+"/tests/local-chat.html",{waitUntil:"load"});
+    await page.waitForFunction(()=>
+      document.querySelector("#my-tox-id")?.dataset.state==="ready",
+      {timeout:65000});
+    const freshId=await page.$eval("#my-tox-id",el=>el.textContent);
+    assert.match(freshId,/^[0-9A-F]{76}$/);
+    assert.notEqual(freshId,ownId,
+      "fresh page must not secretly reuse an unsaved identity");
+    assert.equal(await page.$eval("#send-button",el=>el.disabled),true);
+    assert.equal(await page.$eval("#request-button",el=>el.disabled),false);
+    await (await page.$("#restore-file")).uploadFile(downloaded);
+    await page.type("#restore-password",savePassword);
+    // Attempt WITHOUT explicit replacement approval must not destroy the
+    // new identity, and cannot create a hidden friend.
+    await page.click("#restore-backup");
+    await page.waitForFunction(()=>
+      document.querySelector("#restore-state")?.dataset.state==="failed",
+      {timeout:12000});
+    assert.equal(await page.$eval("#my-tox-id",el=>el.textContent),freshId);
+    assert.match(await page.$eval("#feedback",el=>el.textContent),
+      /backup_identity_mismatch/);
+    assert.match(await page.$eval("#friend-status",el=>el.textContent),
+      /No friend added/);
+    await page.click("#replace-fresh");
+    await page.type("#restore-password",savePassword);
+    await page.click("#restore-backup");
+    await page.waitForFunction(()=>
+      document.querySelector("#restore-state")?.dataset.state==="restored",
+      {timeout:12000});
+    assert.equal(await page.$eval("#my-tox-id",el=>el.textContent),ownId,
+      "the full original identity must survive complete browser page reload");
+    assert.match(await page.$eval("#friend-status",el=>el.textContent),
+      /Saved friend restored/);
+    assert.equal(await page.$eval("#request-button",el=>el.disabled),true,
+      "restored friend must exist without a second friend request");
+    await page.waitForFunction(()=>
+      document.querySelector("#my-tox-id")?.dataset.state==="ready" &&
+      document.querySelector("#send-button")?.disabled===false,
+      {timeout:65000});
+    await page.type("#message-text","wTox message after full browser page reload");
+    await page.click("#send-button");
+    await page.waitForFunction(()=>
+      [...document.querySelectorAll("#messages li")].some(el=>
+        el.textContent==="Friend: wTox reply after full browser page reload"),
+      {timeout:30000});
+    const finalBubbles=await page.$$eval("#messages li",all=>all.map(x=>x.textContent));
+    assert.ok(finalBubbles.includes("You: wTox message after full browser page reload"));
+    assert.ok(finalBubbles.includes("Friend: wTox reply after full browser page reload"));
     const state={publicKey:ownId.slice(0,64).toLowerCase()};
     // Native stdout is emitted by the ORIGINAL tox_callback_friend_request,
     // status and message callbacks, never synthesized by Node.
@@ -301,15 +362,15 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
     assert.match(log,/FRIEND_ONLINE/);
     assert.match(log,/TEXT_RECEIVED/);
     assert.match(log,/TEXT_SENT/);
-    assert.equal((log.match(/TEXT_RECEIVED/g)||[]).length,2,
+    assert.equal((log.match(/TEXT_RECEIVED/g)||[]).length,3,
       "native original Toxcore must receive messages before and after restore");
-    assert.equal((log.match(/TEXT_SENT/g)||[]).length,2,
+    assert.equal((log.match(/TEXT_SENT/g)||[]).length,3,
       "native original Toxcore must send replies before and after restore");
     assert.equal((log.match(/REQUEST_RECEIVED /g)||[]).length,1,
       "restored Tox identity should not generate a second friend request");
     assert.ok(metrics.sent>=2 && metrics.received>=2,
       "real Tox DHT handshake must traverse native OS UDP in both directions");
-    assert.equal(metrics.clients,1,"a single isolated browser DHT client");
+    assert.equal(metrics.clients,2,"two sequential isolated browser DHT clients");
     assert.equal(metrics.invalid,0,"no forbidden datagrams or invalid UDP frames");
     assert.equal(pageErrors.length,0,"no browser JavaScript errors");
     assert.equal(native.child.exitCode,null,"original native DHT bootstrap stays alive");

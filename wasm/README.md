@@ -780,3 +780,34 @@ the Linux native friend-request callback ran exactly once.
 No user credentials or backups are posted to the server and no production
 React, VPS, Cloudflare or main-branch files are changed. This is still
 localhost-only, not a claim of unmodified qTox/aTox/public Tox interop.
+
+## Stage 28: full browser document reload and encrypted identity recovery
+
+Beyond Stage 27's in-page Toxcore restart, the isolated Chromium integration
+now **navigates away from the entire document**, drains the first Dedicated
+Worker/WebSocket/UDP tunnel, and opens a brand new browser page and original
+WASM Toxcore instance. The fresh page must have a DIFFERENT original Tox ID,
+no friends and no enabled Send action. No identity is silently persisted.
+
+The user manually chooses the previously downloaded *original encrypted .tox*
+and enters its password. Without a separate explicit `replace-fresh` consent
+checkbox, the different identity MUST be rejected, retaining the new
+temporary identity. With consent, replacement is permitted **only while the
+temporary identity has no friends and is offline**. Original ToxEncryptSave
+preflight and bound checks still run inside WASM. Existing conversations and
+identities cannot be overwritten by a selected file. No browser storage,
+server session state or unencrypted private key is involved in recovery.
+
+Successful recovery must restore the *exact original full Tox ID*, the
+existing original native friend, bootstrap again through real DHT/Onion
+and exchange a THIRD distinct pair of end-to-end text messages with the same
+independent Linux c-toxcore peer, without ever reissuing a second friend
+request. The local test bridge permits two sequential authenticated sockets
+but never two simultaneously, and both connect only to the same explicitly
+bounded localhost UDP fixture. The isolated CI download directory is
+deleted on test completion.
+
+This is **not** automatic restoration after reopening the browser and
+**not** public qTox/aTox interoperability; the backup must remain with the
+user and be re-selected with its password. Production React, Cloudflare,
+VPS, and `main` remain untouched.

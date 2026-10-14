@@ -27,6 +27,8 @@ static const uint8_t browser_text[]="wTox browser original friend text";
 static const uint8_t native_text[]="wTox native original friend reply";
 static const uint8_t browser_text_after[]="wTox browser message after restored identity";
 static const uint8_t native_text_after[]="wTox native reply after restored identity";
+static const uint8_t browser_text_reload[]="wTox message after full browser page reload";
+static const uint8_t native_text_reload[]="wTox reply after full browser page reload";
 static void stop(int sig){(void)sig;running=0;}
 static bool local(const IP_Port *ip){
     return ip && net_family_is_ipv4(ip->ip.family) &&
@@ -102,12 +104,14 @@ static void status_cb(Tox *tox,Tox_Friend_Number id,Tox_Connection state,
 static void message_cb(Tox *tox,Tox_Friend_Number id,Tox_Message_Type type,
                        const uint8_t *message,size_t n,void *ignored){
     (void)ignored;
-    const uint8_t *expected=received==0?browser_text:browser_text_after;
+    const uint8_t *expected=received==0?browser_text:
+                            received==1?browser_text_after:browser_text_reload;
     const size_t expected_n=received==0?sizeof(browser_text)-1:
-                                              sizeof(browser_text_after)-1;
+                            received==1?sizeof(browser_text_after)-1:
+                                        sizeof(browser_text_reload)-1;
     if(tox!=receiver || id!=0 || type!=TOX_MESSAGE_TYPE_NORMAL ||
        !message || n!=expected_n || memcmp(message,expected,n)!=0 ||
-       received>=2){
+       received>=3){
         puts("ERROR invalid_text");fflush(stdout);running=0;return;
     }
     received++;
@@ -163,9 +167,11 @@ int main(int argc,char **argv){
         tox_iterate(bootstrap,NULL);
         tox_iterate(receiver,NULL);
         if(received>sent && online){
-            const uint8_t *reply=sent==0?native_text:native_text_after;
+            const uint8_t *reply=sent==0?native_text:
+                                 sent==1?native_text_after:native_text_reload;
             const size_t n=sent==0?sizeof(native_text)-1:
-                                       sizeof(native_text_after)-1;
+                           sent==1?sizeof(native_text_after)-1:
+                                   sizeof(native_text_reload)-1;
             Tox_Err_Friend_Send_Message err=TOX_ERR_FRIEND_SEND_MESSAGE_OK;
             tox_friend_send_message(receiver,0,TOX_MESSAGE_TYPE_NORMAL,
                                      reply,n,&err);

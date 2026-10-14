@@ -31,6 +31,11 @@
     <label for="restore-password">Backup password</label>
     <input id="restore-password" type="password" autocomplete="off"
            minlength="8" maxlength="1024" required>
+    <label for="replace-fresh">
+      <input id="replace-fresh" type="checkbox">
+      I confirm: replace this newly created, empty browser identity with the selected backup
+    </label>
+    <p class="muted">Check this only after reopening the page to recover your previous identity. A session with an existing friend cannot be replaced.</p>
     <div class="stack">
       <button id="restore-backup" type="submit" disabled>Restore and reconnect</button>
       <span id="restore-state" data-state="idle" class="muted" role="status">No backup restored</span>
