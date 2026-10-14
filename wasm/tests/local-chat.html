@@ -16,6 +16,26 @@
   <p class="muted">Ephemeral identity — not saved or shared with the production wTox account.</p>
   <code id="my-tox-id" data-state="pending">Waiting for native Toxcore…</code>
   <div class="stack"><button id="disconnect" type="button" class="secondary">Disconnect test session</button></div>
+  <form id="backup-export-form">
+    <label for="backup-password">Encrypt backup with a password (8–1024 UTF-8 bytes)</label>
+    <input id="backup-password" type="password" autocomplete="new-password"
+           minlength="8" maxlength="1024" required>
+    <div class="stack">
+      <button id="export-backup" type="submit" disabled>Download encrypted .tox</button>
+      <span id="export-state" data-state="idle" class="muted" role="status">No backup exported</span>
+    </div>
+  </form>
+  <form id="backup-restore-form">
+    <label for="restore-file">Restore your encrypted .tox (same identity)</label>
+    <input id="restore-file" type="file" accept=".tox" required>
+    <label for="restore-password">Backup password</label>
+    <input id="restore-password" type="password" autocomplete="off"
+           minlength="8" maxlength="1024" required>
+    <div class="stack">
+      <button id="restore-backup" type="submit" disabled>Restore and reconnect</button>
+      <span id="restore-state" data-state="idle" class="muted" role="status">No backup restored</span>
+    </div>
+  </form>
 </section>
 <section class="panel" aria-labelledby="friend-title">
   <h2 id="friend-title">Add a native Tox friend</h2>

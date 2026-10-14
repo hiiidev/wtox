@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {createSocket} from "node:dgram";
 import {spawn,execFileSync} from "node:child_process";
-import {readFile} from "node:fs/promises";
+import {readFile,mkdtemp,readdir,rm,stat} from "node:fs/promises";
+import {tmpdir} from "node:os";
 import {existsSync} from "node:fs";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -84,6 +85,7 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
   const native=await launchNative(nativePort,receiverPort);
   const osSocket=createSocket("udp4");
   let server=null,wss=null,browser=null;
+  const downloadDir=await mkdtemp(join(tmpdir(),"wtox-original-tox-save-"));
   const metrics={sent:0,received:0,invalid:0,clients:0};
   try {
     await openUdp(osSocket);
@@ -165,6 +167,10 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
     browser=await puppeteer.launch({headless:true,executablePath:chrome(),
       args:["--no-sandbox","--disable-dev-shm-usage","--disable-gpu"]});
     const page=await browser.newPage(),pageErrors=[];
+    const cdp=await page.createCDPSession();
+    await cdp.send("Page.setDownloadBehavior",{
+      behavior:"allow",downloadPath:downloadDir
+    });
     page.on("pageerror",e=>pageErrors.push(e.message.slice(0,200)));
     await page.goto(origin+"/tests/local-chat.html",{waitUntil:"load"});
     // The UI, not the fixture, must initiate the real original friend request.
@@ -224,6 +230,65 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
       "the real native Tox receive callback must update the DOM");
     const feedback=await page.$eval("#feedback",el=>el.textContent);
     assert.match(feedback,/original native Tox message callback/);
+    // End-to-end encrypted standard .tox backup initiated by the REAL UI.
+    // Only ciphertext may leave WASM; the Chrome download stays on CI disk.
+    const savePassword="stage27-end-to-end-browser-backup-password";
+    await page.type("#backup-password",savePassword);
+    await page.click("#export-backup");
+    await page.waitForFunction(()=>
+      document.querySelector("#export-state")?.dataset.state==="downloaded",
+      {timeout:12000});
+    let downloaded=null;
+    for(let i=0;i<120;i++){
+      const files=(await readdir(downloadDir)).filter(x=>x.endsWith(".tox"));
+      if(files.length===1){
+        const candidate=join(downloadDir,files[0]);
+        const size=(await stat(candidate)).size;
+        if(size>80){downloaded=candidate;break;}
+      }
+      await new Promise(resolve=>setTimeout(resolve,50));
+    }
+    assert.ok(downloaded,"encrypted standard .tox must download from the user action");
+    const blob=await readFile(downloaded);
+    assert.ok(blob.length>80 && blob.length<=1024*1024+80);
+    assert.equal(blob.subarray(0,8).toString(),"toxEsave");
+    // Incorrect password MUST NOT destroy the original connected instance.
+    await (await page.$("#restore-file")).uploadFile(downloaded);
+    await page.type("#restore-password","incorrect-original-backup-password");
+    await page.click("#restore-backup");
+    await page.waitForFunction(()=>
+      document.querySelector("#restore-state")?.dataset.state==="failed",
+      {timeout:10000});
+    assert.equal(await page.$eval("#send-button",el=>el.disabled),false,
+      "incorrect password must leave live Toxcore and friend connected");
+    assert.equal(await page.$eval("#my-tox-id",el=>el.textContent),ownId);
+    await page.type("#restore-password",savePassword);
+    await page.click("#restore-backup");
+    await page.waitForFunction(()=>
+      document.querySelector("#restore-state")?.dataset.state==="restored",
+      {timeout:10000});
+    assert.equal(await page.$eval("#my-tox-id",el=>el.textContent),ownId,
+      "restored original identity must have identical full Tox ID");
+    assert.match(await page.$eval("#friend-status",el=>el.textContent),
+      /Saved friend restored/);
+    assert.equal(await page.$eval("#request-button",el=>el.disabled),true,
+      "saved friend must NOT be readded using a synthetic DHT identity");
+    await page.waitForFunction(()=>
+      document.querySelector("#my-tox-id")?.dataset.state==="ready" &&
+      document.querySelector("#send-button")?.disabled===false,
+      {timeout:65000});
+    assert.match(await page.$eval("#friend-status",el=>el.textContent),
+      /Friend online/);
+    await page.type("#message-text","wTox browser message after restored identity");
+    await page.click("#send-button");
+    await page.waitForFunction(()=>
+      [...document.querySelectorAll("#messages li")].some(el=>
+        el.textContent==="Friend: wTox native reply after restored identity"),
+      {timeout:30000});
+    const history=await page.$$eval("#messages li",all=>
+      all.map(x=>x.textContent));
+    assert.ok(history.includes("You: wTox browser message after restored identity"));
+    assert.ok(history.includes("Friend: wTox native reply after restored identity"));
     const state={publicKey:ownId.slice(0,64).toLowerCase()};
     // Native stdout is emitted by the ORIGINAL tox_callback_friend_request,
     // status and message callbacks, never synthesized by Node.
@@ -236,6 +301,12 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
     assert.match(log,/FRIEND_ONLINE/);
     assert.match(log,/TEXT_RECEIVED/);
     assert.match(log,/TEXT_SENT/);
+    assert.equal((log.match(/TEXT_RECEIVED/g)||[]).length,2,
+      "native original Toxcore must receive messages before and after restore");
+    assert.equal((log.match(/TEXT_SENT/g)||[]).length,2,
+      "native original Toxcore must send replies before and after restore");
+    assert.equal((log.match(/REQUEST_RECEIVED /g)||[]).length,1,
+      "restored Tox identity should not generate a second friend request");
     assert.ok(metrics.sent>=2 && metrics.received>=2,
       "real Tox DHT handshake must traverse native OS UDP in both directions");
     assert.equal(metrics.clients,1,"a single isolated browser DHT client");
@@ -251,5 +322,6 @@ test("local manual chat UI: genuine Chromium Tox ID form, friend online, typed m
     if(server)await new Promise(resolve=>server.close(resolve));
     await new Promise(resolve=>osSocket.close(resolve));
     await stopNative(native.child);
+    await rm(downloadDir,{recursive:true,force:true});
   }
 });

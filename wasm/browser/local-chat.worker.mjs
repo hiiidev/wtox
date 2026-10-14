@@ -25,7 +25,7 @@ self.onmessage=({data})=>{
     })).finally(()=>{active=false;});
   } else if(data?.action==="STOP") {
     closeRequested=true;
-  } else if(["REQUEST","SEND"].includes(data?.action)) {
+  } else if(["REQUEST","SEND","EXPORT","RESTORE"].includes(data?.action)) {
     if(commandQueue.length<8)commandQueue.push(data);
   }
 };
@@ -100,6 +100,94 @@ async function main(config){
     ensure(m._wtox_vudp_native_bootstrap(port,keyPtr,32)===0,
            "native_dht_bootstrap_failed");
     notice("BOOTSTRAPPING");
+
+    // Never send unencrypted savedata to the page or over the transport.
+    const passwordBytes=password=>{
+      ensure(typeof password==="string","backup_password_required");
+      const secret=encode.encode(password);
+      if(secret.length<8 || secret.length>1024){
+        secret.fill(0);throw Error("backup_password_length_invalid");
+      }
+      return secret;
+    };
+    function exportEncrypted(password){
+      const secret=passwordBytes(password);
+      let p=0,out=0,lengthPtr=0;
+      try{
+        const saved=m._wtox_vudp_savedata_size();
+        ensure(saved>0 && saved<=1024*1024,"savedata_size_invalid");
+        p=m._malloc(secret.length);
+        out=m._malloc(saved+80);
+        lengthPtr=m._malloc(4);
+        ensure(p&&out&&lengthPtr,"backup_wasm_allocation_failed");
+        m.HEAPU8.set(secret,p);
+        const ret=m._wtox_vudp_export_encrypted(p,secret.length,
+                             out,saved+80,lengthPtr);
+        ensure(ret===0,"original_tox_encrypt_failed:"+ret);
+        const n=new DataView(m.HEAPU8.buffer).getUint32(lengthPtr,true);
+        ensure(n>80&&n<=saved+80,"encrypted_backup_size_invalid");
+        const ciphertext=m.HEAPU8.slice(out,out+n);
+        ensure(Array.from("toxEsave").every((ch,i)=>ciphertext[i]===ch.charCodeAt(0)),
+               "not_standard_tox_encryptsave");
+        notice("ENCRYPTED_BACKUP",{encryptedBackup:ciphertext});
+      }finally{
+        secret.fill(0);
+        if(p){m.HEAPU8.fill(0,p,p+secret.length);m._free(p);}
+        if(out){m.HEAPU8.fill(0,out,out+m._wtox_vudp_savedata_size()+80);m._free(out);}
+        if(lengthPtr){m.HEAPU8.fill(0,lengthPtr,lengthPtr+4);m._free(lengthPtr);}
+      }
+    }
+    function restoreEncrypted(command){
+      ensure(command.backup instanceof Uint8Array &&
+             command.backup.length>80 &&
+             command.backup.length<=1024*1024+80,"invalid_encrypted_backup");
+      const secret=passwordBytes(command.password);
+      let p=0,b=0,id=0;
+      try{
+        p=m._malloc(secret.length);
+        b=m._malloc(command.backup.length);
+        id=m._malloc(38);
+        ensure(p&&b&&id,"restore_wasm_allocation_failed");
+        m.HEAPU8.set(secret,p);
+        m.HEAPU8.set(command.backup,b);
+        // Preflight against original c-toxcore BEFORE terminating online identity.
+        const checked=m._wtox_inspect_encrypted(
+          b,command.backup.length,p,secret.length,id);
+        ensure(checked===0,"encrypted_backup_validation_failed:"+checked);
+        ensure(m._wtox_vudp_native_address(addressPtr,38)===0,
+               "original_network_identity_missing");
+        const expected=hex(m.HEAPU8.slice(addressPtr,addressPtr+38));
+        const recovered=hex(m.HEAPU8.slice(id,id+38));
+        ensure(recovered===expected,"backup_identity_mismatch");
+        m._wtox_vudp_probe_stop();
+        started=false;
+        const status=m._wtox_vudp_restore_encrypted(
+          b,command.backup.length,p,secret.length);
+        ensure(status===0,"native_network_savedata_restore_failed:"+status);
+        started=true;
+        ensure(m._wtox_vudp_native_address(addressPtr,38)===0,
+               "restored_network_identity_missing");
+        ensure(hex(m.HEAPU8.slice(addressPtr,addressPtr+38))===expected,
+               "native_identity_changed_after_restore");
+        ensure(m._wtox_vudp_native_friend_state(meta)===0,
+               "restored_friend_query_failed");
+        const listCount=new DataView(m.HEAPU8.buffer).getUint32(meta,true);
+        requested=listCount===1;
+        online=false;
+        verified=false;
+        sent=received=0;
+        ensure(m._wtox_vudp_native_bootstrap(port,keyPtr,32)===0,
+               "restored_native_dht_bootstrap_failed");
+        notice("RESTORED",{toxId:expected,friendRestored:requested});
+      }finally{
+        secret.fill(0);
+        if(p){m.HEAPU8.fill(0,p,p+secret.length);m._free(p);}
+        if(b){m.HEAPU8.fill(0,b,b+command.backup.length);m._free(b);}
+        if(id){m.HEAPU8.fill(0,id,id+38);m._free(id);}
+        command.backup?.fill(0);
+      }
+    }
+
     const deadline=Date.now()+100000;
     while(!closeRequested){
       ensure(Date.now()<deadline,"local_manual_chat_session_timeout");
@@ -131,6 +219,13 @@ async function main(config){
       if(verified){
         while(commandQueue.length){
           const command=commandQueue.shift();
+          if(command.action==="EXPORT" || command.action==="RESTORE"){
+            try{
+              if(command.action==="EXPORT")exportEncrypted(command.password);
+              else restoreEncrypted(command);
+            }catch(err){notice("ACTION_ERROR",{message:String(err?.message||err)});}
+            continue;
+          }
           if(command.action==="REQUEST"){
             if(requested){notice("ACTION_ERROR",{message:"friend_request_already_queued"});continue;}
             try{
@@ -158,7 +253,7 @@ async function main(config){
             }catch(err){notice("ACTION_ERROR",{message:String(err?.message||err)});}
           }
         }
-        if(requested){
+        if(requested && verified){
           ensure(m._wtox_vudp_native_friend_state(meta)===0,
                  "native_friend_query_failed");
           const status=new DataView(m.HEAPU8.buffer).getUint32(meta+4,true);

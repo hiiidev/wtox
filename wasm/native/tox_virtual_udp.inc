@@ -184,10 +184,14 @@ void wtox_vudp_probe_stop(void)
     vudp_friend_message_length=0;
     vudp_rejected=vudp_backpressure=vudp_sent=vudp_received=0;
 }
-EMSCRIPTEN_KEEPALIVE
-int wtox_vudp_probe_start(void)
+/* Both fresh and restored identities use the SAME UDP Network_Funcs and
+ * original tox_new_testing. Savedata is only ever provided to Toxcore in
+ * plaintext inside WASM; callers may export only encrypted ToxEncryptSave. */
+static int vudp_start_internal(const uint8_t *saved, size_t saved_len)
 {
     if(vudp_tox || wtox_live || sodium_init()<0) return -1;
+    if((saved && (!saved_len || saved_len>MAX_RAW_SAVEDATA)) ||
+       (!saved && saved_len))return -1;
     wtox_vudp_probe_stop();
     vudp_network.funcs=&vudp_funcs;
     vudp_network.obj=NULL;
@@ -196,7 +200,7 @@ int wtox_vudp_probe_start(void)
     Tox_Options_Testing testing={.operating_system=&vudp_system};
     Tox_Err_Options_New oerr=TOX_ERR_OPTIONS_NEW_OK;
     Tox_Options *opt=tox_options_new(&oerr);
-    if(!opt || oerr!=TOX_ERR_OPTIONS_NEW_OK) {
+    if(!opt || oerr!=TOX_ERR_OPTIONS_NEW_OK){
         if(opt)tox_options_free(opt);
         return -2;
     }
@@ -206,19 +210,93 @@ int wtox_vudp_probe_start(void)
     tox_options_set_experimental_disable_dns(opt,true);
     tox_options_set_start_port(opt,33447);
     tox_options_set_end_port(opt,33447);
+    if(saved){
+        if(!tox_options_set_savedata_data(opt,saved,saved_len)){
+            tox_options_free(opt);
+            return -3;
+        }
+        tox_options_set_savedata_type(opt,TOX_SAVEDATA_TYPE_TOX_SAVE);
+    }
     Tox_Err_New terr=TOX_ERR_NEW_OK;
     Tox_Err_New_Testing perr=TOX_ERR_NEW_TESTING_OK;
     Tox *tox=tox_new_testing(opt,&terr,&testing,&perr);
     tox_options_free(opt);
     if(!tox || terr!=TOX_ERR_NEW_OK || perr!=TOX_ERR_NEW_TESTING_OK ||
        !vudp_socket_open || !vudp_socket_bound ||
-       vudp_local_port!=33447 || tox_get_system(tox)->ns!=&vudp_network) {
+       vudp_local_port!=33447 || tox_get_system(tox)->ns!=&vudp_network){
         if(tox)tox_kill(tox);
         wtox_vudp_probe_stop();
-        return -3;
+        return -4;
+    }
+    const size_t friend_count=tox_self_get_friend_list_size(tox);
+    if(friend_count>1){
+        tox_kill(tox);
+        wtox_vudp_probe_stop();
+        return -5; /* this research adapter deliberately supports one friend */
     }
     vudp_tox=tox;
+    vudp_friend_requested=friend_count==1;
+    tox_callback_friend_connection_status(tox,vudp_friend_status_cb);
+    tox_callback_friend_message(tox,vudp_friend_text_cb);
     return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_probe_start(void)
+{
+    return vudp_start_internal(NULL,0);
+}
+EMSCRIPTEN_KEEPALIVE
+size_t wtox_vudp_savedata_size(void)
+{
+    if(!vudp_tox)return 0;
+    const size_t n=tox_get_savedata_size(vudp_tox);
+    return n && n<=MAX_RAW_SAVEDATA?n:0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_export_encrypted(const uint8_t *password,size_t plen,
+                                uint8_t *out,size_t capacity,size_t *written)
+{
+    if(!vudp_tox || !valid_password(password,plen) ||
+       !out || !written || sodium_init()<0)return -1;
+    *written=0;
+    const size_t n=wtox_vudp_savedata_size();
+    if(!n || n>SIZE_MAX-TOX_PASS_ENCRYPTION_EXTRA_LENGTH ||
+       capacity<n+TOX_PASS_ENCRYPTION_EXTRA_LENGTH)return -2;
+    uint8_t *plain=(uint8_t *)malloc(n);
+    if(!plain)return -3;
+    tox_get_savedata(vudp_tox,plain);
+    Tox_Err_Encryption err=TOX_ERR_ENCRYPTION_OK;
+    const bool ok=tox_pass_encrypt(plain,n,password,plen,out,&err);
+    sodium_memzero(plain,n);
+    free(plain);
+    if(!ok || err!=TOX_ERR_ENCRYPTION_OK){
+        sodium_memzero(out,capacity);
+        return -4;
+    }
+    *written=n+TOX_PASS_ENCRYPTION_EXTRA_LENGTH;
+    return 0;
+}
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_restore_encrypted(const uint8_t *encrypted,size_t length,
+                                 const uint8_t *password,size_t plen)
+{
+    if(vudp_tox || wtox_live || !encrypted ||
+       !valid_password(password,plen) ||
+       length<=TOX_PASS_ENCRYPTION_EXTRA_LENGTH ||
+       length>MAX_RAW_SAVEDATA+TOX_PASS_ENCRYPTION_EXTRA_LENGTH ||
+       sodium_init()<0)return -1;
+    if(!tox_is_data_encrypted(encrypted))return -2;
+    const size_t n=length-TOX_PASS_ENCRYPTION_EXTRA_LENGTH;
+    uint8_t *plain=(uint8_t *)malloc(n);
+    if(!plain)return -3;
+    Tox_Err_Decryption err=TOX_ERR_DECRYPTION_OK;
+    const bool ok=tox_pass_decrypt(encrypted,length,password,plen,plain,&err);
+    int result=-4;
+    if(ok && err==TOX_ERR_DECRYPTION_OK)
+        result=vudp_start_internal(plain,n);
+    sodium_memzero(plain,n);
+    free(plain);
+    return result;
 }
 /* User data is sent through ORIGINAL ns_sendto, not straight into queue. */
 EMSCRIPTEN_KEEPALIVE

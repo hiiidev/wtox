@@ -740,3 +740,43 @@ It has **no encrypted identity persistence, reconnect/restart workflow,
 attachments, public DHT connectivity or unmodified qTox/aTox UI
 interoperability** yet. Those require separate work. Nothing here deploys
 Cloudflare, modifies main, or accesses the production VPS.
+
+## Stage 27: encrypted original Tox Savedata in the live browser network session
+
+The Stage 26 local-only native chat now offers explicit **Download encrypted
+.tox** and **Restore and reconnect** forms. These call the *same*
+UDP-enabled original c-toxcore Tox instance that already performed genuine
+DHT/Onion first-contact and message exchange. No plaintext savedata is
+returned to JavaScript. The file is original ToxEncryptSave with the
+`toxEsave` header; passwords and plaintext temporary WASM allocations are
+scrubbed as far as the runtime allows. JavaScript password strings cannot
+be reliably erased from browser memory.
+
+The native network adapter exposes `wtox_vudp_savedata_size`,
+`wtox_vudp_export_encrypted`, and `wtox_vudp_restore_encrypted`. Restored
+savedata is supplied to original `tox_new_testing` alongside the *same*
+bounded UDP Network_Funcs. It validates that this one-friend research
+adapter did not unexpectedly restore additional friends and attaches
+original friend online/message callbacks after reopening. It reboots
+DHT/Onion, never inserts an artificial friend, and does not claim being
+online until original friend status changes.
+
+The UI pre-validates a user-selected encrypted backup with the original
+`wtox_inspect_encrypted` API and checks the complete existing native
+Tox ID before closing the active instance. **Wrong passwords and wrong
+identities leave the active conversation intact.** This is deliberately a
+same-identity in-page restart in the still-running isolated local WebSocket
+test environment, not persistence in browser storage or a public cloud.
+
+Native unit testing verifies byte-for-byte identity restoration, persistent
+native friend relationship, malformed ciphertext and wrong-password rejection,
+offline-vs-online state, and bounded UDP rebind. Chromium integration exports
+an actual .tox download, uploads it back, rejects an incorrect password
+without disconnecting, verifies original identity and friend restoration,
+and exchanges a SECOND pair of actual Tox friend messages with the original
+native Linux peer after rebuilding the browser WASM Tox session. It asserts
+the Linux native friend-request callback ran exactly once.
+
+No user credentials or backups are posted to the server and no production
+React, VPS, Cloudflare or main-branch files are changed. This is still
+localhost-only, not a claim of unmodified qTox/aTox/public Tox interop.
