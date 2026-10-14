@@ -846,3 +846,27 @@ or certify an unmodified qTox GUI/aTox application. Their actual app-level
 import/export behaviour and public-network compatibility remain untested.
 The branch stays local-only; main, Cloudflare, VPS and production users are
 not involved.
+
+## Stage 29 follow-up: bounded browser UDP receive backpressure
+
+A real Chromium full-page-reload regression exposed a race that was not a
+savedata compatibility failure: the independently running DHT bootstrap and
+friend can burst UDP frames faster than the 16-slot native Network_Funcs
+inbound FIFO is drained. Previously, a temporary native `EWOULDBLOCK`
+from this condition was misinterpreted as a fatal WebSocket disconnect.
+
+`browser/bounded-udp-inbox.mjs` now keeps at most **128 whole datagrams**,
+each up to **2048 bytes**. Native `EWOULDBLOCK` preserves the packet in the
+bounded JS FIFO for the next `tox_iterate()`. The real native UDP socket
+remains exactly 16 slots; no unbounded memory or general UDP forwarding is
+introduced. If the upper bound is reached, additional UDP datagrams are
+dropped according to UDP's best-effort semantics and reported as a
+non-fatal diagnostic; Toxcore remains responsible for its normal protocol
+retransmission. Pending frames are wiped when the original Tox session is
+replaced or the browser Worker stops.
+
+Unit tests simulate repeated original 16-datagram native backpressure,
+byte-for-byte preservation including a 2048-byte packet, saturation,
+validation, eventual draining, and zeroization. The existing Chromium full
+page reload/test still exercises the real DHT/Onion path, not simulated
+network success.

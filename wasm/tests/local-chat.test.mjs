@@ -24,6 +24,7 @@ const mime=new Map([
   ["/tests/local-chat.css","text/css; charset=utf-8"],
   ["/tests/local-chat-ui.mjs","text/javascript; charset=utf-8"],
   ["/browser/local-chat.worker.mjs","text/javascript; charset=utf-8"],
+  ["/browser/bounded-udp-inbox.mjs","text/javascript; charset=utf-8"],
   ["/dist/tox_identity.mjs","text/javascript; charset=utf-8"],
   ["/dist/tox_identity.wasm","application/wasm"]
 ]);

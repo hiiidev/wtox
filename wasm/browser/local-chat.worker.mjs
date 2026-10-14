@@ -6,6 +6,7 @@
  * NOT connected to production React/Python login.
  */
 import createModule from "../dist/tox_identity.mjs";
+import {BoundedUdpInbox} from "./bounded-udp-inbox.mjs";
 const MAX=2048, MAX_TEXT=128;
 const encode=new TextEncoder(), decode=new TextDecoder("utf-8",{fatal:true});
 const hex=b=>Array.from(b,x=>x.toString(16).padStart(2,"0")).join("").toUpperCase();
@@ -63,6 +64,7 @@ async function main(config){
   let buffer=0,meta=0,keyPtr=0,addressPtr=0;
   let requested=false,online=false,verified=false;
   let sent=0,received=0;
+  const inbox=new BoundedUdpInbox(128,MAX);
   closeRequested=false;
   commandQueue=[];
   try {
@@ -87,12 +89,14 @@ async function main(config){
         notice("ERROR",{message:"invalid_udp_transport_frame"});
         closeRequested=true;return;
       }
-      m.HEAPU8.set(packet.subarray(5),buffer);
-      const result=m._wtox_vudp_probe_push(buffer,length,source);
-      if(result!==length){
-        notice("ERROR",{message:"incoming_udp_queue_overflow"});
-        closeRequested=true;
-      } else ++received;
+      // WebSocket delivery can arrive in bursts (especially after a full
+      // page reload). Do not overflow the original 16-slot native queue.
+      // Keep up to 128 whole datagrams, draining at native tox_iterate pace.
+      if(!inbox.push(packet.subarray(5),source) &&
+         (inbox.dropped===1||inbox.dropped%64===0)){
+        notice("TRANSPORT_DIAGNOSTIC",{message:
+          "bounded_udp_packets_dropped:"+inbox.dropped});
+      }
     };
     ws.onerror=()=>{notice("ERROR",{message:"transport_socket_error"});closeRequested=true;};
     ws.onclose=()=>{closeRequested=true;};
@@ -169,6 +173,7 @@ async function main(config){
             "cannot_replace_identity_with_friends");
         }
         m._wtox_vudp_probe_stop();
+        inbox.clear(); // old encrypted session's pending UDP is now stale
         started=false;
         const status=m._wtox_vudp_restore_encrypted(
           b,command.backup.length,p,secret.length);
@@ -202,7 +207,13 @@ async function main(config){
     while(!closeRequested){
       ensure(Date.now()<deadline,"local_manual_chat_session_timeout");
       ensure(ws.readyState===WebSocket.OPEN,"transport_disconnected");
+      const fillNative=()=>inbox.drain((packet,source)=>{
+        m.HEAPU8.set(packet,buffer);
+        return m._wtox_vudp_probe_push(buffer,packet.length,source);
+      },64);
+      received+=fillNative();
       ensure(m._wtox_vudp_native_tick()===0,"native_tox_iterate_failed");
+      received+=fillNative();
       for(let i=0;i<16;i++){
         const n=m._wtox_vudp_probe_take(buffer,MAX,meta);
         ensure(n>=0&&n<=MAX,"invalid_native_udp_datagram");
@@ -285,6 +296,7 @@ async function main(config){
       await new Promise(resolve=>setTimeout(resolve,16));
     }
   } finally {
+    inbox.clear();
     ws?.close();
     if(started)m._wtox_vudp_probe_stop();
     if(m){
