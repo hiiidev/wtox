@@ -951,13 +951,14 @@ the matching unmodified qTox decrypt path must accept. Each path must
 reject incorrect passwords and tampered encrypted files. The existing
 ASCII compatibility tests continue unchanged.
 
-An independent *real Chromium HTML file-picker* test now runs both the
-original qTox cached-key ASCII profile and cached-key multilingual UTF-8
-profile through the same native WASM restore page. In both cases an
-incorrect password must leave the new browser identity intact; a correct
-password with explicit empty-identity replacement consent restores the
-original qTox-created Tox ID and friend **without fabricating online
-status or any synthetic network message**.
+An independent *real Chromium HTML file-picker* test now runs
+THREE original qTox profile modes: ASCII cached-key, multilingual
+UTF-8 cached-key, and multilingual UTF-8 direct-password encryption.
+All three are imported through the SAME native WASM restore page.
+In each case an incorrect password must leave the new browser identity
+intact; a correct password with explicit empty-identity replacement
+consent restores the original qTox-created Tox ID and friend **without
+fabricating online status or any synthetic network message**.
 
 These tests prove interoperability with actual qTox **upstream encryption
 source code**, not execution of the full unmodified qTox GUI, its

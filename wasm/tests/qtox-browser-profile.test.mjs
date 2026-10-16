@@ -77,7 +77,9 @@ async function stopNative(child) {
 for(const variant of [
   {label:"ASCII cached-key qTox profile",create:"create",
    password:"wtox-qtox-Qt-test-only-interoperability"},
-  {label:"multilingual UTF-8 direct-password qTox profile",create:"create-unicode",
+  {label:"multilingual UTF-8 cached-key qTox profile",create:"create-unicode",
+   password:"wtox-互通🔐-пароль-安全-2026"},
+  {label:"multilingual UTF-8 direct-password qTox profile",create:"create-unicode-direct",
    password:"wtox-互通🔐-пароль-安全-2026"}
 ]) {
 test("real Chromium imports "+variant.label+" from UNMODIFIED upstream qTox Qt ToxEncrypt",{
