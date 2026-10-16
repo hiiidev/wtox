@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {parseScannedToxId} from "../frontend/src/tox_qr.js";
+import {parseScannedToxId,parseFriendId} from "../frontend/src/tox_qr.js";
 
 const toxId="aB".repeat(38);
 assert.equal(parseScannedToxId(toxId),toxId.toUpperCase());
@@ -13,6 +13,19 @@ for(const invalid of [
 ]){
  assert.equal(parseScannedToxId(invalid),null,
    `Reject non-Tox QR text: ${String(invalid).slice(0,25)}`);
+}
+const publicKey="aB".repeat(32);
+assert.deepEqual(parseFriendId(publicKey),
+  {type:"public_key",value:publicKey.toUpperCase()});
+assert.deepEqual(parseFriendId("  "+publicKey+"  "),
+  {type:"public_key",value:publicKey.toUpperCase()});
+assert.deepEqual(parseFriendId(toxId),
+  {type:"address",value:toxId.toUpperCase()});
+assert.deepEqual(parseFriendId("tox:"+toxId),
+  {type:"address",value:toxId.toUpperCase()});
+for(const invalid of ["","G".repeat(64),"A".repeat(72),"A".repeat(75),
+  "A".repeat(77),null,undefined,{}]){
+  assert.equal(parseFriendId(invalid),null);
 }
 const app=readFileSync("frontend/src/App.jsx","utf8");
 const scanner=readFileSync("frontend/src/ToxQRScanner.jsx","utf8");
@@ -50,8 +63,15 @@ assert.ok(reset.includes('setFriendId("")')&&reset.includes('setRequestText("")'
   "Closing add-friend must clear both fields and scanner state");
 assert.ok(app.includes("closeAddFriend();"),
   "Success should clear the form too");
-assert.ok(app.includes('disabled={!parseScannedToxId(friendId)}'),
-  "Prevent sending incomplete or invalid Tox IDs");
+assert.ok(app.includes('disabled={!parsedFriendId||friendIdIsSelf}'),
+  "Prevent submitting invalid IDs or the user's own public key");
+assert.ok(app.includes('parsedFriendId.value.slice(0,64)===user?.public_key?.toUpperCase()'),
+  "Reject both own full Tox ID and own 64-hex public key");
+assert.ok(app.includes('postJson("/api/friends/accept",{public_key:parsed.value})'),
+  "64-hex public keys must use the existing norequest endpoint");
+assert.ok(app.includes('postJson("/api/friends",{address:parsed.value,'),
+  "76-hex Tox IDs must use the friend-request endpoint");
+assert.ok(!app.includes("双方互加"),"Do not show mutual-add instructions");
 assert.ok(app.includes('message:requestText.trim()||"你好，我想添加你为 Tox 好友"'),
   "Use default greeting only on submit when the optional input is blank");
 

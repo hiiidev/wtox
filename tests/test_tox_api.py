@@ -105,6 +105,18 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(msg.json()["public_key"], PEER)
         self.assertEqual(self.client.get("/api/outbox").json()["messages"][0]["status"],"queued")
 
+    def test_cannot_add_own_tox_id_or_public_key(self):
+        own_key = "A" * 64
+        for path, payload in [
+            ("/api/friends", {"address": "A" * 76, "message": "Hello"}),
+            ("/api/friends/accept", {"public_key": own_key.lower()}),
+        ]:
+            with self.subTest(path=path):
+                result = self.client.post(path, json=payload)
+                self.assertEqual(result.status_code, 400, result.text)
+                self.assertIn("不能添加自己", result.json()["detail"])
+        self.assertEqual(store.friend_tox_ids(self.uid), {})
+
     def test_complete_friend_address_is_private_to_owner(self):
         tox_id=PEER+"000000000000"
         self.assertEqual(self.client.post("/api/friends",json={

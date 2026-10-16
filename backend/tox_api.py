@@ -22,6 +22,12 @@ def require_user(request: Request) -> str:
         raise HTTPException(401, "请上传 .tox 身份文件登录")
     return uid
 
+def reject_self_friend(uid: str, peer_id: str) -> None:
+    own = store.tox_identity_info(uid)
+    if own and own["public_key"] and own["public_key"].upper() == peer_id[:64].upper():
+        raise HTTPException(400, "不能添加自己为好友")
+
+
 def check_origin(request: Request):
     origin = request.headers.get("origin")
     if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
@@ -90,6 +96,7 @@ def friends(uid: str = Depends(require_user)):
 @router.post("/api/friends")
 def add_friend(body: FriendAdd, request: Request, uid: str = Depends(require_user)):
     check_origin(request)
+    reject_self_friend(uid, body.address)
     try:
         key = session(uid).add_friend(body.address, body.message)
         store.remember_friend_tox_id(uid, key, body.address)
@@ -157,6 +164,7 @@ def reject_pending_request(request_id: str, request: Request,
 @router.post("/api/friends/accept")
 def accept_friend(body: FriendAccept, request: Request, uid: str = Depends(require_user)):
     check_origin(request)
+    reject_self_friend(uid, body.public_key)
     try:
         key = session(uid).accept_friend(body.public_key)
         return {"public_key": key, "ok": True}

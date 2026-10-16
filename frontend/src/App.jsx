@@ -13,7 +13,7 @@ import { PaperClipOutlined, SettingOutlined, ArrowLeftOutlined,
 import PushSettings from "./PushSettings.jsx";
 import PwaPushWelcome from "./PwaPushWelcome.jsx";
 import ToxQRScanner from "./ToxQRScanner.jsx";
-import {parseScannedToxId} from "./tox_qr.js";
+import {parseScannedToxId,parseFriendId} from "./tox_qr.js";
 import {isStandalone} from "./push_client.js";
 import {LOGO_URL} from "./versioned_assets.js";
 import {disablePushBeforeLogout} from "./push_client.js";
@@ -1206,6 +1206,9 @@ export default function App(){
   },[user?.public_key,refreshFriends,refreshNetwork,refreshFriendRequests,alert]);
   const screens=Grid.useBreakpoint();
   const isMobile=(!!screens.xs||!!screens.sm)&&!screens.md;
+  const parsedFriendId=parseFriendId(friendId);
+  const friendIdIsSelf=!!parsedFriendId&&
+    parsedFriendId.value.slice(0,64)===user?.public_key?.toUpperCase();
   const selectedFriend=friends.find(f=>f.public_key===selected);
   const peerStatus=selectedFriend?.status===0||!selectedFriend?"离线":
     ["在线","离开","忙碌"][selectedFriend.user_status]||"在线";
@@ -1678,18 +1681,24 @@ export default function App(){
     }finally{sendBusy.current=false;setSending(false)}
   }
   async function addFriend(){
-    const address=friendId.trim().toUpperCase();
-    if(!parseScannedToxId(address)){
-      alert("请输入有效的 76 位 Tox ID","error");
+    const parsed=parseFriendId(friendId);
+    if(!parsed){
+      alert("请输入有效的 64 位公钥或 76 位 Tox ID","error");
+      return;
+    }
+    if(parsed.value.slice(0,64)===user?.public_key?.toUpperCase()){
+      alert("不能添加自己为好友","error");
       return;
     }
     try{
-      const data=await postJson("/api/friends",{address,
-        message:requestText.trim()||"你好，我想添加你为 Tox 好友"});
+      const data=parsed.type==="public_key"
+        ? await postJson("/api/friends/accept",{public_key:parsed.value})
+        : await postJson("/api/friends",{address:parsed.value,
+            message:requestText.trim()||"你好，我想添加你为 Tox 好友"});
       await refreshFriends();
       closeAddFriend();
       selectFriend(data.public_key);
-      alert("好友请求已保存，请等待对方接受");
+      alert(parsed.type==="public_key"?"好友已添加":"好友请求已保存，请等待对方接受");
     }catch(error){alert(error.message)}
   }
   async function acceptRequest(item){
@@ -2836,7 +2845,7 @@ export default function App(){
             onBack={()=>setFriendQrOpen(false)}/>
         : <div className="wt-add-friend-content">
           <Typography.Paragraph type="secondary" className="wt-add-friend-description">
-            输入好友完整的 Tox ID，发送好友请求。
+            输入好友的 64 位公钥或 76 位完整 Tox ID。
           </Typography.Paragraph>
           {(isMobile||installedPwa)&&
             <AntButton block icon={<QrcodeOutlined/>} className="wt-add-friend-scan"
@@ -2844,24 +2853,25 @@ export default function App(){
               扫描好友二维码
             </AntButton>}
           <Form layout="vertical" className="wt-add-friend-form" onFinish={addFriend}>
-            <Form.Item label="好友 Tox ID" required>
+            <Form.Item label="好友公钥或 Tox ID" required>
               <Input.TextArea rows={2} autoSize={{minRows:2,maxRows:3}}
                 value={friendId}
                 onChange={e=>setFriendId(e.target.value)}
-                placeholder="粘贴好友的 76 位 Tox ID" autoComplete="off"
+                placeholder="粘贴 64 位公钥或 76 位 Tox ID" autoComplete="off"
                 spellCheck={false}/>
               <Typography.Text type="secondary" className="wt-add-friend-counter">
-                {friendId.trim().length} / 76 位
+                {friendId.trim().length} 位（64 / 76）
               </Typography.Text>
             </Form.Item>
-            <Form.Item label="好友申请附言（选填）">
-              <Input value={requestText} maxLength={256}
-                onChange={e=>setRequestText(e.target.value)}
-                placeholder="留空将使用默认好友申请问候"/>
-            </Form.Item>
+            {parsedFriendId?.type!=="public_key"&&
+              <Form.Item label="好友申请附言（选填）">
+                <Input value={requestText} maxLength={256}
+                  onChange={e=>setRequestText(e.target.value)}
+                  placeholder="留空将使用默认好友申请问候"/>
+              </Form.Item>}
             <AntButton type="primary" htmlType="submit" block size="large"
-              disabled={!parseScannedToxId(friendId)}>
-              发送好友请求
+              disabled={!parsedFriendId||friendIdIsSelf}>
+              {parsedFriendId?.type==="public_key"?"添加好友":"发送好友请求"}
             </AntButton>
           </Form>
         </div>}
