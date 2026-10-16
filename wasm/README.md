@@ -892,3 +892,37 @@ The downloaded fixture remains local to GitHub Actions, and is deleted
 after use. This is **real browser UI import of independently produced
 original c-toxcore standard .tox binary files**, not an unmodified
 qTox/aTox executable or public-Tox compatibility certification.
+
+## Stage 31: exact-pinned upstream qTox Qt encryption source interop
+
+This is a stronger compatibility test than two separate c-toxcore builds.
+The GitHub CI fetches the **unchanged upstream TokTok/qTox**
+src/core/toxencrypt.cpp and src/core/toxencrypt.h from the public immutable
+qTox commit b4c8021cbc83f381eb62b2c995ee222390cf85d8, checks both
+upstream Git blob SHA-1 identities, and compiles the files directly against
+Qt5Core and our already pinned original c-toxcore. The ONLY shim is an
+include-directory header pointing the installed-style tox/toxencryptsave.h
+name to the correct pinned upstream toxencryptsave header. qTox C++ source
+is never patched, copied into this repository or confused with our fixture.
+
+A small independent native/qtox_profile_interop.cpp CLI calls the genuine
+upstream qTox ToxEncrypt::makeToxEncrypt(password) and encrypt() methods
+to save a real native Tox identity with one original friend, and its
+makeToxEncrypt(password, ciphertext) plus decrypt() methods to load files
+from browser-targeted WASM. The underlying Tox IDs and friend public keys
+are checked using only original c-toxcore APIs.
+
+Two new tests verify full original Tox ID and friend identity, wrong
+password/tampered ciphertext rejection and cross-runtime roundtrip. The
+real Chromium fixture also uploads a qTox-code-created encrypted profile
+using the actual HTML file selector and checks the native WASM restores
+the authentic identity and offline friend without pretending an online
+connection. All synthetic profiles and fixed test-only passwords stay in
+isolated CI and ephemeral temporary files are deleted afterward.
+
+**Scope limitation:** this is proof of actual upstream **qTox ToxEncrypt
+source-code compatibility**, not yet execution of the unmodified full
+qTox GUI, its local database/settings, audio/video, or qTox/aTox public
+network messaging. Actual GUI interoperability needs its own test gate.
+The qTox source has GPL-3.0-or-later licensing and is fetched only for
+local CI compilation. Neither main, VPS nor Cloudflare is modified.

@@ -25,7 +25,7 @@ jobs:
           node --check wasm/tests/local-chat-ui.mjs
           node --check wasm/tests/local-chat.test.mjs
       - name: Install native build prerequisites
-        run: sudo apt-get update && sudo apt-get install -y cmake make autoconf automake libtool pkg-config libsodium-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake make autoconf automake libtool pkg-config libsodium-dev qtbase5-dev curl
       - uses: emscripten-core/setup-emsdk@v15
         with:
           version: "5.0.1"
@@ -50,6 +50,7 @@ jobs:
             wasm/dist/tox-udp-bootstrap
             wasm/dist/tox-udp-friend-receiver
             wasm/dist/tox-save-interop
+            wasm/dist/qtox-profile-interop
           if-no-files-found: error
           retention-days: 3
 
@@ -83,7 +84,8 @@ jobs:
           test -s wasm/dist/tox-udp-bootstrap
           test -s wasm/dist/tox-udp-friend-receiver
           test -s wasm/dist/tox-save-interop
-          chmod +x wasm/dist/tox-relay-loopback wasm/dist/tox-linux-peer wasm/dist/tox-local-discovery wasm/dist/tox-udp-bootstrap wasm/dist/tox-udp-friend-receiver wasm/dist/tox-save-interop
+          test -s wasm/dist/qtox-profile-interop
+          chmod +x wasm/dist/tox-relay-loopback wasm/dist/tox-linux-peer wasm/dist/tox-local-discovery wasm/dist/tox-udp-bootstrap wasm/dist/tox-udp-friend-receiver wasm/dist/tox-save-interop wasm/dist/qtox-profile-interop
       - name: Test JS WASM-boundary and virtual socket error handling
         working-directory: wasm
         run: npm run test:unit
