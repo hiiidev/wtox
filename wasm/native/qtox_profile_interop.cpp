@@ -25,6 +25,11 @@
 namespace {
 constexpr size_t kMaxRaw = 1024*1024;
 const QString kPassword = QStringLiteral("wtox-qtox-Qt-test-only-interoperability");
+// Exercise both UNMODIFIED upstream qTox APIs with a UTF-8 password:
+// makeToxEncrypt cached key (normal profile) and direct encryptPass/decryptPass.
+// QString::toUtf8() returns QByteArray; QByteArray::length() counts bytes.
+// Fixture is disposable, NOT a user secret or claim about the full qTox GUI.
+const QString kUnicodePassword=QString::fromUtf8("wtox-互通🔐-пароль-安全-2026");
 const uint8_t kName[]="TokTok qTox upstream ToxEncrypt CI fixture";
 
 bool parse_hex(const char *text,size_t n,uint8_t *bytes) {
@@ -96,7 +101,7 @@ QByteArray read_file(const char *path){
     std::fclose(file);
     return read?data:QByteArray{};
 }
-int create(const char *path){
+int create(const char *path,bool unicode,bool direct){
     Tox *owner=create_tox(nullptr,0),*friendTox=create_tox(nullptr,0);
     if(!owner||!friendTox){
         if(owner)tox_kill(owner);
@@ -117,8 +122,14 @@ int create(const char *path){
             tox_get_savedata(owner,reinterpret_cast<uint8_t*>(raw.data()));
             // Exercise qTox's actual profile encrypt() path, which first
             // derives and stores Tox_Pass_Key via makeToxEncrypt(password).
-            auto keyObj=ToxEncrypt::makeToxEncrypt(kPassword);
-            const QByteArray encrypted=keyObj?keyObj->encrypt(raw):QByteArray{};
+            QByteArray encrypted;
+            const QString &pass=unicode?kUnicodePassword:kPassword;
+            if(direct){
+                encrypted=ToxEncrypt::encryptPass(pass,raw);
+            }else{
+                auto keyObj=ToxEncrypt::makeToxEncrypt(pass);
+                encrypted=keyObj?keyObj->encrypt(raw):QByteArray{};
+            }
             sodium_memzero(raw.data(),size_t(raw.length()));
             if(!encrypted.isEmpty()&&ToxEncrypt::isEncrypted(encrypted) &&
                write_file(path,encrypted)){
@@ -139,7 +150,7 @@ int create(const char *path){
     tox_kill(friendTox);
     return ret;
 }
-int verify(const char *path,const char *expectId,const char *expectKey){
+int verify(const char *path,const char *expectId,const char *expectKey,bool unicode,bool direct){
     uint8_t id[TOX_ADDRESS_SIZE]={},key[TOX_PUBLIC_KEY_SIZE]={};
     if(!parse_hex(expectId,sizeof(id),id) ||
        !parse_hex(expectKey,sizeof(key),key))return 2;
@@ -147,9 +158,15 @@ int verify(const char *path,const char *expectId,const char *expectKey){
     if(encrypted.isEmpty() || !ToxEncrypt::isEncrypted(encrypted))return 3;
     // Exercise qTox's actual profile LOAD path: derive key from the saved
     // salt, then decrypt with the preserved passkey.
-    auto passKey=ToxEncrypt::makeToxEncrypt(kPassword,encrypted);
-    if(!passKey)return 4;
-    QByteArray raw=passKey->decrypt(encrypted);
+    QByteArray raw;
+    const QString &pass=unicode?kUnicodePassword:kPassword;
+    if(direct){
+        raw=ToxEncrypt::decryptPass(pass,encrypted);
+    }else{
+        auto passKey=ToxEncrypt::makeToxEncrypt(pass,encrypted);
+        if(!passKey)return 4;
+        raw=passKey->decrypt(encrypted);
+    }
     if(raw.isEmpty() || size_t(raw.size())>kMaxRaw)return 4;
     Tox *owner=create_tox(reinterpret_cast<const uint8_t*>(raw.constData()),
                           size_t(raw.size()));
@@ -171,13 +188,40 @@ int verify(const char *path,const char *expectId,const char *expectKey){
     tox_kill(owner);
     return matched?0:6;
 }
+// Characterize the EXACT pinned qTox cached-key behavior without patching
+// third-party GPL source or attempting to recover real user passwords.
+int probe_unicode_cached_key()
+{
+    const QByteArray plain("stage32-qtox-unicode-cached-key-test",36);
+    auto encryptor=ToxEncrypt::makeToxEncrypt(kUnicodePassword);
+    if(!encryptor)return 3;
+    const QByteArray encrypted=encryptor->encrypt(plain);
+    if(encrypted.isEmpty() || !ToxEncrypt::isEncrypted(encrypted))return 4;
+    auto decryptor=ToxEncrypt::makeToxEncrypt(kUnicodePassword,encrypted);
+    if(!decryptor)return 5;
+    const QByteArray roundtrip=decryptor->decrypt(encrypted);
+    if(roundtrip!=plain){
+        std::puts("UPSTREAM_QTOX_UNICODE_CACHED_KEY_FAILED");
+        return 7;
+    }
+    std::puts("UPSTREAM_QTOX_UNICODE_CACHED_KEY_ROUNDTRIP_OK");
+    return 0;
+}
 } // namespace
 
 int main(int argc,char **argv){
     if(sodium_init()<0)return 10;
-    if(argc==3&&std::strcmp(argv[1],"create")==0)return create(argv[2]);
+    if(argc==2&&std::strcmp(argv[1],"probe-unicode-cache")==0)
+        return probe_unicode_cached_key();
+    if(argc==3&&std::strcmp(argv[1],"create")==0)return create(argv[2],false,false);
+    if(argc==3&&std::strcmp(argv[1],"create-unicode")==0)return create(argv[2],true,false);
+    if(argc==3&&std::strcmp(argv[1],"create-unicode-direct")==0)return create(argv[2],true,true);
     if(argc==5&&std::strcmp(argv[1],"verify")==0)
-        return verify(argv[2],argv[3],argv[4]);
-    std::fputs("Usage: qtox-profile-interop create FILE | verify FILE TOX_ID FRIEND_PUBLIC_KEY\n",stderr);
+        return verify(argv[2],argv[3],argv[4],false,false);
+    if(argc==5&&std::strcmp(argv[1],"verify-unicode")==0)
+        return verify(argv[2],argv[3],argv[4],true,false);
+    if(argc==5&&std::strcmp(argv[1],"verify-unicode-direct")==0)
+        return verify(argv[2],argv[3],argv[4],true,true);
+    std::fputs("Usage: qtox-profile-interop probe-unicode-cache | create|create-unicode|create-unicode-direct FILE | verify|verify-unicode|verify-unicode-direct FILE TOX_ID FRIEND_PUBLIC_KEY\n",stderr);
     return 2;
 }

@@ -926,3 +926,42 @@ qTox GUI, its local database/settings, audio/video, or qTox/aTox public
 network messaging. Actual GUI interoperability needs its own test gate.
 The qTox source has GPL-3.0-or-later licensing and is fetched only for
 local CI compilation. Neither main, VPS nor Cloudflare is modified.
+
+## Stage 32: real upstream qTox Qt multilingual passphrase interoperability
+
+The independently compiled `native/qtox_profile_interop.cpp` CLI still
+links exactly the same **unmodified**, hash-checked TokTok/qTox
+`src/core/toxencrypt.cpp` and `.h` sources. New disposable test modes
+exercise both upstream qTox encryption APIs with a UTF-8 passphrase
+containing CJK characters, Cyrillic and an emoji:
+
+- The standard profile path: original `ToxEncrypt::makeToxEncrypt`
+  followed by `encrypt` or `decrypt`, with the originally saved salt.
+- The direct-password path: original
+  `ToxEncrypt::encryptPass` / `decryptPass`.
+- An independent cached-key self-check confirms that qTox correctly uses
+  the **byte length of the UTF-8 QByteArray** derived from the QString,
+  not the QString's Unicode code-unit length.
+
+The real original c-toxcore WASM must import profiles produced by each
+unmodified qTox API and retain the entire 38-byte identity, exact saved
+friend public key and offline status. The reverse direction exports
+encrypted standard Tox savedata using the same Unicode password, which
+the matching unmodified qTox decrypt path must accept. Each path must
+reject incorrect passwords and tampered encrypted files. The existing
+ASCII compatibility tests continue unchanged.
+
+An independent *real Chromium HTML file-picker* test now runs both the
+original qTox cached-key ASCII profile and cached-key multilingual UTF-8
+profile through the same native WASM restore page. In both cases an
+incorrect password must leave the new browser identity intact; a correct
+password with explicit empty-identity replacement consent restores the
+original qTox-created Tox ID and friend **without fabricating online
+status or any synthetic network message**.
+
+These tests prove interoperability with actual qTox **upstream encryption
+source code**, not execution of the full unmodified qTox GUI, its
+settings database, or public/aTox networking. Passphrases are static
+TEST-ONLY fixtures; generated profiles are removed from the disposable
+CI environment. No deployment, production access, `main` changes,
+Cloudflare setup or VPS activity occurs.

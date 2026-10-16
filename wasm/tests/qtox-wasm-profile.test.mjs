@@ -143,3 +143,92 @@ test("unchanged upstream qTox Qt ToxEncrypt source <-> original browser WASM exc
     await rm(directory,{recursive:true,force:true});
   }
 });
+
+
+/* Stage 32: Both real, unchanged qTox C++ paths must handle non-ASCII UTF-8:
+ * standard makeToxEncrypt cached-key profile and encryptPass/decryptPass.
+ * qTox performs QString::toUtf8() and measures QByteArray bytes. */
+for(const mode of [
+  {label:"cached-key profile",create:"create-unicode",verify:"verify-unicode"},
+  {label:"direct-password profile",create:"create-unicode-direct",verify:"verify-unicode-direct"}
+]){
+test("unmodified upstream qTox "+mode.label+" and browser-targeted WASM exchange real saved identities with a multilingual UTF-8 password",{
+  timeout:90000
+},async()=>{
+  assert.ok(existsSync(native)&&existsSync(wasm),
+            "real upstream qTox Qt fixture and original WASM required");
+  const passwordText="wtox-互通🔐-пароль-安全-2026";
+  const password=new TextEncoder().encode(passwordText);
+  assert.notEqual(password.length,passwordText.length,
+    "must exercise multibyte UTF-8, not an ASCII-only passphrase");
+  const wrong=new TextEncoder().encode("wtox-互通🔐-пароль-安全-2027");
+  const directory=await mkdtemp(join(tmpdir(),"wtox-qtox-unicode-"));
+  const fromQt=join(directory,"qtox-unicode-created.tox");
+  const fromWasm=join(directory,"wasm-unicode-created.tox");
+  const corrupted=join(directory,"qtox-unicode-tampered.tox");
+  const {default:make}=await import("../dist/tox_identity.mjs");
+  const m=await make();
+  const alloc=n=>{const p=m._malloc(n);assert.ok(p);return {p,n};};
+  const free=o=>{m.HEAPU8.fill(0,o.p,o.p+o.n);m._free(o.p);};
+  const pass=alloc(256),badpass=alloc(256),bytes=alloc(65536),
+        identity=alloc(38),friend=alloc(32),stats=alloc(16),written=alloc(4);
+  const read32=p=>new DataView(m.HEAPU8.buffer).getUint32(p,true);
+  try{
+    assert.ok(password.length<pass.n&&wrong.length<badpass.n);
+    m.HEAPU8.set(password,pass.p);
+    m.HEAPU8.set(wrong,badpass.p);
+    if(mode.create==="create-unicode"){
+      assert.match(strictNative("probe-unicode-cache"),
+                   /UPSTREAM_QTOX_UNICODE_CACHED_KEY_ROUNDTRIP_OK/,
+        "upstream qTox cached-key must use UTF-8 bytes for multilingual passwords");
+    }
+    const output=strictNative(mode.create,fromQt);
+    const created=output.match(/^CREATED ([0-9a-f]{76}) ([0-9a-f]{64})\s*$/);
+    assert.ok(created,"actual qTox QString->UTF8 encryption must create a Tox profile");
+    const [,nativeId,friendKey]=created;
+    assert.match(strictNative(mode.verify,fromQt,nativeId,friendKey),
+                 /VERIFIED/,"upstream qTox direct decryptPass must read its own UTF-8 profile");
+    assert.notEqual(originalLinux("verify",fromQt,nativeId,friendKey).status,0,
+      "ASCII cached-key qTox mode must not accidentally accept Unicode ciphertext");
+    const qtoxEncrypted=await readFile(fromQt);
+    assert.equal(qtoxEncrypted.subarray(0,8).toString(),"toxEsave");
+    assert.ok(qtoxEncrypted.length>80&&qtoxEncrypted.length<=bytes.n);
+    m.HEAPU8.set(qtoxEncrypted,bytes.p);
+    assert.equal(m._wtox_vudp_restore_encrypted(bytes.p,qtoxEncrypted.length,
+                 badpass.p,wrong.length),-4,
+                 "wrong multilingual password must not install identity");
+    assert.equal(m._wtox_vudp_savedata_size(),0);
+    assert.equal(m._wtox_vudp_restore_encrypted(bytes.p,qtoxEncrypted.length,
+                 pass.p,password.length),0,
+                 "browser-targeted WASM must decrypt unmodified qTox Unicode fixture");
+    assert.equal(m._wtox_vudp_native_address(identity.p,38),0);
+    assert.equal(identityHex(m.HEAPU8.slice(identity.p,identity.p+38)),nativeId);
+    assert.equal(m._wtox_vudp_native_friend_public_key(friend.p,32),0);
+    assert.equal(identityHex(m.HEAPU8.slice(friend.p,friend.p+32)),friendKey);
+    assert.equal(m._wtox_vudp_native_friend_state(stats.p),0);
+    assert.equal(read32(stats.p),1,"actual friend roster must survive");
+    assert.equal(read32(stats.p+4),0,"imported friend must remain offline");
+    const rawSize=m._wtox_vudp_savedata_size();
+    assert.ok(rawSize>0&&rawSize+80<=bytes.n);
+    assert.equal(m._wtox_vudp_export_encrypted(pass.p,password.length,
+                 bytes.p,bytes.n,written.p),0);
+    const n=read32(written.p);
+    assert.ok(n>80&&n<=bytes.n);
+    await writeFile(fromWasm,m.HEAPU8.slice(bytes.p,bytes.p+n),{mode:0o600});
+    assert.match(strictNative(mode.verify,fromWasm,nativeId,friendKey),
+                 /VERIFIED/,
+                 "actual upstream qTox direct decryptPass must load WASM Unicode profile");
+    const tampered=Buffer.from(qtoxEncrypted);
+    tampered[tampered.length-19]^=0x80;
+    await writeFile(corrupted,tampered,{mode:0o600});
+    assert.notEqual(originalLinux(mode.verify,corrupted,nativeId,friendKey).status,0,
+      "upstream Qt qTox must reject corrupted authenticated UTF-8 backup");
+    m._wtox_vudp_probe_stop();
+  }finally{
+    m._wtox_vudp_probe_stop();
+    for(const o of [written,stats,friend,identity,bytes,badpass,pass])free(o);
+    password.fill(0);wrong.fill(0);
+    await rm(directory,{recursive:true,force:true});
+  }
+});
+}

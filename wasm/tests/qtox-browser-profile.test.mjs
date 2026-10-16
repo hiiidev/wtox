@@ -74,7 +74,13 @@ async function stopNative(child) {
   await Promise.race([done,new Promise(resolve=>
     setTimeout(()=>{child.kill("SIGKILL");resolve();},1600))]);
 }
-test("real Chromium file picker imports standard encrypted .tox created by UNMODIFIED upstream qTox Qt ToxEncrypt",{
+for(const variant of [
+  {label:"ASCII cached-key qTox profile",create:"create",
+   password:"wtox-qtox-Qt-test-only-interoperability"},
+  {label:"multilingual UTF-8 direct-password qTox profile",create:"create-unicode",
+   password:"wtox-互通🔐-пароль-安全-2026"}
+]) {
+test("real Chromium imports "+variant.label+" from UNMODIFIED upstream qTox Qt ToxEncrypt",{
   timeout:105000
 },async()=>{
   assert.ok(existsSync(nativeBinary),"native original c-toxcore DHT bootstrap is required");
@@ -84,7 +90,7 @@ test("real Chromium file picker imports standard encrypted .tox created by UNMOD
   const nativeFile=join(temp,"qtox-qt-created-profile.tox");
   const nativeCLI=join(root,"dist/qtox-profile-interop");
   assert.ok(existsSync(nativeCLI),"actual qTox ToxEncrypt profile producer required");
-  const process=spawnSync(nativeCLI,["create",nativeFile],{
+  const process=spawnSync(nativeCLI,[variant.create,nativeFile],{
     encoding:"utf8",timeout:15000,maxBuffer:8192
   });
   assert.equal(process.status,0,
@@ -205,7 +211,11 @@ test("real Chromium file picker imports standard encrypted .tox created by UNMOD
     const bytes=await readFile(nativeFile);
     assert.ok(bytes.length>80 && bytes.length<1024*1024+80);
     await (await page.$("#restore-file")).uploadFile(nativeFile);
-    const password="wtox-qtox-Qt-test-only-interoperability";
+    const password=variant.password;
+    if(variant.create==="create-unicode"){
+      assert.ok(new TextEncoder().encode(password).length>password.length,
+        "browser test must really use a multi-byte UTF-8 passphrase");
+    }
     // First force a wrong password: original WASM MUST preserve fresh identity.
     await page.type("#restore-password","completely-wrong-CI-password");
     await page.click("#replace-fresh");
@@ -248,3 +258,4 @@ test("real Chromium file picker imports standard encrypted .tox created by UNMOD
     await rm(temp,{recursive:true,force:true});
   }
 });
+}
