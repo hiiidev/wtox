@@ -513,3 +513,16 @@ int wtox_vudp_native_friend_take(uint8_t *out,size_t capacity)
     vudp_friend_message_length=0;
     return n;
 }
+
+/* Stage 33: Read-only exact UTF-8 self-name from the SAME original
+ * network-enabled Tox instance after qTox encrypted profile import.
+ * Nothing is decoded or synthesized by JavaScript. */
+EMSCRIPTEN_KEEPALIVE
+int wtox_vudp_native_self_name(uint8_t *out,size_t cap)
+{
+    if(!vudp_tox || !out || cap>TOX_MAX_NAME_LENGTH || !cap)return -1;
+    const size_t n=tox_self_get_name_size(vudp_tox);
+    if(n>cap || n>TOX_MAX_NAME_LENGTH)return -2;
+    if(n)tox_self_get_name(vudp_tox,out);
+    return (int)n;
+}

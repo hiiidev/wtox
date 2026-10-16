@@ -97,6 +97,11 @@ test("unchanged upstream qTox Qt ToxEncrypt source <-> original browser WASM exc
                   pass.p,password.length),0,
                  "WASM must import ORIGINAL NATIVE encrypted .tox");
     assert.equal(getId(),nativeId,"native full Tox ID must survive WASM import");
+    const qtoxName=new TextEncoder().encode("TokTok qTox upstream ToxEncrypt CI fixture");
+    assert.equal(m._wtox_vudp_native_self_name(message.p,message.n),qtoxName.length,
+      "qTox nickname metadata size survives original WASM import");
+    assert.deepEqual(m.HEAPU8.slice(message.p,message.p+qtoxName.length),qtoxName,
+      "byte-for-byte qTox profile nickname must survive WASM import");
     assert.equal(getFriend(),nativeFriend,
                  "native friend public key must survive WASM import");
     assert.equal(m._wtox_vudp_native_friend_state(info.p),0);
@@ -203,6 +208,14 @@ test("unmodified upstream qTox "+mode.label+" and browser-targeted WASM exchange
                  "browser-targeted WASM must decrypt unmodified qTox Unicode fixture");
     assert.equal(m._wtox_vudp_native_address(identity.p,38),0);
     assert.equal(identityHex(m.HEAPU8.slice(identity.p,identity.p+38)),nativeId);
+    const qtoxName=new TextEncoder().encode("TokTok qTox upstream ToxEncrypt CI fixture");
+    assert.equal(m._wtox_vudp_native_self_name(stats.p,stats.n),-2,
+      "undersized nickname buffer must reject without truncation");
+    assert.equal(m._wtox_vudp_native_self_name(bytes.p,bytes.n),-1,
+      "oversized caller capacity must be rejected");
+    assert.equal(m._wtox_vudp_native_self_name(bytes.p,128),qtoxName.length);
+    assert.deepEqual(m.HEAPU8.slice(bytes.p,bytes.p+qtoxName.length),qtoxName,
+      "qTox UTF-8 profile name survives multilingual-password WASM import");
     assert.equal(m._wtox_vudp_native_friend_public_key(friend.p,32),0);
     assert.equal(identityHex(m.HEAPU8.slice(friend.p,friend.p+32)),friendKey);
     assert.equal(m._wtox_vudp_native_friend_state(stats.p),0);

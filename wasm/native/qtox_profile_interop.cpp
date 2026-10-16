@@ -176,7 +176,15 @@ int verify(const char *path,const char *expectId,const char *expectKey,bool unic
     tox_self_get_address(owner,foundId);
     Tox_Err_Friend_Get_Public_Key friendErr=TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK;
     const bool hasFriend=tox_friend_get_public_key(owner,0,friendKey,&friendErr);
-    const bool matched=tox_self_get_friend_list_size(owner)==1 &&
+    const size_t name_len=tox_self_get_name_size(owner);
+    uint8_t actual_name[sizeof(kName)]={0};
+    const bool name_size_ok=name_len==sizeof(kName)-1;
+    if(name_size_ok)tox_self_get_name(owner,actual_name);
+    const bool name_ok=name_size_ok &&
+        sodium_memcmp(actual_name,kName,sizeof(kName)-1)==0;
+    sodium_memzero(actual_name,sizeof(actual_name));
+    const bool matched=name_ok &&
+        tox_self_get_friend_list_size(owner)==1 &&
        hasFriend && friendErr==TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK &&
        sodium_memcmp(foundId,id,sizeof(id))==0 &&
        sodium_memcmp(friendKey,key,sizeof(key))==0;

@@ -966,3 +966,23 @@ settings database, or public/aTox networking. Passphrases are static
 TEST-ONLY fixtures; generated profiles are removed from the disposable
 CI environment. No deployment, production access, `main` changes,
 Cloudflare setup or VPS activity occurs.
+
+## Stage 33: qTox profile display-name metadata integrity
+
+Alongside full Tox IDs, stored native friend keys and both upstream qTox
+encryption modes, the independently compiled unmodified qTox ToxEncrypt
+profile is now verified to preserve its **exact original profile nickname**.
+The independent native verifier reopens the decrypted original Toxcore
+savedata and compares the nickname byte-for-byte against its original
+fixture. Browser-targeted WASM exposes a small read-only bounded original
+`tox_self_get_name_size`/`tox_self_get_name` adapter and independently
+checks the actual nickname bytes after restoring both ASCII and multilingual
+UTF-8 password qTox profiles. Calls with undersized output buffers are
+rejected without silent truncation, as are capacities exceeding the
+original Toxcore name limit.
+
+These are actual native Tox savedata properties, not JSON display metadata.
+This increment tests qTox source-level encrypted profile interoperability;
+it still does **not** execute the complete unmodified qTox GUI or certify
+qTox/aTox public messaging. All profiles remain disposable CI fixtures.
+No `main`, Cloudflare, production VPS or deployment changes are made.
